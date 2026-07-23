@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>T1ERA Studio</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            background-color: #000000;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            color: #ffffff;
+        }
+
+        /* Orientation Enforcement Alert */
+        #orientation-warning {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000000;
+            z-index: 1000;
+            color: #ffffff;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 30px;
+        }
+        #orientation-warning svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            fill: #ffffff;
+            animation: rotateDevice 2s infinite ease-in-out;
+        }
+        @keyframes rotateDevice {
+            0% { transform: rotate(0deg); }
+            50% { transform: rotate(-90deg); }
+            100% { transform: rotate(0deg); }
+        }
+        #orientation-warning h2 {
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        /* Show alert on mobile portrait orientation */
+        @media (orientation: portrait) and (max-width: 1024px) {
+            #orientation-warning {
+                display: flex;
+            }
+            #main-viewport {
+                display: none;
+            }
+        }
+
+        /* Seamless Dual Video Canvas */
+        .video-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            overflow: hidden;
+        }
+        .video-bg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            min-width: 100%;
+            min-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: cover;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        /* Aesthetic Interface overlay */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: calc(20px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
+        }
+
+        /* Action button style */
+        .enter-studio-wrapper {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            margin-bottom: 40px;
+        }
+        .btn-enter-studio {
+            pointer-events: auto;
+            opacity: 0;
+            transform: translateY(20px);
+            padding: 15px 40px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50px;
+            cursor: pointer;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 255, 255, 0.1);
+            transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .btn-enter-studio.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .btn-enter-studio:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+            letter-spacing: 5px;
+        }
+
+        /* Premium Side Menu Button */
+        .menu-btn {
+            position: fixed;
+            top: calc(20px + env(safe-area-inset-top));
+            right: calc(20px + env(safe-area-inset-right));
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            z-index: 100;
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .menu-btn span {
+            display: block;
+            width: 24px;
+            height: 2px;
+            background: #ffffff;
+            margin: 3px 0;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 0 8px rgba(0,0,0,0.5);
+        }
+        .menu-btn.active span:nth-child(1) {
+            transform: translateY(8px) rotate(45deg);
+        }
+        .menu-btn.active span:nth-child(2) {
+            opacity: 0;
+            transform: scaleX(0);
+        }
+        .menu-btn.active span:nth-child(3) {
+            transform: translateY(-8px) rotate(-45deg);
+        }
+
+        /* Responsive Navigation Drawer */
+        .side-menu {
+            position: fixed;
+            top: 0;
+            right: -320px;
+            width: 320px;
+            height: 100%;
+            background: rgba(5, 5, 5, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 99;
+            transition: right 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 40px;
+            border-left: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .side-menu.open {
+            right: 0;
+        }
+        .menu-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(2px);
+            -webkit-backdrop-filter: blur(2px);
+            opacity: 0;
+            visibility: hidden;
+            z-index: 98;
+            transition: all 0.5s ease;
+        }
+        .menu-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .nav-links {
+            list-style: none;
+        }
+        .nav-links li {
+            margin: 25px 0;
+        }
+        .nav-links a {
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            font-size: 1.1rem;
+            font-weight: 300;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            transition: all 0.3s ease;
+        }
+        .nav-links a:hover {
+            color: #ffffff;
+            letter-spacing: 5px;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Landscape Warning Screen -->
+    <div id="orientation-warning">
+        <svg viewBox="0 0 24 24">
+            <path d="M16 1H8C6.34 1 5 2.34 5 4v16c0 1.66 1.34 3 3 3h8c1.66 0 3-1.34 3-3V4c0-1.66-1.34-3-3-3zm-2 20h-4v-1h4v1zm3.25-3H6.75V4h10.5V18z"/>
+        </svg>
+        <h2>Please rotate device to landscape</h2>
+    </div>
+
+    <!-- Main Viewport Context -->
+    <div id="main-viewport">
+        <!-- Dual Video Stage -->
+        <div class="video-container">
+            <video id="vid1" class="video-bg" playsinline autoplay src="assets/videos/vid1.mp4"></video>
+            <video id="vid2" class="video-bg" playsinline loop muted style="opacity: 0;" src="assets/videos/vid2.mp4"></video>
+        </div>
+
+        <!-- Interface Layer -->
+        <div class="ui-layer">
+            <div class="header-placeholder"></div>
+            
+            <div class="enter-studio-wrapper">
+                <button class="btn-enter-studio" id="enter-studio-btn">Enter Studio</button>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="menu-btn" id="menu-toggle">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+
+        <div class="menu-overlay" id="menu-overlay"></div>
+        <nav class="side-menu" id="side-menu">
+            <ul class="nav-links">
+                <li><a href="#">Home</a></li>
+                <li><a href="#">Studio</a></li>
+                <li><a href="#">Tracks</a></li>
+                <li><a href="#">About</a></li>
+                <li><a href="#">Contact</a></li>
+            </ul>
+        </nav>
+    </div>
+
+    <script>
+        const v1 = document.getElementById("vid1");
+        const v2 = document.getElementById("vid2");
+        const enterBtn = document.getElementById("enter-studio-btn");
+        
+        // Attempt immediate audio-enabled video play. Fallback to muted to guarantee layout renders.
+        v1.play().catch(error => {
+            console.log("Unmuted autoplay restricted. Activating muted player fail-safe.", error);
+            v1.muted = true;
+            v1.play();
+        });
+
+        // Trigger seamless switch once vid1 finishes playing
+        v1.addEventListener('ended', () => {
+            // Play video 2 (muted loop state pre-applied)
+            v2.play().then(() => {
+                v2.style.opacity = "1";
+                v1.style.opacity = "0";
+
+                // Fade-in action button "Enter Studio" after 3.5 seconds
+                setTimeout(() => {
+                    enterBtn.classList.add("show");
+                }, 3500);
+            }).catch(e => {
+                console.log("Video 2 playback failed:", e);
+            });
+        });
+
+        // Sliding Menu UI Trigger logic
+        const menuToggle = document.getElementById('menu-toggle');
+        const sideMenu = document.getElementById('side-menu');
+        const menuOverlay = document.getElementById('menu-overlay');
+
+        function toggleMenu() {
+            menuToggle.classList.toggle('active');
+            sideMenu.classList.toggle('open');
+            menuOverlay.classList.toggle('active');
+        }
+
+        menuToggle.addEventListener('click', toggleMenu);
+        menuOverlay.addEventListener('click', toggleMenu);
+    </script>
+</body>
+</html>
