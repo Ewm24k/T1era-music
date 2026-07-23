@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>T1ERA Music Studio</title>
+    
+    <!-- PWA Configuration -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="T1ERA">
+    <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            background-color: #000000;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            color: #ffffff;
+        }
+        
+        /* User Interaction Screen (Required for Audio Autoplay bypass) */
+        #interactive-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            cursor: pointer;
+            transition: opacity 1s ease-in-out;
+        }
+        .pulse-text {
+            font-size: 1.1rem;
+            letter-spacing: 4px;
+            animation: pulse 2s infinite;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
+            text-transform: uppercase;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+
+        /* Typewriter Animation Display */
+        #loading-container {
+            text-align: center;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+            padding: 20px;
+        }
+        .glow-text {
+            font-size: 1.8rem;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px #ffffff, 0 0 20px #ffffff, 0 0 30px #ffffff;
+            border-right: 2px solid rgba(255, 255, 255, 0.75);
+            white-space: normal;
+            display: inline-block;
+        }
+        .blink {
+            animation: blink-caret 0.75s step-end infinite;
+        }
+        @keyframes blink-caret {
+            from, to { border-color: transparent }
+            50% { border-color: white }
+        }
+        .fade-out {
+            opacity: 0 !important;
+            transition: opacity 1s ease-in-out !important;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Tap Overlay (iOS / Android compatibility barrier) -->
+    <div id="interactive-overlay" onclick="startExperience()">
+        <div class="pulse-text">Tap to Enter T1ERA</div>
+    </div>
+
+    <!-- Main Typewriter Screen -->
+    <div id="loading-container">
+        <div class="glow-text blink" id="typewriter"></div>
+    </div>
+
+    <!-- Audio Element -->
+    <audio id="bg-sound" src="assets/audio/ambient.mp3" preload="auto" loop></audio>
+
+    <script>
+        // PWA Registration
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('Service Worker Active.'))
+                    .catch(err => console.log('Service Worker Failed:', err));
+            });
+        }
+
+        const textToType = "T1ERA Music Studio ...";
+        const typewriterElement = document.getElementById("typewriter");
+        const overlay = document.getElementById("interactive-overlay");
+        const loadingContainer = document.getElementById("loading-container");
+        const sound = document.getElementById("bg-sound");
+        let charIndex = 0;
+
+        function startExperience() {
+            overlay.classList.add("fade-out");
+            
+            // Try playing background audio
+            sound.play().catch(err => {
+                console.log("Audio playback initiated but browser restricted it:", err);
+            });
+
+            setTimeout(() => {
+                overlay.style.display = "none";
+                loadingContainer.style.opacity = "1";
+                typeEffect();
+            }, 1000);
+        }
+
+        function typeEffect() {
+            if (charIndex < textToType.length) {
+                typewriterElement.textContent += textToType.charAt(charIndex);
+                charIndex++;
+                setTimeout(typeEffect, 150);
+            } else {
+                // Typewriter complete, wait 2 seconds, fade screen, redirect
+                setTimeout(() => {
+                    document.body.classList.add("fade-out");
+                    setTimeout(() => {
+                        window.location.href = "landingpage.html";
+                    }, 1000);
+                }, 2000);
+            }
+        }
+    </script>
+</body>
+</html>
