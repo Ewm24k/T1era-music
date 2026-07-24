@@ -7,12 +7,12 @@
     
     <!-- PWA Configuration -->
     <link rel="manifest" href="manifest.json">
-    <meta name="mobile-web-app-capable" content="yes"> <!-- Resolved Deprecation Warning -->
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="T1ERA">
     <link class="pwa-icon" rel="apple-touch-icon" href="assets/icons/icon-192.png">
     
-    <!-- Supress standard Favicon 404 warning -->
+    <!-- Suppress standard Favicon 404 warning -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 
     <style>
@@ -718,8 +718,8 @@
             transition: right 0.5s cubic-bezier(0.16, 1, 0.3, 1);
             display: flex;
             flex-direction: column;
-            justify-content: center;
-            padding: 40px;
+            justify-content: space-between; /* Space out nav links and footer */
+            padding: calc(40px + env(safe-area-inset-top)) 40px calc(40px + env(safe-area-inset-bottom)) 40px;
             border-left: 1px solid rgba(255, 255, 255, 0.05);
         }
         .side-menu.open { right: 0; }
@@ -753,6 +753,142 @@
             color: #ffffff;
             letter-spacing: 5px;
             text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        /* Side Menu Footer Section Styles */
+        .menu-footer {
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 20px;
+            margin-top: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            text-align: left;
+        }
+        .profile-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .user-avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            object-fit: cover;
+        }
+        .avatar-fallback {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.6);
+        }
+        .profile-meta {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .profile-name {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #ffffff;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            letter-spacing: 1px;
+        }
+        .profile-email {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.4);
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            letter-spacing: 0.5px;
+        }
+        .logout-row {
+            width: 100%;
+        }
+        .logout-btn {
+            width: 100%;
+            padding: 10px;
+            background: rgba(255, 74, 74, 0.05);
+            border: 1px solid rgba(255, 74, 74, 0.15);
+            border-radius: 8px;
+            color: #ff4a4a;
+            font-size: 0.8rem;
+            font-weight: 500;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+        .logout-btn:hover {
+            background: rgba(255, 74, 74, 0.15);
+            border-color: rgba(255, 74, 74, 0.4);
+            box-shadow: 0 0 10px rgba(255, 74, 74, 0.15);
+        }
+
+        /* Dynamic Sign Out Feedback Overlay */
+        #signout-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            z-index: 160;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+        #signout-overlay.active {
+            opacity: 1;
+        }
+        .signout-card {
+            text-align: center;
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            box-shadow: 0 10px 45px rgba(0, 0, 0, 0.8);
+            max-width: 320px;
+            width: 90%;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        .signout-spinner {
+            width: 35px;
+            height: 35px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #ff4a4a;
+            border-radius: 50%;
+            margin: 0 auto 20px auto;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            100% { transform: rotate(360deg); }
+        }
+        .signout-text {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.95rem;
+            letter-spacing: 2px;
+            color: #ffffff;
+            text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+            text-transform: uppercase;
         }
     </style>
 </head>
@@ -801,6 +937,7 @@
                 <span></span>
             </div>
             <div class="menu-overlay" id="menu-overlay"></div>
+            
             <nav class="side-menu" id="side-menu">
                 <ul class="nav-links">
                     <li><a href="#">Home</a></li>
@@ -809,6 +946,26 @@
                     <li><a href="#">About</a></li>
                     <li><a href="#">Contact</a></li>
                 </ul>
+
+                <!-- Side Menu Footer Section (Row 1: Profile meta, Row 2: Logout execution) -->
+                <div class="menu-footer" id="menu-footer" style="display: none;">
+                    <div class="profile-row">
+                        <img id="user-avatar" class="user-avatar" src="" alt="Avatar" style="display: none;">
+                        <div id="avatar-fallback" class="avatar-fallback">👤</div>
+                        <div class="profile-meta">
+                            <div class="profile-name" id="user-name">Guest User</div>
+                            <div class="profile-email" id="user-email">guest@t1era.com</div>
+                        </div>
+                    </div>
+                    <div class="logout-row">
+                        <button id="logout-btn" class="logout-btn">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                                <path d="M16 13v-2H10V9l-5 3 5 3v-2h6zM20 3H9c-1.1 0-2 .9-2 2v4h2V5h11v14H9v-4H7v4c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
+                            </svg>
+                            Sign Out
+                        </button>
+                    </div>
+                </div>
             </nav>
         </div>
 
@@ -853,19 +1010,19 @@
                 <div class="services-title">Studio Console</div>
                 
                 <div class="services-grid">
-                    <!-- Option 1 Card: Blue static glow -->
+                    <!-- Option 1 Card -->
                     <div class="service-card blue-glow" onclick="alert('Feature offline for upgrade: Generate Cover Song')">
                         <div class="card-icon">🎙️</div>
                         <div class="card-name">Generate Cover Song</div>
                     </div>
 
-                    <!-- Option 2 Card: Emerald static glow -->
+                    <!-- Option 2 Card -->
                     <div class="service-card emerald-glow" onclick="alert('Feature offline for upgrade: Generate Raw Sheet Music')">
                         <div class="card-icon">🎼</div>
                         <div class="card-name">Generate Raw Sheet Music</div>
                     </div>
 
-                    <!-- Option 3 Card: High-end moving/rotating glowing border -->
+                    <!-- Option 3 Card -->
                     <div class="service-card glowing-active" onclick="alert('Initiating: Open Studio T1ERA')">
                         <div class="card-icon">⚡</div>
                         <div class="card-name">Open Studio T1ERA</div>
@@ -881,6 +1038,14 @@
                 <div class="maintenance-title">System Upgrade</div>
                 <div class="maintenance-text">Please sign up using Gmail only.<br><br>Sorry for any inconvenience, we are currently in maintenance upgrading.</div>
                 <button class="maintenance-btn" id="maintenance-close-btn">Acknowledge</button>
+            </div>
+        </div>
+
+        <!-- Phase 8: Disconnect Session Overlay Screen -->
+        <div id="signout-overlay">
+            <div class="signout-card">
+                <div class="signout-spinner"></div>
+                <div class="signout-text" id="signout-status-text">Disconnecting session...</div>
             </div>
         </div>
 
