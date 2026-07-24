@@ -1,3 +1,5 @@
+--- START OF FILE midiano.html ---
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -715,6 +717,13 @@
         let lastFrameTime = performance.now();
         let lastTriggeredTime = 0;
 
+        // Optimized Audio Trigger Heads
+        let playbackNoteIndex = 0;
+        let sheetPlaybackNoteIndex = 0;
+        let verticalPlaybackNoteIndex = 0;
+        let studioPlaybackNoteIndex = 0;
+        let maxNoteDuration = 5; // Updated dynamically upon loading file
+
         // DSP nodes
         let activeInstrument = null;
         let samplerPiano = null;
@@ -867,19 +876,22 @@
                     activeInstrument = samplerPiano;
                     activeInstrument.connect(volNode);
                 } else {
-                    // Temporary warm synth fallback while downloading
+                    // Temporary warm synth fallback while downloading (Optimized with voice caps)
                     activeInstrument = new Tone.PolySynth(Tone.Synth, {
+                        maxPolyphony: 32,
                         oscillator: { type: "sine" },
                         envelope: { attack: 0.005, decay: 1.5, sustain: 0.15, release: 1.2 }
                     }).connect(volNode);
                 }
             } else if (type === 'grand') {
                 activeInstrument = new Tone.PolySynth(Tone.Synth, {
+                    maxPolyphony: 32,
                     oscillator: { type: "sine" },
                     envelope: { attack: 0.005, decay: 1.5, sustain: 0.15, release: 1.2 }
                 }).connect(volNode);
             } else if (type === 'rhodes') {
                 activeInstrument = new Tone.PolySynth(Tone.FMSynth, {
+                    maxPolyphony: 32,
                     harmonicity: 3.05,
                     modulationIndex: 12,
                     oscillator: { type: "sine" },
@@ -889,11 +901,13 @@
                 }).connect(volNode);
             } else if (type === 'ambient') {
                 activeInstrument = new Tone.PolySynth(Tone.Synth, {
+                    maxPolyphony: 32,
                     oscillator: { type: "triangle" },
                     envelope: { attack: 0.18, decay: 2.5, sustain: 0.6, release: 2.8 }
                 }).connect(volNode);
             } else if (type === 'chiptune') {
                 activeInstrument = new Tone.PolySynth(Tone.Synth, {
+                    maxPolyphony: 32,
                     oscillator: { type: "square" },
                     envelope: { attack: 0.002, decay: 0.4, sustain: 0.2, release: 0.4 }
                 }).connect(volNode);
@@ -1483,6 +1497,14 @@
             const systemHeight = 220;
             const marginLeft = 100;
 
+            const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
+            
+            // Fast seek of starting index
+            verticalPlaybackNoteIndex = 0;
+            while (verticalPlaybackNoteIndex < activeNotesMemory.length && Math.max(0, activeNotesMemory[verticalPlaybackNoteIndex].time - firstNoteTime) < verticalPlaybackTime) {
+                verticalPlaybackNoteIndex++;
+            }
+
             function updateVerticalFrame(now) {
                 if (!isVerticalPlaying) return;
 
@@ -1492,7 +1514,6 @@
                 const prevTime = verticalPlaybackTime;
                 verticalPlaybackTime += delta * playbackSpeed;
 
-                const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
                 const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
 
                 if (verticalPlaybackTime >= totalDurationSecs) {
@@ -1527,26 +1548,38 @@
                     scrollContainer.scrollTop = Math.max(0, targetScrollTop);
                 }
 
-                // 3. Audio Dispatcher
-                activeNotesMemory.forEach((note, index) => {
+                // 3. Audio Dispatcher (Dynamic Cursor-Indexed trigger)
+                while (verticalPlaybackNoteIndex < activeNotesMemory.length) {
+                    const note = activeNotesMemory[verticalPlaybackNoteIndex];
+                    const shiftedStart = Math.max(0, note.time - firstNoteTime);
+                    if (shiftedStart < verticalPlaybackTime) {
+                        if (shiftedStart >= prevTime) {
+                            const playDelay = Math.max(0, shiftedStart - prevTime) / playbackSpeed;
+                            const noteName = Tone.Frequency(note.midi, "midi").toNote();
+                            activeInstrument.triggerAttackRelease(noteName, note.duration, Tone.now() + playDelay, note.velocity);
+
+                            // Highlight note on the specific SVG container
+                            const noteHead = document.getElementById(`${targetContainerId}-notehead-${verticalPlaybackNoteIndex}`);
+                            const noteRect = document.getElementById(`${targetContainerId}-note-rect-${verticalPlaybackNoteIndex}`);
+                            if (noteHead) noteHead.setAttribute('fill', '#db2777'); // Magenta active
+                            if (noteRect) noteRect.setAttribute('fill', '#db2777');
+                        }
+                        verticalPlaybackNoteIndex++;
+                    } else {
+                        break;
+                    }
+                }
+
+                // Visual release handler (analyzes only recent sliding window keys)
+                const checkStart = Math.max(0, verticalPlaybackNoteIndex - 100);
+                for (let i = checkStart; i < verticalPlaybackNoteIndex; i++) {
+                    const note = activeNotesMemory[i];
                     const shiftedStart = Math.max(0, note.time - firstNoteTime);
                     const shiftedEnd = shiftedStart + note.duration;
 
-                    if (shiftedStart >= prevTime && shiftedStart < verticalPlaybackTime) {
-                        const playDelay = Math.max(0, shiftedStart - prevTime) / playbackSpeed;
-                        const noteName = Tone.Frequency(note.midi, "midi").toNote();
-                        activeInstrument.triggerAttackRelease(noteName, note.duration, Tone.now() + playDelay, note.velocity);
-
-                        // Highlight note on the specific SVG container
-                        const noteHead = document.getElementById(`${targetContainerId}-notehead-${index}`);
-                        const noteRect = document.getElementById(`${targetContainerId}-note-rect-${index}`);
-                        if (noteHead) noteHead.setAttribute('fill', '#db2777'); // Magenta active
-                        if (noteRect) noteRect.setAttribute('fill', '#db2777');
-                    }
-
                     if (prevTime < shiftedEnd && verticalPlaybackTime >= shiftedEnd) {
-                        const noteHead = document.getElementById(`${targetContainerId}-notehead-${index}`);
-                        const noteRect = document.getElementById(`${targetContainerId}-note-rect-${index}`);
+                        const noteHead = document.getElementById(`${targetContainerId}-notehead-${i}`);
+                        const noteRect = document.getElementById(`${targetContainerId}-note-rect-${i}`);
                         
                         const chkShowColors = document.getElementById('chk-show-colors');
                         const showColors = chkShowColors ? chkShowColors.checked : false;
@@ -1561,7 +1594,7 @@
                         if (noteHead) noteHead.setAttribute('fill', defaultColor);
                         if (noteRect) noteRect.setAttribute('fill', defaultColor);
                     }
-                });
+                }
 
                 verticalPlaybackTimer = requestAnimationFrame(updateVerticalFrame);
             }
@@ -1746,6 +1779,13 @@
 
             resetSheetNoteHighlights();
 
+            // Setup optimized index seek head
+            sheetPlaybackNoteIndex = 0;
+            const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
+            while (sheetPlaybackNoteIndex < activeNotesMemory.length && Math.max(0, activeNotesMemory[sheetPlaybackNoteIndex].time - firstNoteTime) < sheetMusicPlaybackTime) {
+                sheetPlaybackNoteIndex++;
+            }
+
             // Frame scheduler to drive audio events and follow pointer visual states
             function updateSheetFrame(now) {
                 if (!sheetMusicPlaying) return;
@@ -1756,7 +1796,6 @@
                 const prevTime = sheetMusicPlaybackTime;
                 sheetMusicPlaybackTime += delta * playbackSpeed;
 
-                const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
                 const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
 
                 if (sheetMusicPlaybackTime >= totalDurationSecs) {
@@ -1778,30 +1817,41 @@
                     contentContainer.scrollLeft = targetScroll;
                 }
 
-                // 3. Sequential Audio Dispatcher
-                activeNotesMemory.forEach((note, index) => {
+                // 3. Audio Triggering Scheduler (Highly Optimized Pointer check)
+                while (sheetPlaybackNoteIndex < activeNotesMemory.length) {
+                    const note = activeNotesMemory[sheetPlaybackNoteIndex];
+                    const shiftedStart = Math.max(0, note.time - firstNoteTime);
+                    if (shiftedStart < sheetMusicPlaybackTime) {
+                        if (shiftedStart >= prevTime) {
+                            const playDelay = Math.max(0, shiftedStart - prevTime) / playbackSpeed;
+                            const noteName = Tone.Frequency(note.midi, "midi").toNote();
+                            activeInstrument.triggerAttackRelease(noteName, note.duration, Tone.now() + playDelay, note.velocity);
+
+                            // Visual highlight
+                            const noteHead = document.getElementById(`sheet-notehead-${sheetPlaybackNoteIndex}`);
+                            const noteRect = document.getElementById(`sheet-note-rect-${sheetPlaybackNoteIndex}`);
+                            if (noteHead) noteHead.setAttribute('fill', '#e879f9');
+                            if (noteRect) noteRect.setAttribute('fill', '#e879f9');
+                        }
+                        sheetPlaybackNoteIndex++;
+                    } else {
+                        break;
+                    }
+                }
+
+                // Visual release sweep on local active notes sliding window
+                const checkStart = Math.max(0, sheetPlaybackNoteIndex - 100);
+                for (let i = checkStart; i < sheetPlaybackNoteIndex; i++) {
+                    const note = activeNotesMemory[i];
                     const shiftedStart = Math.max(0, note.time - firstNoteTime);
                     const shiftedEnd = shiftedStart + note.duration;
-
-                    if (shiftedStart >= prevTime && shiftedStart < sheetMusicPlaybackTime) {
-                        const playDelay = Math.max(0, shiftedStart - prevTime) / playbackSpeed;
-                        const noteName = Tone.Frequency(note.midi, "midi").toNote();
-                        activeInstrument.triggerAttackRelease(noteName, note.duration, Tone.now() + playDelay, note.velocity);
-
-                        // Visual highlight
-                        const noteHead = document.getElementById(`sheet-notehead-${index}`);
-                        const noteRect = document.getElementById(`sheet-note-rect-${index}`);
-                        if (noteHead) noteHead.setAttribute('fill', '#e879f9');
-                        if (noteRect) noteRect.setAttribute('fill', '#e879f9');
-                    }
-
                     if (prevTime < shiftedEnd && sheetMusicPlaybackTime >= shiftedEnd) {
-                        const noteHead = document.getElementById(`sheet-notehead-${index}`);
-                        const noteRect = document.getElementById(`sheet-note-rect-${index}`);
+                        const noteHead = document.getElementById(`sheet-notehead-${i}`);
+                        const noteRect = document.getElementById(`sheet-note-rect-${i}`);
                         if (noteHead) noteHead.setAttribute('fill', note.midi >= 60 ? '#818cf8' : '#fbbf24');
                         if (noteRect) noteRect.setAttribute('fill', note.midi >= 60 ? '#818cf8' : '#fbbf24');
                     }
-                });
+                }
 
                 sheetMusicPlaybackTimer = requestAnimationFrame(updateSheetFrame);
             }
@@ -1855,6 +1905,42 @@
             });
         }
 
+        // --- Optimized Visualizer Clipping binary bounds search ---
+        function getVisibleNotesSlice() {
+            if (!activeNotesMemory || activeNotesMemory.length === 0) return [];
+            
+            const tMin = currentPlaybackTime - maxNoteDuration;
+            const tMax = currentPlaybackTime + (elCanvas.height / noteSpeed) + 1;
+            
+            // Lower-bound search
+            let start = 0;
+            let low = 0, high = activeNotesMemory.length - 1;
+            while (low <= high) {
+                let mid = Math.floor((low + high) / 2);
+                if (activeNotesMemory[mid].time >= tMin) {
+                    start = mid;
+                    high = mid - 1;
+                } else {
+                    low = mid + 1;
+                }
+            }
+            
+            // Upper-bound search
+            let end = activeNotesMemory.length - 1;
+            low = 0; high = activeNotesMemory.length - 1;
+            while (low <= high) {
+                let mid = Math.floor((low + high) / 2);
+                if (activeNotesMemory[mid].time <= tMax) {
+                    end = mid;
+                    low = mid + 1;
+                } else {
+                    high = mid - 1;
+                }
+            }
+            
+            return activeNotesMemory.slice(start, end + 1);
+        }
+
         // --- Parsing Management Engine ---
         function loadMidi(buffer) {
             stopPlayback();
@@ -1888,6 +1974,10 @@
             totalDuration = midiData.duration;
             lastTriggeredTime = 0;
 
+            // Extract maximum length parameters to dynamically calculate visual canvas boundaries
+            maxNoteDuration = activeNotesMemory.reduce((max, n) => Math.max(max, n.duration), 2);
+            if (maxNoteDuration > 15) maxNoteDuration = 15; // Cap to keep render checks small
+
             // Seeding dynamic non-destructive studio database immediately
             initStudioData();
 
@@ -1914,6 +2004,9 @@
             btnRestart.disabled = false;
             btnSheet.disabled = false;
             elTimeline.disabled = false;
+            
+            playbackNoteIndex = 0;
+            updatePlaybackNoteIndex();
         }
 
         // --- Audio & Playback Control Operations ---
@@ -1926,6 +2019,7 @@
             lastFrameTime = performance.now();
             btnPlay.disabled = true;
             btnPause.disabled = false;
+            updatePlaybackNoteIndex();
         }
 
         function pausePlayback() {
@@ -2282,6 +2376,14 @@
             const systemHeight = 220;
             const marginLeft = 100;
 
+            const firstNoteTime = studioNotesMemory.length > 0 ? studioNotesMemory[0].time : 0;
+            
+            // Fast seek of starting studio index
+            studioPlaybackNoteIndex = 0;
+            while (studioPlaybackNoteIndex < studioNotesMemory.length && Math.max(0, studioNotesMemory[studioPlaybackNoteIndex].time - firstNoteTime) < studioPlaybackTime) {
+                studioPlaybackNoteIndex++;
+            }
+
             function updateStudioFrame(now) {
                 if (!isStudioPlaying) return;
 
@@ -2291,7 +2393,6 @@
                 const prevTime = studioPlaybackTime;
                 studioPlaybackTime += delta * playbackSpeed;
 
-                const firstNoteTime = studioNotesMemory.length > 0 ? studioNotesMemory[0].time : 0;
                 const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
 
                 if (studioPlaybackTime >= totalDurationSecs) {
@@ -2318,24 +2419,36 @@
                     scrollContainer.scrollTop = Math.max(0, targetScrollTop);
                 }
 
-                studioNotesMemory.forEach((note, index) => {
+                // Audio Dispatcher (Dynamic Cursor-Indexed Trigger)
+                while (studioPlaybackNoteIndex < studioNotesMemory.length) {
+                    const note = studioNotesMemory[studioPlaybackNoteIndex];
+                    const shiftedStart = Math.max(0, note.time - firstNoteTime);
+                    if (shiftedStart < studioPlaybackTime) {
+                        if (shiftedStart >= prevTime) {
+                            const playDelay = Math.max(0, shiftedStart - prevTime) / playbackSpeed;
+                            const noteName = Tone.Frequency(note.midi, "midi").toNote();
+                            activeInstrument.triggerAttackRelease(noteName, note.duration, Tone.now() + playDelay, note.velocity);
+
+                            const noteHead = document.getElementById(`sheet-music-notation-studio-notehead-${studioPlaybackNoteIndex}`);
+                            const noteRect = document.getElementById(`sheet-music-notation-studio-note-rect-${studioPlaybackNoteIndex}`);
+                            if (noteHead) noteHead.setAttribute('fill', '#db2777');
+                            if (noteRect) noteRect.setAttribute('fill', '#db2777');
+                        }
+                        studioPlaybackNoteIndex++;
+                    } else {
+                        break;
+                    }
+                }
+
+                // Visual release handler (analyzes only recent sliding window keys)
+                const checkStart = Math.max(0, studioPlaybackNoteIndex - 100);
+                for (let i = checkStart; i < studioPlaybackNoteIndex; i++) {
+                    const note = studioNotesMemory[i];
                     const shiftedStart = Math.max(0, note.time - firstNoteTime);
                     const shiftedEnd = shiftedStart + note.duration;
-
-                    if (shiftedStart >= prevTime && shiftedStart < studioPlaybackTime) {
-                        const playDelay = Math.max(0, shiftedStart - prevTime) / playbackSpeed;
-                        const noteName = Tone.Frequency(note.midi, "midi").toNote();
-                        activeInstrument.triggerAttackRelease(noteName, note.duration, Tone.now() + playDelay, note.velocity);
-
-                        const noteHead = document.getElementById(`sheet-music-notation-studio-notehead-${index}`);
-                        const noteRect = document.getElementById(`sheet-music-notation-studio-note-rect-${index}`);
-                        if (noteHead) noteHead.setAttribute('fill', '#db2777');
-                        if (noteRect) noteRect.setAttribute('fill', '#db2777');
-                    }
-
                     if (prevTime < shiftedEnd && studioPlaybackTime >= shiftedEnd) {
-                        const noteHead = document.getElementById(`sheet-music-notation-studio-notehead-${index}`);
-                        const noteRect = document.getElementById(`sheet-music-notation-studio-note-rect-${index}`);
+                        const noteHead = document.getElementById(`sheet-music-notation-studio-notehead-${i}`);
+                        const noteRect = document.getElementById(`sheet-music-notation-studio-note-rect-${i}`);
                         
                         const chkShowColors = document.getElementById('chk-show-colors');
                         const showColors = chkShowColors ? chkShowColors.checked : false;
@@ -2350,7 +2463,7 @@
                         if (noteHead) noteHead.setAttribute('fill', defaultColor);
                         if (noteRect) noteRect.setAttribute('fill', defaultColor);
                     }
-                });
+                }
 
                 studioPlaybackTimer = requestAnimationFrame(updateStudioFrame);
             }
@@ -2678,6 +2791,7 @@
             isPlaying = false;
             currentPlaybackTime = 0;
             lastTriggeredTime = 0;
+            playbackNoteIndex = 0;
             elTimeline.value = 0;
             updateTimeDisplay();
             btnPlay.disabled = (midiData === null);
@@ -2685,9 +2799,27 @@
             activeInstrument.releaseAll();
         }
 
+        function updatePlaybackNoteIndex() {
+            if (!activeNotesMemory || activeNotesMemory.length === 0) return;
+            let low = 0;
+            let high = activeNotesMemory.length - 1;
+            let ans = activeNotesMemory.length;
+            while (low <= high) {
+                let mid = Math.floor((low + high) / 2);
+                if (activeNotesMemory[mid].time >= currentPlaybackTime) {
+                    ans = mid;
+                    high = mid - 1;
+                } else {
+                    low = mid + 1;
+                }
+            }
+            playbackNoteIndex = ans;
+        }
+
         function seekTo(time) {
             currentPlaybackTime = Math.max(0, Math.min(time, totalDuration));
             lastTriggeredTime = currentPlaybackTime;
+            updatePlaybackNoteIndex();
             updateTimeDisplay();
             activeInstrument.releaseAll();
         }
@@ -2723,13 +2855,19 @@
                 elTimeline.value = currentPlaybackTime;
                 updateTimeDisplay();
 
-                // Dynamic Audio Note Trigger Scheduler
-                activeNotesMemory.forEach(note => {
-                    if (note.time >= prevTime && note.time < currentPlaybackTime) {
-                        const playDelay = Math.max(0, note.time - prevTime) / playbackSpeed;
-                        activeInstrument.triggerAttackRelease(note.name, note.duration, Tone.now() + playDelay, note.velocity);
+                // Audio Note Trigger Scheduler (Highly Optimized Pointer check)
+                while (playbackNoteIndex < activeNotesMemory.length) {
+                    const note = activeNotesMemory[playbackNoteIndex];
+                    if (note.time < currentPlaybackTime) {
+                        if (note.time >= prevTime) {
+                            const playDelay = Math.max(0, note.time - prevTime) / playbackSpeed;
+                            activeInstrument.triggerAttackRelease(note.name, note.duration, Tone.now() + playDelay, note.velocity);
+                        }
+                        playbackNoteIndex++;
+                    } else {
+                        break;
                     }
-                });
+                }
             }
 
             // Draw Process
@@ -2738,7 +2876,10 @@
             const currentlyActiveMidiKeys = new Set();
 
             if (midiData) {
-                activeNotesMemory.forEach(note => {
+                // Fetch the clipped visible notes slice instead of scanning all notes
+                const visibleSlice = getVisibleNotesSlice();
+                
+                visibleSlice.forEach(note => {
                     // Compute visual spatial layout bounds
                     const noteVisualYStart = elCanvas.height - ((note.time - currentPlaybackTime) * noteSpeed);
                     const noteVisualHeight = note.duration * noteSpeed;
