@@ -124,7 +124,7 @@
             align-items: center;
             z-index: 50;
             opacity: 0;
-            transition: opacity 1.5s ease-in-out; /* Slow fade-out for the typewriter */
+            transition: opacity 1.5s ease-in-out;
             pointer-events: none;
         }
         .glow-text {
@@ -145,7 +145,7 @@
             50% { border-color: white }
         }
 
-        /* Cinematic Landing Screen Fade-In State */
+        /* Cinematic Landing Screen */
         #landing-screen {
             position: absolute;
             top: 0;
@@ -154,7 +154,7 @@
             height: 100%;
             z-index: 10;
             opacity: 0;
-            transition: opacity 2.5s cubic-bezier(0.25, 1, 0.5, 1); /* Slow cinematic entry fade-in */
+            transition: opacity 2.5s cubic-bezier(0.25, 1, 0.5, 1);
             pointer-events: none;
         }
         #landing-screen.active {
@@ -162,7 +162,7 @@
             pointer-events: auto;
         }
 
-        /* Auto-Fitting Video Stage Layout */
+        /* Auto-Fitting Video Stage */
         .video-container {
             position: absolute;
             top: 0;
@@ -179,12 +179,12 @@
             transform: translate(-50%, -50%);
             width: 100%;
             height: 100%;
-            object-fit: cover; /* Forces video to fit entire viewport on all screen sizes with correct aspect ratio */
+            object-fit: cover;
             object-position: center;
-            transition: opacity 2.5s cubic-bezier(0.25, 1, 0.5, 1); /* Slow aesthetic crossfade for the videos */
+            transition: opacity 2.5s cubic-bezier(0.25, 1, 0.5, 1);
         }
 
-        /* Aesthetic Interface overlay */
+        /* UI layer */
         .ui-layer {
             position: absolute;
             top: 0;
@@ -236,7 +236,151 @@
             letter-spacing: 5px;
         }
 
-        /* Responsive Navigation Menu Trigger */
+        /* Transparent Auth Glassmorphism Overlay (Sign Up & Login) */
+        #auth-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(5px) saturate(110%); /* Subtle aesthetic video blurring */
+            -webkit-backdrop-filter: blur(5px) saturate(110%);
+            z-index: 30;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+        #auth-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .auth-card {
+            width: 90%;
+            max-width: 380px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            text-align: center;
+        }
+        .auth-header {
+            font-size: 1.1rem;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            margin-bottom: 25px;
+            color: rgba(255, 255, 255, 0.9);
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+        }
+        .auth-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .auth-input {
+            width: 100%;
+            padding: 12px 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            color: #ffffff;
+            font-size: 0.9rem;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+        .auth-input::placeholder {
+            color: rgba(255, 255, 255, 0.3);
+        }
+        .auth-input:focus {
+            border-color: rgba(255, 255, 255, 0.6);
+            background: rgba(0, 0, 0, 0.5);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
+        }
+        .auth-btn {
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.06);
+            color: #ffffff;
+            font-size: 0.9rem;
+            font-weight: 500;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 5px;
+        }
+        .auth-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+        }
+        .auth-switch {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.4);
+            margin-top: 15px;
+            cursor: pointer;
+            letter-spacing: 1px;
+            transition: color 0.3s ease;
+        }
+        .auth-switch span {
+            color: #ffffff;
+            text-decoration: underline;
+        }
+        .auth-switch:hover {
+            color: rgba(255, 255, 255, 0.8);
+        }
+        .auth-error {
+            font-size: 0.75rem;
+            color: #ff4a4a;
+            margin-top: 5px;
+            letter-spacing: 1px;
+            text-shadow: 0 0 8px rgba(255, 74, 74, 0.3);
+            display: none;
+        }
+
+        /* Authentic Verification Checking UI Terminal (Center Screen) */
+        #verification-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 40;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.8s ease-in-out;
+        }
+        #verification-screen.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .terminal-box {
+            text-align: center;
+            padding: 20px;
+        }
+        .terminal-text {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            color: #ffffff;
+            text-shadow: 0 0 10px #ffffff;
+            display: inline-block;
+        }
+
+        /* Hamburger Navigation */
         .menu-btn {
             position: absolute;
             top: calc(20px + env(safe-area-inset-top));
@@ -260,18 +404,10 @@
             transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
             box-shadow: 0 0 8px rgba(0,0,0,0.5);
         }
-        .menu-btn.active span:nth-child(1) {
-            transform: translateY(8px) rotate(45deg);
-        }
-        .menu-btn.active span:nth-child(2) {
-            opacity: 0;
-            transform: scaleX(0);
-        }
-        .menu-btn.active span:nth-child(3) {
-            transform: translateY(-8px) rotate(-45deg);
-        }
+        .menu-btn.active span:nth-child(1) { transform: translateY(8px) rotate(45deg); }
+        .menu-btn.active span:nth-child(2) { opacity: 0; transform: scaleX(0); }
+        .menu-btn.active span:nth-child(3) { transform: translateY(-8px) rotate(-45deg); }
 
-        /* Sliding Drawer Menu */
         .side-menu {
             position: absolute;
             top: 0;
@@ -289,9 +425,7 @@
             padding: 40px;
             border-left: 1px solid rgba(255, 255, 255, 0.05);
         }
-        .side-menu.open {
-            right: 0;
-        }
+        .side-menu.open { right: 0; }
         .menu-overlay {
             position: absolute;
             top: 0;
@@ -306,16 +440,9 @@
             z-index: 85;
             transition: all 0.5s ease;
         }
-        .menu-overlay.active {
-            opacity: 1;
-            visibility: visible;
-        }
-        .nav-links {
-            list-style: none;
-        }
-        .nav-links li {
-            margin: 25px 0;
-        }
+        .menu-overlay.active { opacity: 1; visibility: visible; }
+        .nav-links { list-style: none; }
+        .nav-links li { margin: 25px 0; }
         .nav-links a {
             color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
@@ -334,7 +461,7 @@
 </head>
 <body>
 
-    <!-- Landscape Warning Screen (Strictly Mobile Portrait check) -->
+    <!-- Landscape Warning Screen -->
     <div id="orientation-warning">
         <svg viewBox="0 0 24 24">
             <path d="M16 1H8C6.34 1 5 2.34 5 4v16c0 1.66 1.34 3 3 3h8c1.66 0 3-1.34 3-3V4c0-1.66-1.34-3-3-3zm-2 20h-4v-1h4v1zm3.25-3H6.75V4h10.5V18z"/>
@@ -345,8 +472,8 @@
     <!-- Main Viewport Layer -->
     <div id="main-content" class="stage-wrapper">
 
-        <!-- Phase 1: Interactive Tap-To-Enter Overlay -->
-        <div id="interactive-overlay" onclick="launchFullscreenStudio()">
+        <!-- Phase 1: Tap-To-Enter Overlay -->
+        <div id="interactive-overlay">
             <div class="pulse-text">Tap to Enter T1ERA</div>
         </div>
 
@@ -355,15 +482,14 @@
             <div class="glow-text blink" id="typewriter"></div>
         </div>
 
-        <!-- Phase 3: Continuous Landing Page Stage -->
+        <!-- Phase 3: Video Stage Landing Screen -->
         <div id="landing-screen">
-            <!-- Fullscreen Video Element Containers -->
             <div class="video-container">
                 <video id="vid1" class="video-bg" playsinline webkit-playsinline muted src="assets/videos/vid1.mp4"></video>
                 <video id="vid2" class="video-bg" playsinline webkit-playsinline loop muted style="opacity: 0;" src="assets/videos/vid2.mp4"></video>
             </div>
 
-            <!-- Foreground Navigation & Interactions Overlay -->
+            <!-- Foreground UI controls overlay -->
             <div class="ui-layer">
                 <div class="header-placeholder"></div>
                 <div class="enter-studio-wrapper">
@@ -389,117 +515,35 @@
             </nav>
         </div>
 
+        <!-- Phase 4: Transparent Glassmorphic Auth Modal (Sign Up & Login Toggle) -->
+        <div id="auth-overlay">
+            <div class="auth-card" id="auth-card">
+                <div class="auth-header" id="auth-title">Sign In</div>
+                
+                <form class="auth-form" id="auth-form">
+                    <input type="email" id="auth-email" class="auth-input" placeholder="EMAIL ADDRESS" required autocomplete="email">
+                    <input type="password" id="auth-password" class="auth-input" placeholder="PASSWORD" required autocomplete="current-password">
+                    <button type="submit" id="auth-submit-btn" class="auth-btn">Access</button>
+                </form>
+
+                <div class="auth-error" id="auth-error-msg">Incorrect credentials</div>
+                <div class="auth-switch" id="auth-switch-view">Don't have an account? <span>Sign Up</span></div>
+            </div>
+        </div>
+
+        <!-- Phase 5: Verification Checking Console Screen -->
+        <div id="verification-screen">
+            <div class="terminal-box">
+                <div class="terminal-text blink" id="verification-terminal"></div>
+            </div>
+        </div>
+
     </div>
 
-    <!-- Loading Audio -->
+    <!-- Background Audio Asset -->
     <audio id="bg-sound" src="assets/audio/ambient.mp3" preload="auto" loop></audio>
 
-    <script>
-        // PWA Setup
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
-                    .then(reg => console.log('Service Worker Registered.'))
-                    .catch(err => console.log('Service Worker Registration failed:', err));
-            });
-        }
-
-        const overlay = document.getElementById("interactive-overlay");
-        const loadingScreen = document.getElementById("loading-screen");
-        const landingScreen = document.getElementById("landing-screen");
-        const typewriterElement = document.getElementById("typewriter");
-        const sound = document.getElementById("bg-sound");
-        const v1 = document.getElementById("vid1");
-        const v2 = document.getElementById("vid2");
-        const enterBtn = document.getElementById("enter-studio-btn");
-
-        const textToType = "T1ERA Music Studio ...";
-        let charIndex = 0;
-
-        function triggerNativeFullscreen() {
-            const docEl = document.documentElement;
-            if (docEl.requestFullscreen) {
-                docEl.requestFullscreen().catch(err => console.log("Fullscreen request rejected:", err));
-            } else if (docEl.webkitRequestFullscreen) {
-                docEl.webkitRequestFullscreen();
-            } else if (docEl.msRequestFullscreen) {
-                docEl.msRequestFullscreen();
-            }
-        }
-
-        function launchFullscreenStudio() {
-            triggerNativeFullscreen();
-
-            overlay.style.opacity = "0";
-            setTimeout(() => {
-                overlay.style.display = "none";
-            }, 1200);
-
-            sound.play().catch(err => console.log("Audio playback restricted", err));
-
-            loadingScreen.style.opacity = "1";
-            
-            v1.load();
-            v2.load();
-
-            setTimeout(typeEffect, 1200);
-        }
-
-        function typeEffect() {
-            if (charIndex < textToType.length) {
-                typewriterElement.textContent += textToType.charAt(charIndex);
-                charIndex++;
-                setTimeout(typeEffect, 150);
-            } else {
-                setTimeout(() => {
-                    sound.pause();
-
-                    // Fade out loading element and trigger the video stage
-                    loadingScreen.style.opacity = "0";
-
-                    v1.muted = false; 
-                    v1.play().then(() => {
-                        // Slowly fade in the main landing screen over the playing video
-                        landingScreen.classList.add("active");
-                    }).catch(e => {
-                        console.log("Unmuted play blocked. Fallback to muted.", e);
-                        v1.muted = true;
-                        v1.play().then(() => {
-                            landingScreen.classList.add("active");
-                        });
-                    });
-                }, 1500);
-            }
-        }
-
-        // Slow cinematic crossfade logic when video 1 ends
-        v1.addEventListener('ended', () => {
-            v2.play().then(() => {
-                // Initiates a 2.5-second simultaneous opacity switch
-                v2.style.opacity = "1";
-                v1.style.opacity = "0";
-
-                // Fade-in action "Enter Studio" button with a smooth delay (e.g. 4 seconds after crossfade begins)
-                setTimeout(() => {
-                    enterBtn.classList.add("show");
-                }, 4000);
-            }).catch(err => {
-                console.log("Continuous video 2 looping error:", err);
-            });
-        });
-
-        const menuToggle = document.getElementById('menu-toggle');
-        const sideMenu = document.getElementById('side-menu');
-        const menuOverlay = document.getElementById('menu-overlay');
-
-        function toggleMenu() {
-            menuToggle.classList.toggle('active');
-            sideMenu.classList.toggle('open');
-            menuOverlay.classList.toggle('active');
-        }
-
-        menuToggle.addEventListener('click', toggleMenu);
-        menuOverlay.addEventListener('click', toggleMenu);
-    </script>
+    <!-- App Logic Module (Handles all UI operations, typewriter, and Firebase Auth) -->
+    <script type="module" src="assets/js/app.js"></script>
 </body>
 </html>
