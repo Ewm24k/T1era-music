@@ -13,25 +13,77 @@
     <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
 
     <style>
+        /* Base Reset */
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
             user-select: none;
+            -webkit-user-select: none;
         }
         body, html {
             width: 100%;
             height: 100%;
             background-color: #000000;
-            font-family: 'Courier New', Courier, monospace;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Courier New", monospace;
             overflow: hidden;
             color: #ffffff;
         }
-        
-        /* User Interaction Screen (Required for Audio Autoplay bypass) */
+
+        /* Responsive Viewport Wrapper */
+        .stage-wrapper {
+            position: relative;
+            width: 100dvw;
+            height: 100dvh;
+            overflow: hidden;
+        }
+
+        /* Orientation Enforcement Alert */
+        #orientation-warning {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000000;
+            z-index: 2000;
+            color: #ffffff;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 30px;
+        }
+        #orientation-warning svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            fill: #ffffff;
+            animation: rotateDevice 2s infinite ease-in-out;
+        }
+        @keyframes rotateDevice {
+            0% { transform: rotate(0deg); }
+            50% { transform: rotate(-90deg); }
+            100% { transform: rotate(0deg); }
+        }
+        #orientation-warning h2 {
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        /* Show warning on mobile portrait view */
+        @media (orientation: portrait) and (max-width: 1024px) {
+            #orientation-warning {
+                display: flex;
+            }
+            #main-content {
+                display: none;
+            }
+        }
+
+        /* Tap to Enter Overlay */
         #interactive-overlay {
             position: absolute;
             top: 0;
@@ -42,9 +94,9 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            z-index: 10;
+            z-index: 100;
             cursor: pointer;
-            transition: opacity 1s ease-in-out;
+            transition: opacity 0.8s ease-in-out;
         }
         .pulse-text {
             font-size: 1.1rem;
@@ -59,16 +111,26 @@
             100% { opacity: 0.3; }
         }
 
-        /* Typewriter Animation Display */
-        #loading-container {
-            text-align: center;
+        /* Loading Typewriter Screen Area */
+        #loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
             opacity: 0;
-            transition: opacity 1s ease-in-out;
-            padding: 20px;
+            transition: opacity 0.8s ease-in-out;
+            pointer-events: none;
         }
         .glow-text {
             font-size: 1.8rem;
             font-weight: bold;
+            font-family: 'Courier New', Courier, monospace;
             letter-spacing: 2px;
             text-shadow: 0 0 10px #ffffff, 0 0 20px #ffffff, 0 0 30px #ffffff;
             border-right: 2px solid rgba(255, 255, 255, 0.75);
@@ -82,74 +144,369 @@
             from, to { border-color: transparent }
             50% { border-color: white }
         }
-        .fade-out {
-            opacity: 0 !important;
-            transition: opacity 1s ease-in-out !important;
+
+        /* Main Video Landing Screen State */
+        #landing-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 1.5s ease-in-out;
+            pointer-events: none;
+        }
+        #landing-screen.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Auto-Fitting Video Stage Layout */
+        .video-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000000;
+        }
+        .video-bg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* Forces video to fit entire viewport on all screen sizes with correct aspect ratio */
+            object-position: center;
+            transition: opacity 0.6s ease-in-out;
+        }
+
+        /* Aesthetic Interface overlay */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 15;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: calc(20px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
+        }
+
+        /* "Enter Studio" Action Button */
+        .enter-studio-wrapper {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            margin-bottom: 40px;
+        }
+        .btn-enter-studio {
+            pointer-events: auto;
+            opacity: 0;
+            transform: translateY(20px);
+            padding: 15px 40px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50px;
+            cursor: pointer;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(255, 255, 255, 0.1);
+            transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .btn-enter-studio.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .btn-enter-studio:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+            letter-spacing: 5px;
+        }
+
+        /* Responsive Navigation Menu Trigger */
+        .menu-btn {
+            position: absolute;
+            top: calc(20px + env(safe-area-inset-top));
+            right: calc(20px + env(safe-area-inset-right));
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            z-index: 100;
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .menu-btn span {
+            display: block;
+            width: 24px;
+            height: 2px;
+            background: #ffffff;
+            margin: 3px 0;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 0 8px rgba(0,0,0,0.5);
+        }
+        .menu-btn.active span:nth-child(1) {
+            transform: translateY(8px) rotate(45deg);
+        }
+        .menu-btn.active span:nth-child(2) {
+            opacity: 0;
+            transform: scaleX(0);
+        }
+        .menu-btn.active span:nth-child(3) {
+            transform: translateY(-8px) rotate(-45deg);
+        }
+
+        /* Sliding Drawer Menu */
+        .side-menu {
+            position: absolute;
+            top: 0;
+            right: -320px;
+            width: 320px;
+            height: 100%;
+            background: rgba(5, 5, 5, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 90;
+            transition: right 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 40px;
+            border-left: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .side-menu.open {
+            right: 0;
+        }
+        .menu-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(2px);
+            -webkit-backdrop-filter: blur(2px);
+            opacity: 0;
+            visibility: hidden;
+            z-index: 85;
+            transition: all 0.5s ease;
+        }
+        .menu-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .nav-links {
+            list-style: none;
+        }
+        .nav-links li {
+            margin: 25px 0;
+        }
+        .nav-links a {
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            font-size: 1.1rem;
+            font-weight: 300;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            transition: all 0.3s ease;
+        }
+        .nav-links a:hover {
+            color: #ffffff;
+            letter-spacing: 5px;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
         }
     </style>
 </head>
 <body>
 
-    <!-- Tap Overlay (iOS / Android compatibility barrier) -->
-    <div id="interactive-overlay" onclick="startExperience()">
-        <div class="pulse-text">Tap to Enter T1ERA</div>
+    <!-- Landscape Warning Screen (Strictly Mobile Portrait check) -->
+    <div id="orientation-warning">
+        <svg viewBox="0 0 24 24">
+            <path d="M16 1H8C6.34 1 5 2.34 5 4v16c0 1.66 1.34 3 3 3h8c1.66 0 3-1.34 3-3V4c0-1.66-1.34-3-3-3zm-2 20h-4v-1h4v1zm3.25-3H6.75V4h10.5V18z"/>
+        </svg>
+        <h2>Please rotate device to landscape</h2>
     </div>
 
-    <!-- Main Typewriter Screen -->
-    <div id="loading-container">
-        <div class="glow-text blink" id="typewriter"></div>
+    <!-- Main Viewport Layer -->
+    <div id="main-content" class="stage-wrapper">
+
+        <!-- Phase 1: Interactive Tap-To-Enter Overlay -->
+        <div id="interactive-overlay" onclick="launchFullscreenStudio()">
+            <div class="pulse-text">Tap to Enter T1ERA</div>
+        </div>
+
+        <!-- Phase 2: Loading & Typewriter Stage -->
+        <div id="loading-screen">
+            <div class="glow-text blink" id="typewriter"></div>
+        </div>
+
+        <!-- Phase 3: Continuous Landing Page Stage -->
+        <div id="landing-screen">
+            <!-- Fullscreen Video Element Containers -->
+            <div class="video-container">
+                <!-- playsinline & webkit-playsinline stop iOS Safari from auto-opening native video layers -->
+                <video id="vid1" class="video-bg" playsinline webkit-playsinline muted src="assets/videos/vid1.mp4"></video>
+                <video id="vid2" class="video-bg" playsinline webkit-playsinline loop muted style="opacity: 0;" src="assets/videos/vid2.mp4"></video>
+            </div>
+
+            <!-- Foreground Navigation & Interactions Overlay -->
+            <div class="ui-layer">
+                <div class="header-placeholder"></div>
+                <div class="enter-studio-wrapper">
+                    <button class="btn-enter-studio" id="enter-studio-btn">Enter Studio</button>
+                </div>
+            </div>
+
+            <!-- Hamburger Button and Slide menu -->
+            <div class="menu-btn" id="menu-toggle">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <div class="menu-overlay" id="menu-overlay"></div>
+            <nav class="side-menu" id="side-menu">
+                <ul class="nav-links">
+                    <li><a href="#">Home</a></li>
+                    <li><a href="#">Studio</a></li>
+                    <li><a href="#">Tracks</a></li>
+                    <li><a href="#">About</a></li>
+                    <li><a href="#">Contact</a></li>
+                </ul>
+            </nav>
+        </div>
+
     </div>
 
-    <!-- Audio Element -->
+    <!-- Loading Audio -->
     <audio id="bg-sound" src="assets/audio/ambient.mp3" preload="auto" loop></audio>
 
     <script>
-        // PWA Registration
+        // PWA Setup
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js')
-                    .then(reg => console.log('Service Worker Active.'))
-                    .catch(err => console.log('Service Worker Failed:', err));
+                    .then(reg => console.log('Service Worker Registered.'))
+                    .catch(err => console.log('Service Worker Registration failed:', err));
             });
         }
+
+        const overlay = document.getElementById("interactive-overlay");
+        const loadingScreen = document.getElementById("loading-screen");
+        const landingScreen = document.getElementById("landing-screen");
+        const typewriterElement = document.getElementById("typewriter");
+        const sound = document.getElementById("bg-sound");
+        const v1 = document.getElementById("vid1");
+        const v2 = document.getElementById("vid2");
+        const enterBtn = document.getElementById("enter-studio-btn");
 
         const textToType = "T1ERA Music Studio ...";
-        const typewriterElement = document.getElementById("typewriter");
-        const overlay = document.getElementById("interactive-overlay");
-        const loadingContainer = document.getElementById("loading-container");
-        const sound = document.getElementById("bg-sound");
         let charIndex = 0;
 
-        function startExperience() {
-            overlay.classList.add("fade-out");
-            
-            // Try playing background audio
-            sound.play().catch(err => {
-                console.log("Audio playback initiated but browser restricted it:", err);
-            });
-
-            setTimeout(() => {
-                overlay.style.display = "none";
-                loadingContainer.style.opacity = "1";
-                typeEffect();
-            }, 1000);
+        // Auto Fullscreen Trigger (Supports iOS / Android / Desktop Chrome / Safari)
+        function triggerNativeFullscreen() {
+            const docEl = document.documentElement;
+            if (docEl.requestFullscreen) {
+                docEl.requestFullscreen().catch(err => console.log("Fullscreen request rejected:", err));
+            } else if (docEl.webkitRequestFullscreen) { /* Chrome, Safari and Opera on iOS / macOS */
+                docEl.webkitRequestFullscreen();
+            } else if (docEl.msRequestFullscreen) { /* IE/Edge */
+                docEl.msRequestFullscreen();
+            }
         }
 
+        function launchFullscreenStudio() {
+            // Trigger native fullscreen mode
+            triggerNativeFullscreen();
+
+            // Hide the initial interactive trigger overlay
+            overlay.style.opacity = "0";
+            setTimeout(() => {
+                overlay.style.display = "none";
+            }, 800);
+
+            // Play background audio for loading screen
+            sound.play().catch(err => console.log("Audio playback was blocked on this device", err));
+
+            // Show typewriter loading screen
+            loadingScreen.style.opacity = "1";
+            
+            // Pre-load videos so they transitions immediately without lag
+            v1.load();
+            v2.load();
+
+            setTimeout(typeEffect, 1000);
+        }
+
+        // Animated typewriter loader
         function typeEffect() {
             if (charIndex < textToType.length) {
                 typewriterElement.textContent += textToType.charAt(charIndex);
                 charIndex++;
                 setTimeout(typeEffect, 150);
             } else {
-                // Typewriter complete, wait 2 seconds, fade screen, redirect
+                // Typwriter sequence ended. Transition directly to Video Stage
                 setTimeout(() => {
-                    document.body.classList.add("fade-out");
-                    setTimeout(() => {
-                        window.location.href = "landingpage.html";
-                    }, 1000);
-                }, 2000);
+                    // Stop typewriter background audio
+                    sound.pause();
+
+                    // Fade out loading element and bring in the active landing space
+                    loadingScreen.style.opacity = "0";
+                    landingScreen.classList.add("active");
+
+                    // Instantly trigger unmuted play of the first video
+                    v1.muted = false; // Attempt unmuted playing
+                    v1.play().catch(e => {
+                        console.log("Unmuted video play failed. Launching silent fallback.", e);
+                        v1.muted = true;
+                        v1.play();
+                    });
+                }, 1500);
             }
         }
+
+        // Smooth video transition trigger logic
+        v1.addEventListener('ended', () => {
+            v2.play().then(() => {
+                v2.style.opacity = "1";
+                v1.style.opacity = "0";
+
+                // Show action "Enter Studio" button with a smooth delay
+                setTimeout(() => {
+                    enterBtn.classList.add("show");
+                }, 3000);
+            }).catch(err => {
+                console.log("Continuous video 2 looping error:", err);
+            });
+        });
+
+        // Navigation drawer controls
+        const menuToggle = document.getElementById('menu-toggle');
+        const sideMenu = document.getElementById('side-menu');
+        const menuOverlay = document.getElementById('menu-overlay');
+
+        function toggleMenu() {
+            menuToggle.classList.toggle('active');
+            sideMenu.classList.toggle('open');
+            menuOverlay.classList.toggle('active');
+        }
+
+        menuToggle.addEventListener('click', toggleMenu);
+        menuOverlay.addEventListener('click', toggleMenu);
     </script>
 </body>
 </html>
