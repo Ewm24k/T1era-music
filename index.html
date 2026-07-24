@@ -30,7 +30,7 @@
             color: #ffffff;
         }
 
-        /* Responsive Viewport Wrapper */
+        /* Viewport Stage */
         .stage-wrapper {
             position: relative;
             width: 100dvw;
@@ -73,14 +73,10 @@
             text-transform: uppercase;
         }
 
-        /* Show warning on mobile portrait view */
+        /* Mobile portrait display lock */
         @media (orientation: portrait) and (max-width: 1024px) {
-            #orientation-warning {
-                display: flex;
-            }
-            #main-content {
-                display: none;
-            }
+            #orientation-warning { display: flex; }
+            #main-content { display: none; }
         }
 
         /* Tap to Enter Overlay */
@@ -111,7 +107,7 @@
             100% { opacity: 0.3; }
         }
 
-        /* Loading Typewriter Screen Area */
+        /* Loading Screen */
         #loading-screen {
             position: absolute;
             top: 0;
@@ -137,15 +133,13 @@
             white-space: normal;
             display: inline-block;
         }
-        .blink {
-            animation: blink-caret 0.75s step-end infinite;
-        }
+        .blink { animation: blink-caret 0.75s step-end infinite; }
         @keyframes blink-caret {
             from, to { border-color: transparent }
             50% { border-color: white }
         }
 
-        /* Cinematic Landing Screen */
+        /* Main Landing Stage */
         #landing-screen {
             position: absolute;
             top: 0;
@@ -162,7 +156,7 @@
             pointer-events: auto;
         }
 
-        /* Auto-Fitting Video Stage */
+        /* Video Container */
         .video-container {
             position: absolute;
             top: 0;
@@ -184,7 +178,7 @@
             transition: opacity 2.5s cubic-bezier(0.25, 1, 0.5, 1);
         }
 
-        /* UI layer */
+        /* UI overlay layer */
         .ui-layer {
             position: absolute;
             top: 0;
@@ -199,7 +193,7 @@
             padding: calc(20px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
         }
 
-        /* "Enter Studio" Action Button */
+        /* Enter Studio Button */
         .enter-studio-wrapper {
             width: 100%;
             display: flex;
@@ -236,7 +230,7 @@
             letter-spacing: 5px;
         }
 
-        /* Transparent Auth Glassmorphism Overlay (Sign Up & Login) */
+        /* Transparent Auth Glassmorphism Overlay */
         #auth-overlay {
             position: absolute;
             top: 0;
@@ -294,9 +288,7 @@
             outline: none;
             transition: all 0.3s ease;
         }
-        .auth-input::placeholder {
-            color: rgba(255, 255, 255, 0.3);
-        }
+        .auth-input::placeholder { color: rgba(255, 255, 255, 0.3); }
         .auth-input:focus {
             border-color: rgba(255, 255, 255, 0.6);
             background: rgba(0, 0, 0, 0.5);
@@ -322,7 +314,7 @@
             box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
         }
         
-        /* Google Sign-In UI Elements */
+        /* Provider Separator */
         .auth-divider {
             display: flex;
             align-items: center;
@@ -375,9 +367,7 @@
             color: #ffffff;
             text-decoration: underline;
         }
-        .auth-switch:hover {
-            color: rgba(255, 255, 255, 0.8);
-        }
+        .auth-switch:hover { color: rgba(255, 255, 255, 0.8); }
         .auth-error {
             font-size: 0.75rem;
             color: #ff4a4a;
@@ -387,7 +377,7 @@
             display: none;
         }
 
-        /* Aesthetic Maintenance Upgrade Modal Alert */
+        /* Maintenance Upgrade Modal Alert */
         #maintenance-overlay {
             position: absolute;
             top: 0;
@@ -423,9 +413,7 @@
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
         }
-        #maintenance-overlay.active .maintenance-card {
-            transform: scale(1);
-        }
+        #maintenance-overlay.active .maintenance-card { transform: scale(1); }
         .maintenance-icon {
             font-size: 2.2rem;
             margin-bottom: 15px;
@@ -464,14 +452,14 @@
             box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
         }
 
-        /* Authentic Verification Checking UI Terminal (Center Screen) */
+        /* Centered Real-Time Verification Loading Console */
         #verification-screen {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.4);
+            background: rgba(0, 0, 0, 0.5);
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
             z-index: 40;
@@ -480,7 +468,7 @@
             align-items: center;
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.8s ease-in-out;
+            transition: opacity 0.6s cubic-bezier(0.25, 1, 0.5, 1);
         }
         #verification-screen.active {
             opacity: 1;
@@ -492,11 +480,199 @@
         }
         .terminal-text {
             font-family: 'Courier New', Courier, monospace;
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             letter-spacing: 2px;
             color: #ffffff;
             text-shadow: 0 0 10px #ffffff;
             display: inline-block;
+        }
+
+        /* Studio Services Hub Overlay (Transparent Card Layout) */
+        #services-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 35;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+            padding: calc(10px + env(safe-area-inset-top)) calc(15px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(15px + env(safe-area-inset-left));
+        }
+        #services-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        
+        .services-hub-card {
+            width: 100%;
+            max-width: 850px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .services-title {
+            font-size: 1.2rem;
+            letter-spacing: 5px;
+            text-transform: uppercase;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.9);
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+        }
+
+        /* 3-Column Card Layout (Landscape optimized) */
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-top: 10px;
+        }
+
+        /* Individual Service Cards with Distinct Glow Effects */
+        .service-card {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 12px;
+            padding: 25px 20px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            position: relative;
+        }
+
+        .service-card .card-icon {
+            font-size: 2rem;
+            transition: transform 0.3s ease;
+        }
+        .service-card:hover .card-icon {
+            transform: scale(1.15) translateY(-5px);
+        }
+
+        .service-card .card-name {
+            font-size: 0.9rem;
+            letter-spacing: 2px;
+            font-weight: 500;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.4;
+        }
+
+        /* Glowing Border Colors for Non-Moving Cards */
+        .service-card.blue-glow {
+            border: 1px solid rgba(57, 118, 240, 0.3);
+            box-shadow: 0 0 15px rgba(57, 118, 240, 0.05);
+        }
+        .service-card.blue-glow:hover {
+            border-color: rgba(57, 118, 240, 0.8);
+            box-shadow: 0 0 25px rgba(57, 118, 240, 0.3);
+            background: rgba(57, 118, 240, 0.05);
+        }
+
+        .service-card.emerald-glow {
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.05);
+        }
+        .service-card.emerald-glow:hover {
+            border-color: rgba(16, 185, 129, 0.8);
+            box-shadow: 0 0 25px rgba(16, 185, 129, 0.3);
+            background: rgba(16, 185, 129, 0.05);
+        }
+
+        /* Rotating Glowing Border Configuration for Studio Card */
+        .service-card.glowing-active {
+            border: none;
+            overflow: hidden;
+            background: rgba(10, 10, 10, 0.9);
+            box-shadow: 0 0 20px rgba(255, 0, 127, 0.15);
+        }
+        .service-card.glowing-active::before {
+            content: '';
+            position: absolute;
+            z-index: 1;
+            left: -50%;
+            top: -50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(
+                #ff007f, 
+                #7f00ff, 
+                #00f0ff, 
+                #ff007f
+            );
+            animation: rotateBorder 4s linear infinite;
+        }
+        .service-card.glowing-active::after {
+            content: '';
+            position: absolute;
+            z-index: 2;
+            left: 2px;
+            top: 2px;
+            width: calc(100% - 4px);
+            height: calc(100% - 4px);
+            background: rgba(10, 10, 10, 0.95);
+            border-radius: 10px;
+            transition: background 0.3s ease;
+        }
+        .service-card.glowing-active:hover::after {
+            background: rgba(25ff, 25ff, 25ff, 0.02) !important;
+        }
+        /* Elevate text and icon content above rotating border layers */
+        .service-card.glowing-active .card-icon,
+        .service-card.glowing-active .card-name {
+            position: relative;
+            z-index: 3;
+        }
+        @keyframes rotateBorder {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Adaptive Mobile Layout Overrides */
+        @media (max-width: 768px) {
+            .services-hub-card {
+                padding: 20px;
+                gap: 15px;
+            }
+            .services-title {
+                font-size: 1rem;
+                letter-spacing: 3px;
+            }
+            .services-grid {
+                grid-template-columns: repeat(3, 1fr); /* Lock to 3-column in landscape */
+                gap: 12px;
+            }
+            .service-card {
+                padding: 15px 10px;
+                gap: 8px;
+            }
+            .service-card .card-icon {
+                font-size: 1.5rem;
+            }
+            .service-card .card-name {
+                font-size: 0.75rem;
+                letter-spacing: 1px;
+            }
         }
 
         /* Hamburger Navigation */
@@ -634,7 +810,7 @@
             </nav>
         </div>
 
-        <!-- Phase 4: Transparent Glassmorphic Auth Modal (Sign Up & Login Toggle) -->
+        <!-- Phase 4: Transparent Glassmorphic Auth Modal -->
         <div id="auth-overlay">
             <div class="auth-card" id="auth-card">
                 <div class="auth-header" id="auth-title">Sign In</div>
@@ -647,7 +823,6 @@
 
                 <div class="auth-divider"><span>OR</span></div>
 
-                <!-- Google Authentication Entry Trigger -->
                 <button type="button" id="google-auth-btn" class="google-btn">
                     <svg class="google-icon" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
                         <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -670,7 +845,34 @@
             </div>
         </div>
 
-        <!-- Phase 6: Maintenance Popup (Aesthetic notification card) -->
+        <!-- Phase 6: Active Studio Services Hub Overlay -->
+        <div id="services-overlay">
+            <div class="services-hub-card">
+                <div class="services-title">Studio Console</div>
+                
+                <div class="services-grid">
+                    <!-- Option 1 Card: Blue static glow -->
+                    <div class="service-card blue-glow" onclick="alert('Feature offline for upgrade: Generate Cover Song')">
+                        <div class="card-icon">🎙️</div>
+                        <div class="card-name">Generate Cover Song</div>
+                    </div>
+
+                    <!-- Option 2 Card: Emerald static glow -->
+                    <div class="service-card emerald-glow" onclick="alert('Feature offline for upgrade: Generate Raw Sheet Music')">
+                        <div class="card-icon">🎼</div>
+                        <div class="card-name">Generate Raw Sheet Music</div>
+                    </div>
+
+                    <!-- Option 3 Card: High-end moving/rotating glowing border -->
+                    <div class="service-card glowing-active" onclick="alert('Initiating: Open Studio T1ERA')">
+                        <div class="card-icon">⚡</div>
+                        <div class="card-name">Open Studio T1ERA</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Phase 7: Maintenance Popup -->
         <div id="maintenance-overlay">
             <div class="maintenance-card">
                 <span class="maintenance-icon">⚙️</span>
