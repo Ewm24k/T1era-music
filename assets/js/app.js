@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 // Firebase App Configuration
 const firebaseConfig = {
@@ -12,7 +12,7 @@ const firebaseConfig = {
   measurementId: "G-XX6MGLBDE4"
 };
 
-// Initialize Firebase App gracefully
+// Initialize Firebase App
 let app, auth, googleProvider;
 try {
     app = initializeApp(firebaseConfig);
@@ -20,14 +20,6 @@ try {
     googleProvider = new GoogleAuthProvider();
 } catch (e) {
     console.error("Firebase SDK initialization error:", e);
-}
-
-// Track Auth State
-let currentUserObj = null;
-if (auth) {
-    onAuthStateChanged(auth, (user) => {
-        currentUserObj = user;
-    });
 }
 
 // UI DOM Elements
@@ -51,6 +43,18 @@ const authErrorMsg = document.getElementById("auth-error-msg");
 const authSwitchView = document.getElementById("auth-switch-view");
 const googleAuthBtn = document.getElementById("google-auth-btn");
 
+// Menu Footer Profile UI elements
+const menuFooter = document.getElementById("menu-footer");
+const userNameEl = document.getElementById("user-name");
+const userEmailEl = document.getElementById("user-email");
+const userAvatarEl = document.getElementById("user-avatar");
+const avatarFallbackEl = document.getElementById("avatar-fallback");
+const logoutBtn = document.getElementById("logout-btn");
+
+// Sign Out Feedback Screen Controls
+const signoutOverlay = document.getElementById("signout-overlay");
+const signoutStatusText = document.getElementById("signout-status-text");
+
 // Maintenance Popups Controls
 const maintenanceOverlay = document.getElementById("maintenance-overlay");
 const maintenanceCloseBtn = document.getElementById("maintenance-close-btn");
@@ -63,6 +67,38 @@ const verificationScreen = document.getElementById("verification-screen");
 const verificationTerminal = document.getElementById("verification-terminal");
 
 let isSignUpState = false;
+
+// Track Auth State & Live sync profile variables
+let currentUserObj = null;
+
+if (auth) {
+    onAuthStateChanged(auth, (user) => {
+        currentUserObj = user;
+        if (user) {
+            // Update Menu Profile info with active user parameters from database
+            userNameEl.textContent = user.displayName || "Studio Creator";
+            userEmailEl.textContent = user.email || "";
+            
+            if (user.photoURL) {
+                userAvatarEl.src = user.photoURL;
+                userAvatarEl.style.display = "block";
+                avatarFallbackEl.style.display = "none";
+            } else {
+                userAvatarEl.style.display = "none";
+                avatarFallbackEl.style.display = "flex";
+                // Render initials as a default avatar
+                const initials = user.email ? user.email.substring(0, 2).toUpperCase() : "ST";
+                avatarFallbackEl.textContent = initials;
+            }
+            
+            // Render menu footer
+            menuFooter.style.display = "flex";
+        } else {
+            // Hide menu footer on log out
+            menuFooter.style.display = "none";
+        }
+    });
+}
 
 // App Loading Logic
 const textToType = "T1ERA Music Studio ...";
@@ -87,7 +123,6 @@ function launchFullscreenStudio() {
         overlay.style.display = "none";
     }, 1200);
 
-    // Audio Play Safe-Fallback wrapper
     if (sound) {
         sound.play().catch(err => {
             console.warn("Background audio playback is restricted or file is missing:", err);
@@ -217,7 +252,7 @@ authForm.addEventListener("submit", (e) => {
     }
 });
 
-// Handle Google Sign-In with robust configuration checks
+// Handle Google Sign-In with robust configuration and domain checks
 googleAuthBtn.addEventListener("click", async () => {
     authErrorMsg.style.display = "none";
     if (!auth) {
@@ -233,6 +268,8 @@ googleAuthBtn.addEventListener("click", async () => {
     } catch (error) {
         if (error.code === "auth/configuration-not-found" || error.message.includes("CONFIGURATION_NOT_FOUND")) {
             authErrorMsg.innerHTML = "<strong>Firebase Setup Required:</strong><br>Please enable the Google login provider inside your Firebase Console.";
+        } else if (error.code === "auth/unauthorized-domain" || error.message.includes("unauthorized-domain")) {
+            authErrorMsg.innerHTML = "<strong>Domain Not Authorized:</strong><br>Please add <code>t1era-music.netlify.app</code> to the Authorized Domains list in your Firebase Console (Authentication > Settings).";
         } else {
             authErrorMsg.textContent = "Google Login failed. Please try again.";
         }
@@ -291,7 +328,6 @@ function runSessionVerification() {
         verificationTerminal.textContent = "Querying live session credentials...";
         
         setTimeout(() => {
-            // Read active user state directly from Firebase SDK
             const user = auth ? auth.currentUser : null;
             
             if (user) {
@@ -326,3 +362,54 @@ function runSessionVerification() {
         }, 1200);
     }, 1200);
 }
+
+// Sign Out Logic & Live Sync Process
+logoutBtn.addEventListener("click", () => {
+    // 1. Instantly close the sliding sidebar
+    toggleMenu();
+    
+    // 2. Load the disconnection overlay 
+    signoutOverlay.style.display = "flex";
+    setTimeout(() => {
+        signoutOverlay.classList.add("active");
+    }, 10);
+    
+    signoutStatusText.style.color = "#ffffff";
+    signoutStatusText.style.textShadow = "0 0 8px rgba(255, 255, 255, 0.3)";
+    signoutStatusText.textContent = "Disconnecting session...";
+    
+    // 3. Simulates database sync sequence before closing session
+    setTimeout(() => {
+        signoutStatusText.textContent = "Syncing local database events...";
+        
+        setTimeout(() => {
+            signOut(auth).then(() => {
+                // Success feedback after successful backend event verification
+                signoutStatusText.style.color = "#ff4a4a";
+                signoutStatusText.style.textShadow = "0 0 15px #ff4a4a";
+                signoutStatusText.textContent = "Sign out Successful.";
+                
+                // Hide existing services layout
+                servicesOverlay.classList.remove("active");
+                
+                setTimeout(() => {
+                    // Turn off and reset signout page state
+                    signoutOverlay.classList.remove("active");
+                    setTimeout(() => {
+                        signoutOverlay.style.display = "none";
+                        // Re-trigger visual "Enter Studio" action button
+                        enterBtn.classList.add("show");
+                    }, 600);
+                }, 1500);
+                
+            }).catch(err => {
+                console.error("Firebase Signout Failure:", err);
+                signoutStatusText.textContent = "Session Signout Failed.";
+                setTimeout(() => {
+                    signoutOverlay.classList.remove("active");
+                    setTimeout(() => { signoutOverlay.style.display = "none"; }, 600);
+                }, 1500);
+            });
+        }, 1000);
+    }, 1000);
+});
