@@ -7,10 +7,13 @@
     
     <!-- PWA Configuration -->
     <link rel="manifest" href="manifest.json">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes"> <!-- Resolved Deprecation Warning -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="T1ERA">
     <link class="pwa-icon" rel="apple-touch-icon" href="assets/icons/icon-192.png">
+    
+    <!-- Supress standard Favicon 404 warning -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 
     <style>
         /* Base Reset */
@@ -487,7 +490,7 @@
             display: inline-block;
         }
 
-        /* Studio Services Hub Overlay (Transparent Card Layout) */
+        /* Studio Services Hub Overlay */
         #services-overlay {
             position: absolute;
             top: 0;
@@ -635,9 +638,8 @@
             transition: background 0.3s ease;
         }
         .service-card.glowing-active:hover::after {
-            background: rgba(25ff, 25ff, 25ff, 0.02) !important;
+            background: rgba(255, 255, 255, 0.02) !important;
         }
-        /* Elevate text and icon content above rotating border layers */
         .service-card.glowing-active .card-icon,
         .service-card.glowing-active .card-name {
             position: relative;
@@ -659,7 +661,7 @@
                 letter-spacing: 3px;
             }
             .services-grid {
-                grid-template-columns: repeat(3, 1fr); /* Lock to 3-column in landscape */
+                grid-template-columns: repeat(3, 1fr);
                 gap: 12px;
             }
             .service-card {
