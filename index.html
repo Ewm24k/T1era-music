@@ -539,6 +539,14 @@
             font-weight: 600;
             color: rgba(255, 255, 255, 0.9);
             text-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+            transition: opacity 0.3s ease;
+        }
+
+        /* Animated Grid Swapping Container */
+        .console-container {
+            position: relative;
+            width: 100%;
+            min-height: 180px;
         }
 
         /* 3-Column Card Layout (Landscape optimized) */
@@ -547,6 +555,25 @@
             grid-template-columns: repeat(3, 1fr);
             gap: 20px;
             margin-top: 10px;
+            width: 100%;
+        }
+
+        /* Smooth dismissal and entry animation rules */
+        .grid-transition {
+            transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1), transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+        .grid-hidden {
+            opacity: 0 !important;
+            transform: scale(0.95) !important;
+            pointer-events: none !important;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .grid-visible {
+            opacity: 1 !important;
+            transform: scale(1) !important;
+            pointer-events: auto !important;
         }
 
         /* Individual Service Cards with Distinct Glow Effects */
@@ -602,7 +629,7 @@
             background: rgba(16, 185, 129, 0.05);
         }
 
-        /* Rotating Glowing Border Configuration for Studio Card */
+        /* Rotating Glowing Border Configuration for Active Option Cards */
         .service-card.glowing-active {
             border: none;
             overflow: hidden;
@@ -650,6 +677,33 @@
             100% { transform: rotate(360deg); }
         }
 
+        /* Back Navigation Button */
+        .back-console-btn {
+            background: transparent;
+            border: none;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.8rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            align-self: center;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            margin-top: 5px;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .back-console-btn.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .back-console-btn:hover {
+            color: #ffffff;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.6);
+        }
+
         /* Adaptive Mobile Layout Overrides */
         @media (max-width: 768px) {
             .services-hub-card {
@@ -674,6 +728,9 @@
             .service-card .card-name {
                 font-size: 0.75rem;
                 letter-spacing: 1px;
+            }
+            .console-container {
+                min-height: 140px;
             }
         }
 
@@ -984,7 +1041,7 @@
 
                 <button type="button" id="google-auth-btn" class="google-btn">
                     <svg class="google-icon" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92(3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                         <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
                         <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
                         <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
@@ -1007,27 +1064,59 @@
         <!-- Phase 6: Active Studio Services Hub Overlay -->
         <div id="services-overlay">
             <div class="services-hub-card">
-                <div class="services-title">Studio Console</div>
+                <div class="services-title" id="console-title">Studio Console</div>
                 
-                <div class="services-grid">
-                    <!-- Option 1 Card -->
-                    <div class="service-card blue-glow" onclick="alert('Feature offline for upgrade: Generate Cover Song')">
-                        <div class="card-icon">🎙️</div>
-                        <div class="card-name">Generate Cover Song</div>
+                <div class="console-container">
+                    <!-- Main Menu Services Grid -->
+                    <div class="services-grid grid-transition grid-visible" id="main-services-grid">
+                        <!-- Option 1 Card -->
+                        <div class="service-card blue-glow" onclick="alert('Feature offline for upgrade: Generate Cover Song')">
+                            <div class="card-icon">🎙️</div>
+                            <div class="card-name">Generate Cover Song</div>
+                        </div>
+
+                        <!-- Option 2 Card: TRIGGERS ANIMATED TRANSITION TO SHOW THE 3 UPLOAD CARDS -->
+                        <div class="service-card emerald-glow" id="generate-sheet-card">
+                            <div class="card-icon">🎼</div>
+                            <div class="card-name">Generate Raw Sheet Music</div>
+                        </div>
+
+                        <!-- Option 3 Card: REDIRECTS DIRECTLY TO MIDIANO.HTML -->
+                        <div class="service-card glowing-active" onclick="window.location.href='midiano.html'">
+                            <div class="card-icon">⚡</div>
+                            <div class="card-name">Open Studio T1ERA</div>
+                        </div>
                     </div>
 
-                    <!-- Option 2 Card -->
-                    <div class="service-card emerald-glow" onclick="alert('Feature offline for upgrade: Generate Raw Sheet Music')">
-                        <div class="card-icon">🎼</div>
-                        <div class="card-name">Generate Raw Sheet Music</div>
-                    </div>
+                    <!-- Swap Destination Menu: Upload Screen Grid (Appears on same popup when Option 2 is clicked) -->
+                    <div class="services-grid grid-transition grid-hidden" id="upload-services-grid" style="display: none;">
+                        <!-- Upload Option 1 -->
+                        <div class="service-card blue-glow" onclick="alert('Feature selected: Upload Music/Video Youtube')">
+                            <div class="card-icon">🎥</div>
+                            <div class="card-name">Upload Music/Video Youtube</div>
+                        </div>
 
-                    <!-- Option 3 Card: Updated to redirect straight to midiano.html -->
-                    <div class="service-card glowing-active" onclick="window.location.href='midiano.html'">
-                        <div class="card-icon">⚡</div>
-                        <div class="card-name">Open Studio T1ERA</div>
+                        <!-- Upload Option 2 -->
+                        <div class="service-card emerald-glow" onclick="alert('Feature selected: Upload Music wav or mp3 file')">
+                            <div class="card-icon">🎵</div>
+                            <div class="card-name">Upload Music wav or mp3 file</div>
+                        </div>
+
+                        <!-- Upload Option 3 -->
+                        <div class="service-card glowing-active" onclick="window.location.href='midiano.html'">
+                            <div class="card-icon">🎹</div>
+                            <div class="card-name">Upload Midi File</div>
+                        </div>
                     </div>
                 </div>
+
+                <!-- Swapping Menu Back Button -->
+                <button class="back-console-btn" id="back-to-console-btn">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+                        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                    </svg>
+                    Back to Console
+                </button>
             </div>
         </div>
 
