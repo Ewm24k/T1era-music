@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// Firebase App Configuration (Configured from your credentials)
+// Firebase App Configuration (Connected live to your project credentials)
 const firebaseConfig = {
   apiKey: "AIzaSyDpVqwUVpM2c41y2RF5IlPQwKW71iyyhc8",
   authDomain: "t1era-musicv1.firebaseapp.com",
@@ -18,13 +18,13 @@ const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 
 // Track Auth State
-let isAuthenticated = false;
+let currentUserObj = null;
 
 onAuthStateChanged(auth, (user) => {
     if (user) {
-        isAuthenticated = true;
+        currentUserObj = user;
     } else {
-        isAuthenticated = false;
+        currentUserObj = null;
     }
 });
 
@@ -52,6 +52,9 @@ const googleAuthBtn = document.getElementById("google-auth-btn");
 // Maintenance Popups Controls
 const maintenanceOverlay = document.getElementById("maintenance-overlay");
 const maintenanceCloseBtn = document.getElementById("maintenance-close-btn");
+
+// Services Hub Controls
+const servicesOverlay = document.getElementById("services-overlay");
 
 // Verification screen Controls
 const verificationScreen = document.getElementById("verification-screen");
@@ -145,14 +148,12 @@ function toggleMenu() {
 menuToggle.addEventListener('click', toggleMenu);
 menuOverlay.addEventListener('click', toggleMenu);
 
-// Interactive Modal Action
+// Interactive Modal Action: Evaluates checks dynamically every time clicked
 enterBtn.addEventListener("click", () => {
-    if (isAuthenticated) {
-        runVerificationProcess();
-    } else {
-        enterBtn.classList.remove("show");
-        authOverlay.classList.add("active");
-    }
+    enterBtn.classList.remove("show");
+    
+    // Always trigger the animated verification state check first
+    runSessionVerification();
 });
 
 // Flip between login and registration layouts
@@ -180,34 +181,38 @@ authForm.addEventListener("submit", (e) => {
     const password = authPassword.value;
 
     if (isSignUpState) {
-        // BLOCKED: For now, we block email/password creation with an upgrade pop-up
+        // Block email/password registration with pop-up
         authOverlay.classList.remove("active");
         maintenanceOverlay.classList.add("active");
     } else {
-        // ALLOWED: Classic sign-in flow remains open if needed
+        // Classic sign-in flow remains open if needed
         signInWithEmailAndPassword(auth, email, password)
             .then(() => {
                 authOverlay.classList.remove("active");
-                runVerificationProcess();
+                // Re-evaluate check following active authentication
+                runSessionVerification();
             })
             .catch((error) => {
                 authErrorMsg.textContent = formatAuthErrors(error.code);
                 authErrorMsg.style.display = "block";
+                enterBtn.classList.add("show");
             });
     }
 });
 
-// Handle Google Sign-In with popup (Runs for both login and signup state)
+// Handle Google Sign-In with popup
 googleAuthBtn.addEventListener("click", () => {
     authErrorMsg.style.display = "none";
     signInWithPopup(auth, googleProvider)
         .then(() => {
             authOverlay.classList.remove("active");
-            runVerificationProcess();
+            // Re-evaluate check following active authentication
+            runSessionVerification();
         })
         .catch((error) => {
             authErrorMsg.textContent = "Google Sign-In failed.";
             authErrorMsg.style.display = "block";
+            enterBtn.classList.add("show");
             console.log("Google error context:", error);
         });
 });
@@ -215,7 +220,6 @@ googleAuthBtn.addEventListener("click", () => {
 // Dismiss maintenance alert modal
 maintenanceCloseBtn.addEventListener("click", () => {
     maintenanceOverlay.classList.remove("active");
-    // Bring user back to sign-in modal
     setTimeout(() => {
         authOverlay.classList.add("active");
     }, 400);
@@ -240,36 +244,62 @@ authOverlay.addEventListener("click", (e) => {
     }
 });
 
-// Authentication and Backend syncing timeline simulation
-function runVerificationProcess() {
-    verificationScreen.classList.add("active");
-    
-    const steps = [
-        "Checking credentials...",
-        "Authorizing network tokens...",
-        "Retrieving studio environment assets...",
-        "Syncing listening events from backend...",
-        "Access Verified. Synchronizing audio core..."
-    ];
-    
-    let currentStep = 0;
-    
-    function outputVerificationLine() {
-        if (currentStep < steps.length) {
-            verificationTerminal.textContent = steps[currentStep];
-            currentStep++;
-            setTimeout(outputVerificationLine, 1500);
-        } else {
-            verificationTerminal.style.color = "#00ff66";
-            verificationTerminal.style.textShadow = "0 0 15px #00ff66";
-            verificationTerminal.textContent = "Success!";
-            
-            setTimeout(() => {
-                alert("Auth verified. Welcome to T1ERA Studio.");
-                verificationScreen.classList.remove("active");
-            }, 1000);
-        }
+// Dismiss Services overlay on outside click
+servicesOverlay.addEventListener("click", (e) => {
+    if (e.target === servicesOverlay) {
+        servicesOverlay.classList.remove("active");
+        setTimeout(() => {
+            enterBtn.classList.add("show");
+        }, 500);
     }
+});
+
+// 8. Session Verification Workflow
+function runSessionVerification() {
+    verificationScreen.classList.add("active");
+    verificationTerminal.style.color = "#ffffff";
+    verificationTerminal.style.textShadow = "0 0 10px #ffffff";
     
-    outputVerificationLine();
+    // Step 1: Start verification checks
+    verificationTerminal.textContent = "Verifying authorization sequence...";
+    
+    setTimeout(() => {
+        verificationTerminal.textContent = "Querying live session credentials...";
+        
+        setTimeout(() => {
+            if (currentUserObj) {
+                // Succeeded authentication route
+                verificationTerminal.textContent = `Active Session Found: ${currentUserObj.email}`;
+                
+                setTimeout(() => {
+                    verificationTerminal.textContent = "Syncing listening database events...";
+                    
+                    setTimeout(() => {
+                        verificationTerminal.style.color = "#00ff66";
+                        verificationTerminal.style.textShadow = "0 0 15px #00ff66";
+                        verificationTerminal.textContent = "Status: AUTHORIZED.";
+                        
+                        setTimeout(() => {
+                            // Fade out verification and load the options Hub overlay
+                            verificationScreen.classList.remove("active");
+                            servicesOverlay.classList.add("active");
+                        }, 1200);
+                        
+                    }, 1200);
+                }, 1200);
+                
+            } else {
+                // Failed authentication route
+                verificationTerminal.style.color = "#ff4a4a";
+                verificationTerminal.style.textShadow = "0 0 15px #ff4a4a";
+                verificationTerminal.textContent = "Status: UNRESOLVED. Directing to authentication gate...";
+                
+                setTimeout(() => {
+                    // Fade out check console and slide in sign up/sign in gate
+                    verificationScreen.classList.remove("active");
+                    authOverlay.classList.add("active");
+                }, 1500);
+            }
+        }, 1200);
+    }, 1200);
 }
