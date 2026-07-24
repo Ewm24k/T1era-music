@@ -71,7 +71,7 @@ const servicesOverlay = document.getElementById("services-overlay");
 const consoleTitle = document.getElementById("console-title");
 const mainServicesGrid = document.getElementById("main-services-grid");
 const uploadServicesGrid = document.getElementById("upload-services-grid");
-const openStudioCard = document.getElementById("open-studio-card");
+const generateSheetCard = document.getElementById("generate-sheet-card");
 const backToConsoleBtn = document.getElementById("back-to-console-btn");
 
 // Verification screen Controls
@@ -348,7 +348,6 @@ authOverlay.addEventListener("click", (e) => {
 // Dismiss Services overlay on outside click
 servicesOverlay.addEventListener("click", (e) => {
   if (e.target === servicesOverlay) {
-    // Reset back to main hub menu if overlay closes mid-navigation
     resetConsoleState();
     servicesOverlay.classList.remove("active");
     setTimeout(() => {
@@ -357,8 +356,8 @@ servicesOverlay.addEventListener("click", (e) => {
   }
 });
 
-// Swapping Console Grids Trigger
-openStudioCard.addEventListener("click", switchToUploadMenu);
+// Option 2 ("Generate Raw Sheet Music") triggers the card dismissal & upload menu transition
+generateSheetCard.addEventListener("click", switchToUploadMenu);
 backToConsoleBtn.addEventListener("click", switchToMainMenu);
 
 function switchToUploadMenu() {
