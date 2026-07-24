@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-// Firebase App Configuration (Connected live to your project credentials)
+// Firebase App Configuration
 const firebaseConfig = {
   apiKey: "AIzaSyDpVqwUVpM2c41y2RF5IlPQwKW71iyyhc8",
   authDomain: "t1era-musicv1.firebaseapp.com",
@@ -12,21 +12,23 @@ const firebaseConfig = {
   measurementId: "G-XX6MGLBDE4"
 };
 
-// Initialize Firebase App
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const googleProvider = new GoogleAuthProvider();
+// Initialize Firebase App gracefully
+let app, auth, googleProvider;
+try {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    googleProvider = new GoogleAuthProvider();
+} catch (e) {
+    console.error("Firebase SDK initialization error:", e);
+}
 
 // Track Auth State
 let currentUserObj = null;
-
-onAuthStateChanged(auth, (user) => {
-    if (user) {
+if (auth) {
+    onAuthStateChanged(auth, (user) => {
         currentUserObj = user;
-    } else {
-        currentUserObj = null;
-    }
-});
+    });
+}
 
 // UI DOM Elements
 const overlay = document.getElementById("interactive-overlay");
@@ -85,12 +87,21 @@ function launchFullscreenStudio() {
         overlay.style.display = "none";
     }, 1200);
 
-    sound.play().catch(err => console.log("Audio playback restricted", err));
+    // Audio Play Safe-Fallback wrapper
+    if (sound) {
+        sound.play().catch(err => {
+            console.warn("Background audio playback is restricted or file is missing:", err);
+        });
+    }
 
     loadingScreen.style.opacity = "1";
     
-    v1.load();
-    v2.load();
+    try {
+        v1.load();
+        v2.load();
+    } catch (e) {
+        console.warn("Video resources failed to load:", e);
+    }
 
     setTimeout(typeEffect, 1200);
 }
@@ -102,7 +113,9 @@ function typeEffect() {
         setTimeout(typeEffect, 150);
     } else {
         setTimeout(() => {
-            sound.pause();
+            if (sound) {
+                try { sound.pause(); } catch (e) {}
+            }
             loadingScreen.style.opacity = "0";
 
             v1.muted = false; 
@@ -111,6 +124,9 @@ function typeEffect() {
             }).catch(e => {
                 v1.muted = true;
                 v1.play().then(() => {
+                    landingScreen.classList.add("active");
+                }).catch(err => {
+                    console.error("Critical: Videos failed to auto-play.", err);
                     landingScreen.classList.add("active");
                 });
             });
@@ -130,7 +146,7 @@ v1.addEventListener('ended', () => {
             enterBtn.classList.add("show");
         }, 4000);
     }).catch(err => {
-        console.log("Continuous loop transition error", err);
+        console.warn("Loop transition failed:", err);
     });
 });
 
@@ -151,8 +167,6 @@ menuOverlay.addEventListener('click', toggleMenu);
 // Interactive Modal Action: Evaluates checks dynamically every time clicked
 enterBtn.addEventListener("click", () => {
     enterBtn.classList.remove("show");
-    
-    // Always trigger the animated verification state check first
     runSessionVerification();
 });
 
@@ -181,15 +195,18 @@ authForm.addEventListener("submit", (e) => {
     const password = authPassword.value;
 
     if (isSignUpState) {
-        // Block email/password registration with pop-up
         authOverlay.classList.remove("active");
         maintenanceOverlay.classList.add("active");
     } else {
-        // Classic sign-in flow remains open if needed
+        if (!auth) {
+            authErrorMsg.textContent = "Database connection offline.";
+            authErrorMsg.style.display = "block";
+            enterBtn.classList.add("show");
+            return;
+        }
         signInWithEmailAndPassword(auth, email, password)
             .then(() => {
                 authOverlay.classList.remove("active");
-                // Re-evaluate check following active authentication
                 runSessionVerification();
             })
             .catch((error) => {
@@ -200,21 +217,29 @@ authForm.addEventListener("submit", (e) => {
     }
 });
 
-// Handle Google Sign-In with popup
-googleAuthBtn.addEventListener("click", () => {
+// Handle Google Sign-In with robust configuration checks
+googleAuthBtn.addEventListener("click", async () => {
     authErrorMsg.style.display = "none";
-    signInWithPopup(auth, googleProvider)
-        .then(() => {
-            authOverlay.classList.remove("active");
-            // Re-evaluate check following active authentication
-            runSessionVerification();
-        })
-        .catch((error) => {
-            authErrorMsg.textContent = "Google Sign-In failed.";
-            authErrorMsg.style.display = "block";
-            enterBtn.classList.add("show");
-            console.log("Google error context:", error);
-        });
+    if (!auth) {
+        authErrorMsg.textContent = "Firebase is uninitialized.";
+        authErrorMsg.style.display = "block";
+        return;
+    }
+    
+    try {
+        await signInWithPopup(auth, googleProvider);
+        authOverlay.classList.remove("active");
+        runSessionVerification();
+    } catch (error) {
+        if (error.code === "auth/configuration-not-found" || error.message.includes("CONFIGURATION_NOT_FOUND")) {
+            authErrorMsg.innerHTML = "<strong>Firebase Setup Required:</strong><br>Please enable the Google login provider inside your Firebase Console.";
+        } else {
+            authErrorMsg.textContent = "Google Login failed. Please try again.";
+        }
+        authErrorMsg.style.display = "block";
+        enterBtn.classList.add("show");
+        console.error("Firebase Auth Exception:", error);
+    }
 });
 
 // Dismiss maintenance alert modal
@@ -254,22 +279,23 @@ servicesOverlay.addEventListener("click", (e) => {
     }
 });
 
-// 8. Session Verification Workflow
+// Session Verification Logic
 function runSessionVerification() {
     verificationScreen.classList.add("active");
     verificationTerminal.style.color = "#ffffff";
     verificationTerminal.style.textShadow = "0 0 10px #ffffff";
     
-    // Step 1: Start verification checks
     verificationTerminal.textContent = "Verifying authorization sequence...";
     
     setTimeout(() => {
         verificationTerminal.textContent = "Querying live session credentials...";
         
         setTimeout(() => {
-            if (currentUserObj) {
-                // Succeeded authentication route
-                verificationTerminal.textContent = `Active Session Found: ${currentUserObj.email}`;
+            // Read active user state directly from Firebase SDK
+            const user = auth ? auth.currentUser : null;
+            
+            if (user) {
+                verificationTerminal.textContent = `Active Session Found: ${user.email}`;
                 
                 setTimeout(() => {
                     verificationTerminal.textContent = "Syncing listening database events...";
@@ -280,7 +306,6 @@ function runSessionVerification() {
                         verificationTerminal.textContent = "Status: AUTHORIZED.";
                         
                         setTimeout(() => {
-                            // Fade out verification and load the options Hub overlay
                             verificationScreen.classList.remove("active");
                             servicesOverlay.classList.add("active");
                         }, 1200);
@@ -289,13 +314,11 @@ function runSessionVerification() {
                 }, 1200);
                 
             } else {
-                // Failed authentication route
                 verificationTerminal.style.color = "#ff4a4a";
                 verificationTerminal.style.textShadow = "0 0 15px #ff4a4a";
                 verificationTerminal.textContent = "Status: UNRESOLVED. Directing to authentication gate...";
                 
                 setTimeout(() => {
-                    // Fade out check console and slide in sign up/sign in gate
                     verificationScreen.classList.remove("active");
                     authOverlay.classList.add("active");
                 }, 1500);
