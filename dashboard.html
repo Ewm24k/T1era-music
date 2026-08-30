@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>T1ERA Music - Dashboard</title>
+    
+    <!-- PWA configuration link -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="assets/css/dashboard.css">
+    
+    <!-- External Material Icons or Font Awesome (using CDN for clean icon render) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div class="dashboard-wrapper">
+        
+        <!-- Left Sidebar Section -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <svg class="logo-icon" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#f35f22" stroke-width="2.5">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+                <span class="logo-text">T1ERA <span>Music</span></span>
+            </div>
+
+            <nav class="sidebar-nav">
+                <ul class="nav-list">
+                    <li class="nav-item active">
+                        <a href="#">
+                            <span class="nav-icon">🏠</span>
+                            Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#">
+                            <span class="nav-icon">📁</span>
+                            Categories
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#">
+                            <span class="nav-icon">👤</span>
+                            Artists
+                        </a>
+                    </li>
+                    
+                    <li class="nav-divider">Playlists</li>
+                    
+                    <li class="nav-item sub-item">
+                        <a href="#">
+                            <span class="playlist-color-dot chill"></span>
+                            Vibes & Chill
+                        </a>
+                    </li>
+                    <li class="nav-item sub-item">
+                        <a href="#">
+                            <span class="playlist-color-dot boost"></span>
+                            Morning Boost
+                        </a>
+                    </li>
+                    <li class="nav-item sub-item">
+                        <a href="#">
+                            <span class="playlist-color-dot energy"></span>
+                            Rhythm & Energy
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="btn-logout" id="dashboard-logout-btn">
+                    <span class="logout-icon">🚪</span>
+                    Logout
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            
+            <!-- Top Header Bar -->
+            <header class="header">
+                <div class="search-bar-wrapper">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="search-input" placeholder="Search for a song" class="search-input">
+                </div>
+
+                <div class="header-right">
+                    <!-- Piano Studio redirect button link -->
+                    <button class="btn-piano-studio" onclick="window.location.href='midiano.html'">
+                        🎹 Piano Studio
+                    </button>
+
+                    <div class="profile-widget">
+                        <div class="avatar-fallback" id="profile-avatar">👤</div>
+                        <div class="profile-meta">
+                            <span class="profile-name" id="profile-name">Molly Hunter</span>
+                            <span class="profile-tier">Premium</span>
+                        </div>
+                    </div>
+
+                    <button class="icon-circle-btn">
+                        <span>❤️</span>
+                    </button>
+                    <button class="icon-circle-btn">
+                        <span>⚙️</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- 3D Album Cover Flow Carousel Section -->
+            <section class="carousel-section">
+                <div class="carousel-container">
+                    
+                    <!-- Left background card -->
+                    <div class="carousel-card card-back-left" style="background-image: url('https://picsum.photos/id/65/500/500');"></div>
+                    
+                    <!-- Mid left background card -->
+                    <div class="carousel-card card-mid-left" style="background-image: url('https://picsum.photos/id/1025/500/500');"></div>
+                    
+                    <!-- Active Center Card -->
+                    <div class="carousel-card active" style="background-image: linear-gradient(rgba(0,0,0,0) 40%, rgba(0,0,0,0.9) 100%), url('https://picsum.photos/id/322/500/500');">
+                        <div class="card-track-info">
+                            <h2 class="card-track-title">Echoes of Midnight</h2>
+                            <p class="card-track-artist">Jon Hickman</p>
+                        </div>
+                        <button class="carousel-play-btn">
+                            <span>▶</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Mid right background card -->
+                    <div class="carousel-card card-mid-right" style="background-image: url('https://picsum.photos/id/338/500/500');"></div>
+                    
+                    <!-- Right background card -->
+                    <div class="carousel-card card-back-right" style="background-image: url('https://picsum.photos/id/352/500/500');"></div>
+
+                </div>
+            </section>
+
+            <!-- select categories tags filter panel -->
+            <section class="filter-section">
+                <div class="section-title-wrapper">
+                    <h3 class="section-title">Select Categories</h3>
+                    <div class="nav-arrow-wrapper">
+                        <button class="nav-arrow-btn">◀</button>
+                        <button class="nav-arrow-btn">▶</button>
+                    </div>
+                </div>
+                
+                <div class="categories-capsule-row" id="categories-row">
+                    <span class="capsule active" data-genre="all">All</span>
+                    <span class="capsule" data-genre="relax">Relax</span>
+                    <span class="capsule" data-genre="sad">Sad</span>
+                    <span class="capsule" data-genre="party">Party</span>
+                    <span class="capsule" data-genre="romance">Romance</span>
+                    <span class="capsule" data-genre="energetic">Energetic</span>
+                    <span class="capsule" data-genre="relaxing">Relaxing</span>
+                    <span class="capsule" data-genre="jazz">Jazz</span>
+                    <span class="capsule" data-genre="alternative">Alternative</span>
+                </div>
+            </section>
+
+            <!-- popular songs list grid section -->
+            <section class="popular-section">
+                <div class="section-title-wrapper">
+                    <h3 class="section-title">Popular songs</h3>
+                    <div class="nav-arrow-wrapper">
+                        <button class="nav-arrow-btn">◀</button>
+                        <button class="nav-arrow-btn">▶</button>
+                    </div>
+                </div>
+
+                <div class="popular-grid" id="popular-tracks-grid">
+                    <!-- Cards are populated dynamically or from local array storage in assets/js/dashboard.js -->
+                </div>
+            </section>
+
+        </main>
+
+        <!-- bottom sticky music player bar widget panel -->
+        <footer class="player-bar">
+            <!-- Left: Currently Playing Track -->
+            <div class="player-left">
+                <img id="player-album-art" src="https://picsum.photos/id/322/100/100" class="player-track-art" alt="Album Art">
+                <div class="player-track-meta">
+                    <div id="player-track-title" class="player-title">Echoes of Midnight</div>
+                    <div id="player-track-artist" class="player-artist">Jon Hickman</div>
+                </div>
+            </div>
+
+            <!-- Center: Player Core Progress Control Slider -->
+            <div class="player-center">
+                <div class="player-controls">
+                    <button class="control-btn" id="player-prev-btn">⏮</button>
+                    <button class="control-play-btn-circle" id="player-play-btn">
+                        <span id="play-pause-icon">▶</span>
+                    </button>
+                    <button class="control-btn" id="player-next-btn">⏭</button>
+                </div>
+                
+                <div class="player-timeline">
+                    <span class="time-stamp" id="current-time">0:00</span>
+                    <div class="timeline-slider-track" id="timeline-track">
+                        <div class="timeline-slider-fill" id="timeline-fill" style="width: 25%;"></div>
+                        <div class="timeline-thumb" id="timeline-thumb" style="left: 25%;"></div>
+                    </div>
+                    <span class="time-stamp" id="track-length">3:58</span>
+                </div>
+            </div>
+
+            <!-- Right: Secondary Volume Utility Settings knobs -->
+            <div class="player-right">
+                <button class="utility-icon-btn">❤️</button>
+                <button class="utility-icon-btn">🔀</button>
+                <button class="utility-icon-btn">🔁</button>
+                <div class="volume-slider-wrapper">
+                    <span class="volume-icon">🔊</span>
+                    <div class="volume-track" id="volume-track">
+                        <div class="volume-fill" id="volume-fill" style="width: 70%;"></div>
+                        <div class="volume-thumb" id="volume-thumb" style="left: 70%;"></div>
+                    </div>
+                </div>
+            </div>
+        </footer>
+
+    </div>
+
+    <!-- Script imports -->
+    <script type="module" src="assets/js/dashboard.js"></script>
+</body>
+</html>
