@@ -704,6 +704,136 @@
             text-shadow: 0 0 10px rgba(255, 255, 255, 0.6);
         }
 
+        /* Web3 Expanded Card styling */
+        .service-card-expanded {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 12px;
+            transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            position: relative;
+            min-height: 180px;
+        }
+
+        /* Header within cards */
+        .card-icon-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 5px;
+        }
+        .yt-logo {
+            width: 24px;
+            height: 24px;
+            filter: drop-shadow(0 0 5px rgba(255, 0, 0, 0.6));
+            transition: transform 0.3s ease;
+        }
+        .service-card-expanded:hover .yt-logo {
+            transform: scale(1.15);
+        }
+        .card-subtitle {
+            font-size: 0.85rem;
+            letter-spacing: 2px;
+            font-weight: 500;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.85);
+        }
+
+        /* Web3 Inputs */
+        .web3-input-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+        }
+        .web3-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            color: #ffffff;
+            font-size: 0.8rem;
+            outline: none;
+            font-family: monospace;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        .web3-input::placeholder {
+            color: rgba(255, 255, 255, 0.25);
+        }
+        .web3-input:focus {
+            border-color: rgba(57, 118, 240, 0.8);
+            background: rgba(0, 0, 0, 0.6);
+            box-shadow: 0 0 15px rgba(57, 118, 240, 0.2);
+        }
+
+        /* Web3 Buttons */
+        .web3-action-btn {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            background: rgba(255, 255, 255, 0.05);
+            color: #ffffff;
+            font-size: 0.75rem;
+            font-weight: 500;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .pulse-glow-blue:hover {
+            background: rgba(57, 118, 240, 0.15);
+            border-color: rgba(57, 118, 240, 0.8);
+            box-shadow: 0 0 15px rgba(57, 118, 240, 0.3);
+        }
+
+        /* File Upload Dropzone */
+        .upload-dropzone {
+            flex: 1;
+            border: 1px dashed rgba(16, 185, 129, 0.3);
+            border-radius: 8px;
+            background: rgba(16, 185, 129, 0.02);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            padding: 8px;
+        }
+        .upload-dropzone:hover {
+            border-color: rgba(16, 185, 129, 0.8);
+            background: rgba(16, 185, 129, 0.08);
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
+        }
+        .dropzone-inner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .upload-icon {
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+        }
+        .upload-dropzone:hover .upload-icon {
+            transform: translateY(-3px);
+        }
+        .dropzone-text {
+            font-size: 0.75rem;
+            letter-spacing: 1.5px;
+            color: rgba(255, 255, 255, 0.7);
+            text-transform: uppercase;
+        }
+        .dropzone-subtext {
+            font-size: 0.6rem;
+            color: rgba(255, 255, 255, 0.3);
+        }
+
         /* Adaptive Mobile Layout Overrides */
         @media (max-width: 768px) {
             .services-hub-card {
@@ -731,6 +861,22 @@
             }
             .console-container {
                 min-height: 140px;
+            }
+            /* Web3 inputs mobile updates */
+            .service-card-expanded {
+                padding: 10px;
+                min-height: 140px;
+                gap: 8px;
+            }
+            .card-subtitle {
+                font-size: 0.7rem;
+            }
+            .web3-input {
+                padding: 6px 10px;
+                font-size: 0.75rem;
+            }
+            .dropzone-text {
+                font-size: 0.65rem;
             }
         }
 
@@ -1090,22 +1236,45 @@
 
                     <!-- Swap Destination Menu: Upload Screen Grid (Appears on same popup when Option 2 is clicked) -->
                     <div class="services-grid grid-transition grid-hidden" id="upload-services-grid" style="display: none;">
-                        <!-- Upload Option 1 -->
-                        <div class="service-card blue-glow" onclick="alert('Feature selected: Upload Music/Video Youtube')">
-                            <div class="card-icon">🎥</div>
-                            <div class="card-name">Upload Music/Video Youtube</div>
+                        
+                        <!-- Upload Option 1: YouTube Import (Web3 Card) -->
+                        <div class="service-card-expanded blue-glow">
+                            <div class="card-icon-header">
+                                <!-- Inline YouTube SVG Icon -->
+                                <svg class="yt-logo" viewBox="0 0 24 24" fill="#FF0000">
+                                    <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.518 3.545 12 3.545 12 3.545s-7.518 0-9.388.507a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.87.507 9.388.507 9.388.507s7.518 0 9.388-.507a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                                </svg>
+                                <div class="card-subtitle">YouTube Streaming Link</div>
+                            </div>
+                            <div class="web3-input-wrapper">
+                                <input type="url" id="youtube-link-input" placeholder="https://www.youtube.com/watch?v=..." class="web3-input">
+                                <button type="button" id="youtube-submit-btn" class="web3-action-btn pulse-glow-blue">Import Stream</button>
+                            </div>
                         </div>
 
-                        <!-- Upload Option 2 -->
-                        <div class="service-card emerald-glow" onclick="alert('Feature selected: Upload Music wav or mp3 file')">
-                            <div class="card-icon">🎵</div>
-                            <div class="card-name">Upload Music wav or mp3 file</div>
+                        <!-- Upload Option 2: File Explorer Audio Upload (Web3 Dropzone) -->
+                        <div class="service-card-expanded emerald-glow">
+                            <div class="card-icon-header">
+                                <div class="card-subtitle">Local Audio File</div>
+                            </div>
+                            
+                            <!-- Dropzone Container -->
+                            <div class="upload-dropzone" id="file-dropzone-trigger">
+                                <div class="dropzone-inner">
+                                    <span class="upload-icon">📤</span>
+                                    <span class="dropzone-text" id="dropzone-label-text">Select Music File</span>
+                                    <span class="dropzone-subtext">WAV, MP3 Supported</span>
+                                </div>
+                            </div>
+
+                            <!-- Hidden Native File Input -->
+                            <input type="file" id="audio-file-input" accept=".mp3,.wav,audio/*" style="display: none;">
                         </div>
 
-                        <!-- Upload Option 3 -->
+                        <!-- Upload Option 3: MIDI Player (Standard Visual Link Card) -->
                         <div class="service-card glowing-active" onclick="window.location.href='midiano.html'">
                             <div class="card-icon">🎹</div>
-                            <div class="card-name">Upload Midi File</div>
+                            <div class="card-name">Upload MIDI file</div>
                         </div>
                     </div>
                 </div>
