@@ -1,5 +1,3 @@
---- START OF FILE midiano.html ---
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,6 +8,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <script src="https://unpkg.com/@tonejs/midi"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/abcjs/6.3.0/abcjs-basic-min.js"></script>
+    <!-- Option B: smplr (HD Piano Sampler Engine) -->
+    <script src="https://unpkg.com/smplr/dist/index.umd.js"></script>
     <style>
         :root {
             --bg-color: #0f0f13;
@@ -438,6 +438,7 @@
                 <div class="select-wrapper">
                     <select id="select-instrument">
                         <option value="sampled" selected>Concert Grand (Sampled - Real Piano)</option>
+                        <option value="splendid">Premium HD Concert Grand (Steinway - Option B)</option>
                         <option value="grand">Warm Acoustic (Synthesized)</option>
                         <option value="rhodes">Tine Rhodes Piano (FM)</option>
                         <option value="ambient">Ambient Space Pad</option>
@@ -731,6 +732,10 @@
         let reverbNode = null;
         let volNode = null;
 
+        // Setup a global variable for splendid piano
+        let splendidPiano = null;
+        let splendidLoaded = false;
+
         // Note tracking maps
         let activeNotesMemory = [];
         let pianoKeysMap = new Map();
@@ -788,6 +793,31 @@
         let verticalLastFrameTime = 0;
         let verticalPlaybackTimer = null;
         let activeVerticalContainerId = "";
+
+        // Class wrapper to seamlessly connect smplr SplendidGrandPiano with Tone.js syntax
+        class SmplrToneWrapper {
+            constructor(smplrInstance) {
+                this.smplr = smplrInstance;
+            }
+            triggerAttackRelease(noteName, duration, time, velocity) {
+                // smplr expects midi-scaled velocity values from 0 to 127
+                const midiVelocity = Math.round((velocity || 0.8) * 127);
+                this.smplr.start({
+                    note: noteName,
+                    time: time,
+                    duration: duration,
+                    velocity: midiVelocity
+                });
+            }
+            releaseAll() {
+                if (this.smplr && typeof this.smplr.stop === 'function') {
+                    this.smplr.stop();
+                }
+            }
+            dispose() {
+                // Kept alive globally to avoid reloading buffers from CDN
+            }
+        }
 
         // --- Initialization ---
         init();
@@ -865,13 +895,44 @@
             // Stop prior notes
             if (activeInstrument) {
                 activeInstrument.releaseAll();
-                // Avoid disposing of our premium sample node
-                if (activeInstrument !== samplerPiano) {
+                // Avoid disposing of our premium sample node or splendid wrapper
+                if (activeInstrument !== samplerPiano && activeInstrument !== splendidPiano) {
                     activeInstrument.dispose();
                 }
             }
 
-            if (type === 'sampled') {
+            if (type === 'splendid') {
+                if (!splendidPiano) {
+                    elSamplerStatus.textContent = "• Loading HD Steinway...";
+                    elSamplerStatus.style.color = "#fbbf24";
+
+                    // Initialize the Option B Steinway samples directly from CDN via raw Web Audio context
+                    const inst = new smplr.SplendidGrandPiano(Tone.context.rawContext, {
+                        destination: volNode.input
+                    });
+
+                    const loadPromise = inst.ready || inst.load || Promise.resolve();
+                    loadPromise.then(() => {
+                        splendidLoaded = true;
+                        splendidPiano = new SmplrToneWrapper(inst);
+                        elSamplerStatus.textContent = "• Ready";
+                        elSamplerStatus.style.color = "#10b981";
+                        if (selectInstrument.value === 'splendid') {
+                            activeInstrument = splendidPiano;
+                        }
+                    }).catch(err => {
+                        console.error("Failed to load Splendid Grand Piano:", err);
+                        elSamplerStatus.textContent = "• Error Loading";
+                        elSamplerStatus.style.color = "#ef4444";
+                    });
+                } else {
+                    activeInstrument = splendidPiano;
+                    if (splendidLoaded) {
+                        elSamplerStatus.textContent = "• Ready";
+                        elSamplerStatus.style.color = "#10b981";
+                    }
+                }
+            } else if (type === 'sampled') {
                 if (samplerLoaded) {
                     activeInstrument = samplerPiano;
                     activeInstrument.connect(volNode);
