@@ -8,8 +8,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <script src="https://unpkg.com/@tonejs/midi"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/abcjs/6.3.0/abcjs-basic-min.js"></script>
-    <!-- Option B: smplr (HD Piano Sampler Engine) -->
-    <script src="https://unpkg.com/smplr/dist/index.umd.js"></script>
     <style>
         :root {
             --bg-color: #0f0f13;
@@ -891,7 +889,7 @@
             });
         }
 
-        function setInstrument(type) {
+        async function setInstrument(type) {
             // Stop prior notes
             if (activeInstrument) {
                 activeInstrument.releaseAll();
@@ -906,13 +904,17 @@
                     elSamplerStatus.textContent = "• Loading HD Steinway...";
                     elSamplerStatus.style.color = "#fbbf24";
 
-                    // Initialize the Option B Steinway samples directly from CDN via raw Web Audio context
-                    const inst = new smplr.SplendidGrandPiano(Tone.context.rawContext, {
-                        destination: volNode.input
-                    });
+                    try {
+                        // Dynamically import the ES module directly from the browser CDN
+                        const { SplendidGrandPiano } = await import("https://unpkg.com/smplr/dist/index.mjs");
+                        
+                        const inst = new SplendidGrandPiano(Tone.context.rawContext, {
+                            destination: volNode.input
+                        });
 
-                    const loadPromise = inst.ready || inst.load || Promise.resolve();
-                    loadPromise.then(() => {
+                        const loadPromise = inst.ready || inst.load || Promise.resolve();
+                        await loadPromise;
+
                         splendidLoaded = true;
                         splendidPiano = new SmplrToneWrapper(inst);
                         elSamplerStatus.textContent = "• Ready";
@@ -920,11 +922,11 @@
                         if (selectInstrument.value === 'splendid') {
                             activeInstrument = splendidPiano;
                         }
-                    }).catch(err => {
-                        console.error("Failed to load Splendid Grand Piano:", err);
+                    } catch (err) {
+                        console.error("Failed to load Splendid Grand Piano ES Module:", err);
                         elSamplerStatus.textContent = "• Error Loading";
                         elSamplerStatus.style.color = "#ef4444";
-                    });
+                    }
                 } else {
                     activeInstrument = splendidPiano;
                     if (splendidLoaded) {
