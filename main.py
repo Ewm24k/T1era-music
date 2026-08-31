@@ -2,7 +2,8 @@
 """
 T1era Music MIDI Transcription & Styling Central Orchestrator
 Meredamkan semua log amaran TensorFlow, menyokong pemprosesan fail sementara,
-mengaktifkan sekatan CORS untuk keselamatan, dan berjalan menggunakan pelayan produksi WSGI Gunicorn [PerQueryResult].
+mengaktifkan sekatan CORS, menyokong dwi-pintasan (Android Client & Cookies) memintas bot-blocker YouTube,
+dan berjalan menggunakan pelayan produksi WSGI Gunicorn [PerQueryResult].
 """
 
 import os
@@ -301,13 +302,24 @@ class CentralOrchestrator:
                 self.update_status(user_id, job_id, "FAILED", 100, error_msg=str(e))
 
     def download_youtube_audio(self, url: str, dest_dir: Path) -> Path:
-        """Memuat turun aliran audio terbaik secara terus dari YouTube"""
+        """Memuat turun aliran audio terbaik secara terus dari YouTube dengan dwi-sistem pintasan"""
         ydl_opts = {
             'format': 'bestaudio/best',
             'outtmpl': os.path.join(dest_dir, 'yt_download.%(ext)s'),
             'quiet': True,
             'no_warnings': True,
+            # PINTASAN 1: Menyamar sebagai peranti mudah alih Android (Sangat efektif memintas sekatan bot!)
+            'extractor_args': {'youtube': {'player_client': 'android'}}
         }
+        
+        # PINTASAN 2: Membaca fail kuki jika dibekalkan secara selamat sebagai Render Secret File
+        cookies_file = Path("cookies.txt")
+        if cookies_file.exists():
+            ydl_opts['cookiefile'] = str(cookies_file)
+            print("[YT-DLP] Fail cookies.txt dikesan dan digunakan sebagai kebenaran masuk.")
+        else:
+            print("[YT-DLP] Makluman: cookies.txt tiada. Menggunakan mod pintasan Android player-client sedia ada.")
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
@@ -319,7 +331,7 @@ class CentralOrchestrator:
 # =========================================================
 app = Flask(__name__)
 
-# Membenarkan akses merentas domain (CORS) hanya untuk Netlify dan localhost pembangunan anda demi keselamatan optimum [PerQueryResult]
+# Membenarkan akses merentas domain (CORS) hanya untuk Netlify dan localhost pembangunan anda demi keselamatan optimum
 CORS(app, resources={
     r"/*": {
         "origins": [
