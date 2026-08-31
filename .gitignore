@@ -1,0 +1,44 @@
+# =========================================================
+# T1era Music — .gitignore File Configuration
+# Menghalang fail rahsia, cache, dan fail ujian tempatan
+# daripada dimuat naik ke GitHub secara tidak sengaja [PerQueryResult].
+# =========================================================
+
+# 1. KUNCI SULIT FIREBASE (Paling Penting! Wajib diabaikan)
+firebase-key.json
+*.json.local
+
+# 2. Caches & Compiled Bytecode (Python)
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ipynb_checkpoints/
+*.pyd
+*.pyo
+
+# 3. Persekitaran Maya Tempatan (Virtual Environments)
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# 4. Folder Input Audio Tempatan
+# Mengekalkan struktur folder "input/" di GitHub tetapi mengabaikan lagu di dalamnya
+input/*
+!input/.gitkeep
+
+# 5. Folder Output MIDI Tempatan
+# Mengekalkan struktur folder "output/" di GitHub tetapi mengabaikan fail MIDI ujian di dalamnya
+output/*
+!output/.gitkeep
+
+# 6. Fail Sistem OS (Mac & Windows)
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
