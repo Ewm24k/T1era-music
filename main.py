@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 T1era Music MIDI Transcription & Styling Central Orchestrator
-Menguruskan fail perantara sebagai fail sementara (dipadamkan secara automatik di Render)
-dan hanya menyimpan SATU fail MIDI akhir (Stage 6) ke dalam Firebase Storage [PerQueryResult].
+Menguruskan fail perantara sebagai fail sementara (dipadamkan secara automatik di Render),
+berjalan sebagai pelayan Flask API untuk menyokong "auto-wake" pelan percuma Render,
+dan menyimpan hasil akhir ke Firebase Storage [PerQueryResult].
 """
 
 import os
@@ -11,6 +12,14 @@ import time
 import tempfile
 import traceback
 from pathlib import Path
+
+# Impor Flask untuk binaan API Web awan
+try:
+    from flask import Flask, request, jsonify
+except ImportError:
+    print("Error: 'flask' diperlukan untuk menjalankan pelayan API.")
+    print("Sila pasang melalui: pip install flask")
+    sys.exit(1)
 
 # Periksa integrasi Firebase
 try:
@@ -36,7 +45,6 @@ except ImportError as e:
 
 class OrchestratorConfig:
     FIREBASE_KEY_PATH = os.environ.get("FIREBASE_SERVICE_ACCOUNT_KEY", "firebase-key.json")
-    # Nama Storage Bucket Firebase T1era Music anda
     BUCKET_NAME = os.environ.get("FIREBASE_STORAGE_BUCKET", "t1era-music.appspot.com")
 
 
@@ -97,7 +105,6 @@ class CentralOrchestrator:
         print(f"MULAKAN PIPELINE T1ERA MUSIC | Mode: {'CLOUD' if is_cloud else 'LOCAL'}")
         print("=" * 70)
 
-        # Fail perantara diletakkan di dalam direktori kerja sementara (work_dir / output_dir)
         stage0_raw_mid = temp_work_dir / "stage0_raw.mid"
         stage1_clean_mid = temp_work_dir / "stage1_clean.mid"
         stage2_repaired_mid = temp_work_dir / "stage2_repaired.mid"
@@ -190,7 +197,7 @@ class CentralOrchestrator:
             stage6.run()
 
             # -------------------------------------------------------------
-            # UPLOAD HANYA 1 MIDI AKHIR KE FIREBASE STORAGE (Jika Mod Awan)
+            # UPLOAD HANYA 1 MIDI AKHIR KE FIREBASE STORAGE
             # -------------------------------------------------------------
             total_time = time.time() - start_time
             print("\n" + "=" * 70)
@@ -200,11 +207,10 @@ class CentralOrchestrator:
             if is_cloud and self.firebase_active and user_id and job_id:
                 self.update_status(user_id, job_id, "UPLOADING_RESULTS", 95)
                 
-                # Hanya fail 'stage6_final.mid' (Peringkat Akhir) sahaja yang dimuat naik ke Storage!
                 remote_path = f"users/{user_id}/transcriptions/{job_id}/final_score.mid"
                 download_url = self.upload_final_midi(stage6_final_mid, remote_path)
                 
-                # Kemaskini maklumat penamat ke Firestore
+                # Kemaskini Firestore
                 job_ref = self.db.collection("users").document(user_id).collection("midi_jobs").document(job_id)
                 job_ref.update({
                     "status": "COMPLETED",
@@ -222,67 +228,123 @@ class CentralOrchestrator:
             if is_cloud and self.firebase_active and user_id and job_id:
                 self.update_status(user_id, job_id, "FAILED", 100, error_msg=str(e))
 
-
-def main():
-    orchestrator = CentralOrchestrator()
-
-    # MOD AWAN (Render + Firebase): Dipesan melalui hantaran hujah terminal dari Render
-    if len(sys.argv) > 4:
-        user_id = sys.argv[1]
-        job_id = sys.argv[2]
-        remote_audio_path = sys.argv[3]
-        local_output_dir = Path(sys.argv[4])
-
-        print(f"[CLOUD START] Memproses tugasan awan T1era Music: {job_id}")
+    def process_incoming_cloud_job(self, user_id: str, job_id: str, remote_audio_path: str):
+        """Memproses tugasan individu di dalam workspace sementara Render"""
+        print(f"[CLOUD PROCESSING] Memulakan tugasan: {job_id} untuk Pengguna: {user_id}")
         
-        # Folder Kerja Sementara (/tmp/) yang diasingkan - dipadam automatik selepas keluar dari blok 'with'
         with tempfile.TemporaryDirectory(prefix=f"t1era_{job_id}_") as tmp_dir:
             temp_work_path = Path(tmp_dir)
             local_audio_path = temp_work_path / "input_audio.mp3"
             
-            # Ambil audio asal dari Firebase Storage
-            print("[CLOUD] Memuat turun audio asal dari Firebase Storage...")
-            blob = orchestrator.bucket.blob(remote_audio_path)
-            blob.download_to_filename(str(local_audio_path))
-            
-            # Jalankan pipeline menggunakan workspace sementara
-            orchestrator.run_pipeline(
-                input_audio_path=local_audio_path,
-                temp_work_dir=temp_work_path,
-                is_cloud=True,
-                user_id=user_id,
-                job_id=job_id
-            )
-            # Selesai! Semua fail perantara dipadam secara automatik di disk pelayan Render di sini.
-            
+            try:
+                # Ambil fail audio asal dari Firebase Storage
+                print(f"[{job_id}] Memuat turun audio dari Storage...")
+                
+                # Pembersihan format URL jika mengandungi parameter muat turun luaran
+                if "firebasestorage.googleapis.com" in remote_audio_path:
+                    path_start = remote_audio_path.find("/o/") + 3
+                    path_end = remote_audio_path.find("?alt=media")
+                    from urllib.parse import unquote
+                    remote_audio_path = unquote(remote_audio_path[path_start:path_end])
+
+                blob = self.bucket.blob(remote_audio_path)
+                blob.download_to_filename(str(local_audio_path))
+                
+                # Jalankan pipeline pemprosesan
+                self.run_pipeline(
+                    input_audio_path=local_audio_path,
+                    temp_work_dir=temp_work_path,
+                    is_cloud=True,
+                    user_id=user_id,
+                    job_id=job_id
+                )
+            except Exception as e:
+                print(f"[{job_id}] Gagal memproses fail awan: {e}")
+                self.update_status(user_id, job_id, "FAILED", 100, error_msg=str(e))
+
+
+# =========================================================
+# FLASK WEB SERVER BLOCK (AUTO-WAKE CONFIGURATION FOR RENDER)
+# =========================================================
+app = Flask(__name__)
+orchestrator = CentralOrchestrator()
+
+@app.route("/", methods=["GET"])
+def index():
+    # Tindak balas kesihatan pelayan (Render Health Check)
+    return jsonify({
+        "server": "T1era Music API",
+        "status": "ONLINE",
+        "firebase_connected": orchestrator.firebase_active
+    }), 200
+
+@app.route("/transcribe", methods=["POST"])
+def transcribe_trigger():
+    """
+    Endpoint HTTP POST yang dipanggil oleh Webapp selepas lagu dimuat naik.
+    Panggilan masuk ke endpoint ini akan mengejutkan Render daripada mode tidur.
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON payload received"}), 400
+
+    user_id = data.get("userId")
+    job_id = data.get("jobId")
+    remote_audio_path = data.get("audioUrl") # Laluan fail audio di Firebase Storage
+
+    if not user_id or not job_id or not remote_audio_path:
+        return jsonify({"error": "Missing required fields (userId, jobId, audioUrl)"}), 400
+
+    # Jalankan tugasan secara tidak segerak (asynchronous) supaya panggilan HTTP tidak luput masa (timeout)
+    import threading
+    thread = threading.Thread(
+        target=orchestrator.process_incoming_cloud_job,
+        args=(user_id, job_id, remote_audio_path)
+    )
+    thread.start()
+
+    return jsonify({
+        "status": "QUEUED",
+        "message": "Transcription job triggered successfully. Render is processing.",
+        "jobId": job_id
+    }), 202
+
+
+def run_local_test():
+    """Mod Ujian Tempatan di PC (VS Code)"""
+    print("[LOCAL START] Membina simulasi ujian tempatan T1era Music di PC...")
+    
+    base_dir = Path(".")
+    input_dir = base_dir / "input"
+    output_dir = base_dir / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    audio_extensions = {'.mp3', '.wav', '.m4a', '.flac', '.ogg'}
+    audio_files = []
+    if input_dir.exists():
+        audio_files = [
+            f for f in input_dir.iterdir() 
+            if f.is_file() and f.suffix.lower() in audio_extensions
+        ]
+        
+    if audio_files:
+        target_audio = audio_files[0]
+        orchestrator.run_pipeline(
+            input_audio_path=target_audio,
+            temp_work_dir=output_dir,
+            is_cloud=False
+        )
     else:
-        # MOD TEMPATAN (VS Code di PC anda): Mengekalkan fail perantara untuk tujuan ujian dan nyah-pepijat (debug)
-        print("[LOCAL START] Membina simulasi ujian tempatan T1era Music di PC...")
-        
-        base_dir = Path(".")
-        input_dir = base_dir / "input"
-        output_dir = base_dir / "output" # Fail ujian perantara kekal di sini untuk anda semak
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        audio_extensions = {'.mp3', '.wav', '.m4a', '.flac', '.ogg'}
-        audio_files = []
-        if input_dir.exists():
-            audio_files = [
-                f for f in input_dir.iterdir() 
-                if f.is_file() and f.suffix.lower() in audio_extensions
-            ]
-            
-        if audio_files:
-            target_audio = audio_files[0]
-            # Jalankan pipeline secara tempatan (fail perantara tidak dipadam untuk tujuan ujian anda)
-            orchestrator.run_pipeline(
-                input_audio_path=target_audio,
-                temp_work_dir=output_dir,
-                is_cloud=False
-            )
-        else:
-            print("Ralat: Sila letakkan fail audio ujian (.mp3 atau .wav) di dalam folder 'input/' terlebih dahulu.")
+        print("Ralat: Sila letakkan fail audio ujian (.mp3 atau .wav) di dalam folder 'input/' terlebih dahulu.")
 
 
 if __name__ == "__main__":
-    main()
+    # Jika dijalankan di pelayan Render, ia mengesan pemboleh ubah PORT
+    port = int(os.environ.get("PORT", 10000))
+    
+    if os.environ.get("RENDER"):
+        # Mod Awan: Mulakan pelayan API Flask di Render
+        app.run(host="0.0.0.0", port=port)
+    else:
+        # Mod Tempatan: Jalankan ujian simulasi local
+        run_local_test()
