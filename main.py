@@ -3,11 +3,12 @@
 T1era Music MIDI Transcription & Styling Central Orchestrator
 Menguruskan fail perantara sebagai fail sementara (dipadamkan secara automatik di Render),
 berjalan sebagai pelayan Flask API untuk menyokong "auto-wake" pelan percuma Render,
-dan menyimpan hasil akhir ke Firebase Storage [PerQueryResult].
+menyokong muat turun audio YouTube (yt-dlp) dinamik, dan menyimpan hasil akhir ke Firebase [PerQueryResult].
 """
 
 import os
 import sys
+import re
 import time
 import tempfile
 import traceback
@@ -19,6 +20,14 @@ try:
 except ImportError:
     print("Error: 'flask' diperlukan untuk menjalankan pelayan API.")
     print("Sila pasang melalui: pip install flask")
+    sys.exit(1)
+
+# Impor yt-dlp untuk muat turun audio YouTube secara langsung tanpa FFmpeg
+try:
+    import yt_dlp
+except ImportError:
+    print("Error: 'yt-dlp' diperlukan untuk muat turun audio YouTube.")
+    print("Sila pasang melalui: pip install yt-dlp")
     sys.exit(1)
 
 # Periksa integrasi Firebase
@@ -65,7 +74,7 @@ class CentralOrchestrator:
                     self.db = firestore.client()
                     self.bucket = storage.bucket()
                     self.firebase_active = True
-                    print("[FIREBASE] Cloud Mode Aktif (T1era Music).")
+                    print("[FIREBASE] Cloud Mode T1era Music Aktif.")
                 else:
                     print("[FIREBASE] Fail kredensial tidak ditemui. Berjalan dalam Mod Tempatan (VS Code).")
         except Exception as e:
@@ -228,29 +237,51 @@ class CentralOrchestrator:
             if is_cloud and self.firebase_active and user_id and job_id:
                 self.update_status(user_id, job_id, "FAILED", 100, error_msg=str(e))
 
-    def process_incoming_cloud_job(self, user_id: str, job_id: str, remote_audio_path: str):
+    def process_incoming_cloud_job(self, user_id: str, job_id: str, audio_url: str = None, youtube_url: str = None):
         """Memproses tugasan individu di dalam workspace sementara Render"""
         print(f"[CLOUD PROCESSING] Memulakan tugasan: {job_id} untuk Pengguna: {user_id}")
         
         with tempfile.TemporaryDirectory(prefix=f"t1era_{job_id}_") as tmp_dir:
             temp_work_path = Path(tmp_dir)
-            local_audio_path = temp_work_path / "input_audio.mp3"
-            
-            try:
-                # Ambil fail audio asal dari Firebase Storage
-                print(f"[{job_id}] Memuat turun audio dari Storage...")
-                
-                # Pembersihan format URL jika mengandungi parameter muat turun luaran
-                if "firebasestorage.googleapis.com" in remote_audio_path:
-                    path_start = remote_audio_path.find("/o/") + 3
-                    path_end = remote_audio_path.find("?alt=media")
-                    from urllib.parse import unquote
-                    remote_audio_path = unquote(remote_audio_path[path_start:path_end])
+            local_audio_path = temp_work_path / "input_audio"  # Laluan dinamik tanpa extension kekal
 
-                blob = self.bucket.blob(remote_audio_path)
-                blob.download_to_filename(str(local_audio_path))
+            try:
+                # KES A: Menggunakan pautan YouTube (Seni bina baharu)
+                if youtube_url:
+                    self.update_status(user_id, job_id, "DOWNLOADING_YOUTUBE", 5)
+                    print(f"[{job_id}] Memulakan muat turun YouTube: {youtube_url}")
+                    
+                    # Muat turun aliran audio terus ke folder sementara tanpa penukaran codec rumit
+                    downloaded_file = self.download_youtube_audio(youtube_url, temp_work_path)
+                    local_audio_path = downloaded_file
+                    print(f"[{job_id}] Muat turun YouTube berjaya. Fail disimpan di: {local_audio_path}")
                 
-                # Jalankan pipeline pemprosesan
+                # KES B: Menggunakan fail audio muat naik terus ke Firebase Storage
+                elif audio_url:
+                    self.update_status(user_id, job_id, "DOWNLOADING_AUDIO", 5)
+                    print(f"[{job_id}] Memuat turun audio sedia ada dari Storage...")
+                    
+                    # Tambah sambungan m4a/mp3 asal
+                    suffix = ".mp3"
+                    if ".wav" in audio_url.lower():
+                        suffix = ".wav"
+                    elif ".m4a" in audio_url.lower():
+                        suffix = ".m4a"
+                    
+                    local_audio_path = local_audio_path.with_suffix(suffix)
+
+                    if "firebasestorage.googleapis.com" in audio_url:
+                        path_start = audio_url.find("/o/") + 3
+                        path_end = audio_url.find("?alt=media")
+                        from urllib.parse import unquote
+                        audio_url = unquote(audio_url[path_start:path_end])
+
+                    blob = self.bucket.blob(audio_url)
+                    blob.download_to_filename(str(local_audio_path))
+                else:
+                    raise ValueError("Tiada pautan YouTube (youtubeUrl) atau fail audio (audioUrl) diterima.")
+
+                # Jalankan pipeline pemprosesan menggunakan fail sementara tersebut
                 self.run_pipeline(
                     input_audio_path=local_audio_path,
                     temp_work_dir=temp_work_path,
@@ -258,9 +289,26 @@ class CentralOrchestrator:
                     user_id=user_id,
                     job_id=job_id
                 )
+                
             except Exception as e:
                 print(f"[{job_id}] Gagal memproses fail awan: {e}")
                 self.update_status(user_id, job_id, "FAILED", 100, error_msg=str(e))
+
+    def download_youtube_audio(self, url: str, dest_dir: Path) -> Path:
+        """
+        Memuat turun aliran audio terbaik secara terus dari YouTube tanpa post-processor FFmpeg
+        untuk kestabilan maksimum di pelayan percuma Render.
+        """
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': os.path.join(dest_dir, 'yt_download.%(ext)s'),
+            'quiet': True,
+            'no_warnings': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+            return Path(filename)
 
 
 # =========================================================
@@ -271,7 +319,6 @@ orchestrator = CentralOrchestrator()
 
 @app.route("/", methods=["GET"])
 def index():
-    # Tindak balas kesihatan pelayan (Render Health Check)
     return jsonify({
         "server": "T1era Music API",
         "status": "ONLINE",
@@ -281,8 +328,7 @@ def index():
 @app.route("/transcribe", methods=["POST"])
 def transcribe_trigger():
     """
-    Endpoint HTTP POST yang dipanggil oleh Webapp selepas lagu dimuat naik.
-    Panggilan masuk ke endpoint ini akan mengejutkan Render daripada mode tidur.
+    Endpoint HTTP POST yang dipanggil oleh Webapp selepas lagu dimuat naik atau pautan YT ditampal.
     """
     data = request.get_json()
     if not data:
@@ -290,22 +336,26 @@ def transcribe_trigger():
 
     user_id = data.get("userId")
     job_id = data.get("jobId")
-    remote_audio_path = data.get("audioUrl") # Laluan fail audio di Firebase Storage
+    audio_url = data.get("audioUrl")       # (Pilihan: Untuk fail audio muat naik)
+    youtube_url = data.get("youtubeUrl")   # (Pilihan: Untuk pautan YouTube)
 
-    if not user_id or not job_id or not remote_audio_path:
-        return jsonify({"error": "Missing required fields (userId, jobId, audioUrl)"}), 400
+    if not user_id or not job_id:
+        return jsonify({"error": "Missing required fields (userId, jobId)"}), 400
 
-    # Jalankan tugasan secara tidak segerak (asynchronous) supaya panggilan HTTP tidak luput masa (timeout)
+    if not audio_url and not youtube_url:
+        return jsonify({"error": "Please provide either audioUrl or youtubeUrl"}), 400
+
+    # Jalankan tugasan secara asynchronous
     import threading
     thread = threading.Thread(
         target=orchestrator.process_incoming_cloud_job,
-        args=(user_id, job_id, remote_audio_path)
+        args=(user_id, job_id, audio_url, youtube_url)
     )
     thread.start()
 
     return jsonify({
         "status": "QUEUED",
-        "message": "Transcription job triggered successfully. Render is processing.",
+        "message": "Transcription job triggered successfully. T1era Music is processing.",
         "jobId": job_id
     }), 202
 
@@ -339,12 +389,9 @@ def run_local_test():
 
 
 if __name__ == "__main__":
-    # Jika dijalankan di pelayan Render, ia mengesan pemboleh ubah PORT
     port = int(os.environ.get("PORT", 10000))
     
     if os.environ.get("RENDER"):
-        # Mod Awan: Mulakan pelayan API Flask di Render
         app.run(host="0.0.0.0", port=port)
     else:
-        # Mod Tempatan: Jalankan ujian simulasi local
         run_local_test()
