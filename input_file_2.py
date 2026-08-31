@@ -181,7 +181,7 @@ class Stage2Pipeline:
         self.logs: List[str] = []
         self.merge_decisions: List[Dict[str, Any]] = []
         
-        # Penyelarasan laluan parameter or fallback relatif
+        # Penyelarasan laluan parameter atau fallback relatif
         self.input_path = input_path or Config.INPUT_PATH
         self.output_path = output_path or Config.OUTPUT_PATH
         self.log_path = log_path or Config.LOG_PATH
@@ -419,6 +419,12 @@ class Stage2Pipeline:
         self.log("Stage 2 successfully completed.", print_console=True)
 
     def apply_legato_closing(self, notes: List[Note], tempo_map: TempoMap):
+        """For consecutive DIFFERENT-pitch notes (same track+channel) with only a
+        tiny silent gap between them, shrinks that gap down to a standard
+        key-release length instead of leaving it at whatever gap the
+        transcription happened to produce - creating a smoother legato flow.
+        Same-pitch gaps are left alone; those are the merge engine's job above.
+        """
         groups: Dict[Tuple[int, int], List[Note]] = {}
         for n in notes:
             groups.setdefault((n.track_idx, n.channel), []).append(n)
@@ -431,19 +437,19 @@ class Stage2Pipeline:
                 n2 = group[i + 1]
 
                 if n2.pitch == n1.pitch:
-                    continue  
+                    continue  # handled by the same-pitch merge engine instead
 
                 gap_sec = n2.start_sec - n1.end_sec
                 if gap_sec <= 0:
-                    continue  
+                    continue  # already touching or overlapping - nothing to close
 
                 cfg = get_register_config(n1.pitch)
                 if gap_sec > cfg.LEGATO_GAP_LIMIT_SEC:
-                    continue  
+                    continue  # too big a gap to be considered legato-closable
 
                 target_gap_sec = cfg.KEY_RELEASE_GAP_SEC
                 if gap_sec <= target_gap_sec:
-                    continue  
+                    continue  # already at or tighter than the target release gap
 
                 shrink_sec = gap_sec - target_gap_sec
                 shrink_ticks = tempo_map.sec_to_ticks(n1.end_tick, shrink_sec)
@@ -484,17 +490,22 @@ class Stage2Pipeline:
         self.log(f"Legato closing complete: {closed_count} gap(s) tightened.")
 
     def evaluate_merge(self, n1: Note, n2: Note, track_notes: List[Note], gap_sec: float) -> Tuple[float, str, Dict[str, Any]]:
+        """Calculates register-aware confidence score evaluating mathematical and contour correlation."""
         is_treble = (n1.pitch >= Config.REGISTER_BOUNDARY_PITCH)
         cfg = get_register_config(n1.pitch)
 
-        s_gap = 100.0 * (1.0 - (gap_sec / cfg.MAX_GAP_SEC))
+        # 1. Temporal Gap Score
+        max_gap = cfg.MAX_GAP_SEC
+        s_gap = 100.0 * (1.0 - (gap_sec / max_gap))
         s_gap = max(0.0, min(100.0, s_gap))
 
+        # 2. Velocity Similarity Score
         delta_vel = abs(n1.velocity - n2.velocity)
         vel_divisor = cfg.VELOCITY_DIVISOR
         s_vel = 100.0 * (1.0 - (delta_vel / vel_divisor))
         s_vel = max(0.0, min(100.0, s_vel))
 
+        # 3. Duration & Transient Feature Heuristic
         min_dur = min(n1.duration_sec, n2.duration_sec)
         glitch_limit = cfg.GLITCH_DURATION_SEC
         if min_dur < glitch_limit:
@@ -505,6 +516,7 @@ class Stage2Pipeline:
             s_dur = 100.0 * math.exp(-ratio)
             s_dur = max(0.0, min(100.0, s_dur))
 
+        # 4. Phrase Boundary / Local Context Analysis
         window_start = n1.start_sec - 0.5
         window_end = n2.end_sec + 0.5
         local_notes = [
@@ -522,6 +534,7 @@ class Stage2Pipeline:
         else:
             s_density = 100.0 - (100.0 - 50.0) * ((effective_density - 2) / 6.0)
 
+        # 5. Motor Rhythm & Staccato Protection
         same_pitch = sorted([n for n in track_notes if n.pitch == n1.pitch], key=lambda x: x.start_tick)
         
         r_regularity_detected = False
@@ -543,6 +556,7 @@ class Stage2Pipeline:
         except ValueError:
             pass
 
+        # Compute Raw Weighted Score
         score = (
             s_gap * cfg.WEIGHT_GAP +
             s_vel * cfg.WEIGHT_VELOCITY +
@@ -571,6 +585,7 @@ class Stage2Pipeline:
             }
         }
 
+        # Phrase boundary threshold, straight from the register's own config
         phrase_boundary_limit = cfg.PHRASE_GAP_THRESHOLD_SEC
         if gap_sec > phrase_boundary_limit:
             return 0.0, "Rejected: Phrase boundary break (gap exceeds safety threshold)", details
@@ -603,7 +618,7 @@ class Stage2Pipeline:
         })
 
     def save_outputs(self, out_mid: mido.MidiFile):
-        # SIMPAN LAPORAN MENGGUNAKAN LALUAN DINAMIK INSTANCE
+        # MENGGUNAKAN INSTANCE PATHS DINAMIK (Pembedahan Konfigurasi Dinamik)
         try:
             out_mid.save(self.output_path)
             self.log(f"Exported repaired MIDI to: {self.output_path}")
