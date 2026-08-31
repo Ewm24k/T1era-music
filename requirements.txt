@@ -4,6 +4,9 @@ Flask>=2.2.0
 # Pakej Pangkalan Data & Integrasi Awan
 firebase-admin>=6.2.0
 
+# Pakej Muat Turun YouTube (T1era Music)
+yt-dlp>=2025.1.1
+
 # Pakej Manipulasi & Analisis Fail MIDI
 mido>=1.3.0
 pretty_midi>=0.2.10
