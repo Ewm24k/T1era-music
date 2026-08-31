@@ -18,7 +18,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 // Pautan URL Pelayan Render API T1era Music
-const RENDER_BACKEND_URL = "https://t1era-music.onrender.com/transcribe";
+const RENDER_BACKEND_URL = "https://t1era-music-api.onrender.com/transcribe";
 
 // =========================================================
 // INJEKSI STYLING NEON KONSOL PEMPROSESAN (AAA GRADE UI/UX)
@@ -803,6 +803,7 @@ audioFileInput.addEventListener("change", (event) => {
 
 function updateTerminalText(text) { verificationTerminal.innerHTML = text; }
 
+// 4. Konsol Pemantauan Status Pipeline Masa Nyata & Automasi Redirection `midiano.html`
 function openLiveTerminalConsole(userId, jobId) {
   const hasCard = document.querySelector(".proc-card");
   if (!hasCard) { verificationTerminal.innerHTML = createProgressCardMarkup(); }
@@ -888,7 +889,7 @@ function openLiveTerminalConsole(userId, jobId) {
       clearTimeout(fallbackTimeout);
       isFirestoreActive = true;
 
-      const data = snapshot.to_dict();
+      const data = snapshot.data(); // FIXED: Tukar .to_dict() kepada .data() mengikut standard Web SDK JS
       const status = data.status;
       const progress = data.progress || 0;
 
