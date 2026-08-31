@@ -437,7 +437,8 @@ function runSessionVerification() {
 
             setTimeout(() => {
               verificationScreen.classList.remove("active");
-              servicesOverlay.classList.add("active");
+              // Redirect to your newly created dashboard.html
+              window.location.href = "dashboard.html";
             }, 1200);
           }, 1200);
         }, 1200);
