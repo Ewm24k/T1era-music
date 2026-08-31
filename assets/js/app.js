@@ -102,6 +102,7 @@ if (auth) {
 const textToType = "T1ERA Music Studio ...";
 let charIndex = 0;
 
+// Fullscreen capability checks
 function triggerNativeFullscreen() {
   const docEl = document.documentElement;
   if (docEl.requestFullscreen) {
@@ -437,8 +438,9 @@ function runSessionVerification() {
 
             setTimeout(() => {
               verificationScreen.classList.remove("active");
-              // Redirect to your newly created dashboard.html
-              window.location.href = "dashboard.html";
+              
+              // FIX: Show the 3-option menu overlay on the landing page instead of redirecting directly [1]
+              servicesOverlay.classList.add("active"); 
             }, 1200);
           }, 1200);
         }, 1200);
