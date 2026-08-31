@@ -1,3 +1,6 @@
+# Pakej Pelayan Web API (Auto-Wake)
+Flask>=2.2.0
+
 # Pakej Pangkalan Data & Integrasi Awan
 firebase-admin>=6.2.0
 
