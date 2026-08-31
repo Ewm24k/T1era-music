@@ -1,3 +1,6 @@
+import { auth } from "./firebase-config.js";
+import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
 // Local hardcoded mock tracks arrays mimicking the reference layout
 const popularTracksData = [
     {
@@ -72,6 +75,37 @@ let isPlaying = false;
 let activeTrack = popularTracksData[5]; // Default active track: "Echoes of Midnight"
 let tickerInterval = null;
 let currentSeconds = 53; // Mock default matching reference image (0:53)
+
+// Monitor Auth State and secure the dashboard page
+if (auth) {
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      // User is signed in, update profile UI dynamically [1]
+      const profileName = document.getElementById("profile-name");
+      const profileAvatar = document.getElementById("profile-avatar");
+      
+      if (profileName) {
+        profileName.textContent = user.displayName || "Studio Creator";
+      }
+      
+      if (profileAvatar) {
+        if (user.photoURL) {
+          profileAvatar.innerHTML = `<img src="${user.photoURL}" alt="Avatar" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
+        } else {
+          // Render initials as a default avatar inside the circle
+          const initials = user.email ? user.email.substring(0, 2).toUpperCase() : "ST";
+          profileAvatar.textContent = initials;
+          profileAvatar.style.fontSize = "0.85rem";
+          profileAvatar.style.fontWeight = "bold";
+          profileAvatar.style.color = "rgba(255,255,255,0.7)";
+        }
+      }
+    } else {
+      // No user session found, redirect back to authentication gateway [1]
+      window.location.href = "index.html";
+    }
+  });
+}
 
 // 1. Populate the Track Cards dynamically
 function renderPopularTracks() {
@@ -176,11 +210,21 @@ categoriesRow.addEventListener("click", (e) => {
     }
 });
 
-// 5. Logout action logic trigger
+// 5. Real Firebase Logout Action
 document.getElementById("dashboard-logout-btn").addEventListener("click", () => {
     if (confirm("Disconnect session?")) {
-        // Redirection to landing page gate
-        window.location.href = "index.html";
+        if (auth) {
+          signOut(auth)
+            .then(() => {
+                window.location.href = "index.html";
+            })
+            .catch((err) => {
+                console.error("Logout failed:", err);
+                alert("Session disconnect failed. Try again.");
+            });
+        } else {
+          window.location.href = "index.html";
+        }
     }
 });
 
