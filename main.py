@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
 """
 T1era Music MIDI Transcription & Styling Central Orchestrator
-Menguruskan fail perantara sebagai fail sementara (dipadamkan secara automatik di Render),
-berjalan sebagai pelayan Flask API untuk menyokong "auto-wake" pelan percuma Render,
-menyokong muat turun audio YouTube (yt-dlp) dinamik, dan menyimpan hasil akhir ke Firebase [PerQueryResult].
+Meredamkan semua log amaran TensorFlow, menyokong pemprosesan fail sementara,
+dan berjalan menggunakan pelayan produksi WSGI Gunicorn untuk prestasi optimum [PerQueryResult].
 """
 
 import os
 import sys
-import re
+
+# =========================================================
+# AMARAN TENSORFLOW SILENCER (Wajib diletakkan di bahagian paling atas!)
+# =========================================================
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'      # Meredam amaran CUDA, AVX, & debug log
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'     # Meredam amaran optimasi oneDNN
+import logging
+logging.getLogger('tensorflow').setLevel(logging.ERROR)
+
 import time
 import tempfile
 import traceback
@@ -22,7 +29,7 @@ except ImportError:
     print("Sila pasang melalui: pip install flask")
     sys.exit(1)
 
-# Impor yt-dlp untuk muat turun audio YouTube secara langsung tanpa FFmpeg
+# Impor yt-dlp untuk muat turun audio YouTube secara langsung
 try:
     import yt_dlp
 except ImportError:
@@ -243,25 +250,23 @@ class CentralOrchestrator:
         
         with tempfile.TemporaryDirectory(prefix=f"t1era_{job_id}_") as tmp_dir:
             temp_work_path = Path(tmp_dir)
-            local_audio_path = temp_work_path / "input_audio"  # Laluan dinamik tanpa extension kekal
+            local_audio_path = temp_work_path / "input_audio"
 
             try:
-                # KES A: Menggunakan pautan YouTube (Seni bina baharu)
+                # KES A: Menggunakan pautan YouTube
                 if youtube_url:
                     self.update_status(user_id, job_id, "DOWNLOADING_YOUTUBE", 5)
                     print(f"[{job_id}] Memulakan muat turun YouTube: {youtube_url}")
                     
-                    # Muat turun aliran audio terus ke folder sementara tanpa penukaran codec rumit
                     downloaded_file = self.download_youtube_audio(youtube_url, temp_work_path)
                     local_audio_path = downloaded_file
                     print(f"[{job_id}] Muat turun YouTube berjaya. Fail disimpan di: {local_audio_path}")
                 
-                # KES B: Menggunakan fail audio muat naik terus ke Firebase Storage
+                # KES B: Menggunakan fail audio muat naik terus
                 elif audio_url:
                     self.update_status(user_id, job_id, "DOWNLOADING_AUDIO", 5)
                     print(f"[{job_id}] Memuat turun audio sedia ada dari Storage...")
                     
-                    # Tambah sambungan m4a/mp3 asal
                     suffix = ".mp3"
                     if ".wav" in audio_url.lower():
                         suffix = ".wav"
@@ -295,10 +300,7 @@ class CentralOrchestrator:
                 self.update_status(user_id, job_id, "FAILED", 100, error_msg=str(e))
 
     def download_youtube_audio(self, url: str, dest_dir: Path) -> Path:
-        """
-        Memuat turun aliran audio terbaik secara terus dari YouTube tanpa post-processor FFmpeg
-        untuk kestabilan maksimum di pelayan percuma Render.
-        """
+        """Memuat turun aliran audio terbaik secara terus dari YouTube"""
         ydl_opts = {
             'format': 'bestaudio/best',
             'outtmpl': os.path.join(dest_dir, 'yt_download.%(ext)s'),
@@ -312,7 +314,7 @@ class CentralOrchestrator:
 
 
 # =========================================================
-# FLASK WEB SERVER BLOCK (AUTO-WAKE CONFIGURATION FOR RENDER)
+# PRODUCTION FLASK APP DECLARATION (GUNICORN EXPOSED APP)
 # =========================================================
 app = Flask(__name__)
 orchestrator = CentralOrchestrator()
@@ -327,17 +329,14 @@ def index():
 
 @app.route("/transcribe", methods=["POST"])
 def transcribe_trigger():
-    """
-    Endpoint HTTP POST yang dipanggil oleh Webapp selepas lagu dimuat naik atau pautan YT ditampal.
-    """
     data = request.get_json()
     if not data:
         return jsonify({"error": "No JSON payload received"}), 400
 
     user_id = data.get("userId")
     job_id = data.get("jobId")
-    audio_url = data.get("audioUrl")       # (Pilihan: Untuk fail audio muat naik)
-    youtube_url = data.get("youtubeUrl")   # (Pilihan: Untuk pautan YouTube)
+    audio_url = data.get("audioUrl")       
+    youtube_url = data.get("youtubeUrl")   
 
     if not user_id or not job_id:
         return jsonify({"error": "Missing required fields (userId, jobId)"}), 400
@@ -355,7 +354,7 @@ def transcribe_trigger():
 
     return jsonify({
         "status": "QUEUED",
-        "message": "Transcription job triggered successfully. T1era Music is processing.",
+        "message": "Transcription job triggered successfully.",
         "jobId": job_id
     }), 202
 
@@ -389,9 +388,5 @@ def run_local_test():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    
-    if os.environ.get("RENDER"):
-        app.run(host="0.0.0.0", port=port)
-    else:
-        run_local_test()
+    # Blok pemula local sahaja (Tidak dipanggil oleh Gunicorn di Render)
+    run_local_test()
