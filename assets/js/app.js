@@ -20,6 +20,142 @@ import {
 // Pautan URL Pelayan Render API T1era Music
 const RENDER_BACKEND_URL = "https://t1era-music.onrender.com/transcribe";
 
+// =========================================================
+// INJEKSI STYLING NEON KONSOL PEMPROSESAN (AAA GRADE UI/UX)
+// =========================================================
+const customStyle = document.createElement("style");
+customStyle.innerHTML = `
+  #verification-terminal {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+  .proc-card {
+    width: 100%;
+    max-width: 500px;
+    background: rgba(10, 7, 22, 0.88);
+    border: 1px solid rgba(255, 145, 77, 0.25);
+    box-shadow: 0 20px 80px rgba(255, 145, 77, 0.15), 0 0 35px rgba(60, 42, 107, 0.25);
+    border-radius: 18px;
+    padding: 30px;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .proc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .proc-title {
+    font-family: monospace;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: #ffffff;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+  }
+  .proc-progress-pct {
+    font-family: monospace;
+    font-weight: 700;
+    color: #ff914d;
+    font-size: 18px;
+  }
+  .proc-bar-container {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 50px;
+    overflow: hidden;
+  }
+  .proc-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3976f0, #ff914d);
+    width: 0%;
+    transition: width 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    border-radius: 50px;
+    box-shadow: 0 0 12px rgba(255, 145, 77, 0.5);
+  }
+  .proc-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .proc-step {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    opacity: 0.25;
+    transition: all 0.3s ease;
+  }
+  .proc-step.active {
+    opacity: 1;
+  }
+  .proc-step.completed {
+    opacity: 1;
+  }
+  .step-status {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .step-circle {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
+  }
+  .proc-step.active .step-circle {
+    background: #ff914d;
+    box-shadow: 0 0 10px #ff914d;
+  }
+  .step-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(57, 118, 240, 0.15);
+    border-top-color: #3976f0;
+    border-radius: 50%;
+    animation: proc-spin 0.8s linear infinite;
+  }
+  .step-check {
+    color: #00df89;
+    font-size: 16px;
+    font-weight: bold;
+    animation: proc-pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+  .step-label {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.8px;
+    color: rgba(255, 255, 255, 0.8);
+    text-transform: uppercase;
+  }
+  .proc-step.active .step-label {
+    color: #ff914d;
+    font-weight: 600;
+    text-shadow: 0 0 8px rgba(255, 145, 77, 0.2);
+  }
+  @keyframes proc-spin {
+    100% { transform: rotate(360deg); }
+  }
+  @keyframes proc-pop {
+    0% { transform: scale(0); }
+    100% { transform: scale(1); }
+  }
+`;
+document.head.appendChild(customStyle);
+
 // UI DOM Elements
 const overlay = document.getElementById("interactive-overlay");
 const loadingScreen = document.getElementById("loading-screen");
@@ -539,6 +675,83 @@ function isValidYouTubeUrl(url) {
   return pattern.test(url);
 }
 
+// Struktur Kad Kemajuan Dinamik (Suntikan HTML Reka Bentuk Baru)
+function createProgressCardMarkup() {
+  return `
+    <div class="proc-card">
+      <div class="proc-header">
+        <h3 class="proc-title">T1ERA Studio Engine</h3>
+        <span class="proc-progress-pct" id="proc-pct">0%</span>
+      </div>
+      <div class="proc-bar-container">
+        <div class="proc-bar-fill" id="proc-bar" style="width: 0%"></div>
+      </div>
+      <div class="proc-steps">
+        <div class="proc-step" id="step-init">
+          <div class="step-status"><span class="step-circle"></span></div>
+          <span class="step-label">Initializing Session Verification</span>
+        </div>
+        <div class="proc-step" id="step-download">
+          <div class="step-status"><span class="step-circle"></span></div>
+          <span class="step-label">Acquiring YouTube Audio Stream</span>
+        </div>
+        <div class="proc-step" id="step-temp">
+          <div class="step-status"><span class="step-circle"></span></div>
+          <span class="step-label">Caching Raw Track to Workspace</span>
+        </div>
+        <div class="proc-step" id="step-transcribe">
+          <div class="step-status"><span class="step-circle"></span></div>
+          <span class="step-label">Neural Pitch Transcription</span>
+        </div>
+        <div class="proc-step" id="step-repair">
+          <div class="step-status"><span class="step-circle"></span></div>
+          <span class="step-label">Structural Clean & Note Repair</span>
+        </div>
+        <div class="proc-step" id="step-reconstruct">
+          <div class="step-status"><span class="step-circle"></span></div>
+          <span class="step-label">Melodic Reconstruction & Skyline</span>
+        </div>
+        <div class="proc-step" id="step-stabilize">
+          <div class="step-status"><span class="step-circle"></span></div>
+          <span class="step-label">Stabilizing Pitch Classes</span>
+        </div>
+        <div class="proc-step" id="step-styling">
+          <div class="step-status"><span class="step-circle"></span></div>
+          <span class="step-label">Arranging Piano Styles</span>
+        </div>
+        <div class="proc-step" id="step-quantize">
+          <div class="step-status"><span class="step-circle"></span></div>
+          <span class="step-label">Quantizing Timeline Grid</span>
+        </div>
+        <div class="proc-step" id="step-complete">
+          <div class="step-status"><span class="step-circle"></span></div>
+          <span class="step-label">Synchronizing Final MIDI</span>
+        </div>
+      </div>
+      <div id="proc-action-area" style="text-align: center;"></div>
+    </div>
+  `;
+}
+
+// Helper untuk mengemas kini status barisan ikon
+function setStepStatus(stepId, state) {
+  const stepEl = document.getElementById(stepId);
+  if (!stepEl) return;
+
+  stepEl.classList.remove("active", "completed");
+  const statusContainer = stepEl.querySelector(".step-status");
+
+  if (state === "loading") {
+    stepEl.classList.add("active");
+    statusContainer.innerHTML = `<span class="step-spinner"></span>`;
+  } else if (state === "success") {
+    stepEl.classList.add("completed");
+    statusContainer.innerHTML = `<span class="step-check">✓</span>`;
+  } else {
+    statusContainer.innerHTML = `<span class="step-circle"></span>`;
+  }
+}
+
 // 1. PENGENDALI TRANSAKSI ALIRAN YOUTUBE (Dengan Simulasi 3-Fasa Pengesahan & Butang Continue)
 youtubeSubmitBtn.addEventListener("click", () => {
   const urlValue = youtubeLinkInput.value.trim();
@@ -564,85 +777,78 @@ youtubeSubmitBtn.addEventListener("click", () => {
   // Tutup panel konsol perkhidmatan utama
   servicesOverlay.classList.remove("active");
 
-  // Tampilkan skrin terminal untuk visualisasi muat turun YouTube
+  // Tampilkan skrin terminal dan suntik rupa bentuk kad kemajuan baru
   verificationScreen.classList.add("active");
-  verificationTerminal.style.color = "#ffffff";
-  verificationTerminal.style.textShadow = "0 0 10px #ffffff";
+  verificationTerminal.innerHTML = createProgressCardMarkup();
 
-  // SIMULASI DETAL 3-FASA MUAT TURUN & EKSTRAKSI YOUTUBE
-  updateTerminalText(`[T1ERA ENGINE] Initializing Stream Downloader...`);
+  // FASA 1: Mengesahkan Sesi Pengguna
+  setStepStatus("step-init", "loading");
 
   setTimeout(() => {
-    updateTerminalText(
-      `[T1ERA ENGINE] Initializing Stream Downloader...<br>` +
-      `[PHASE 1] Loading YouTube link... <span style="color:#00ff66;">[SUCCESS ✓]</span>`
-    );
+    setStepStatus("step-init", "success");
+    // FASA 2: Muat turun Audio Stream YouTube
+    setStepStatus("step-download", "loading");
 
     setTimeout(() => {
-      updateTerminalText(
-        `[T1ERA ENGINE] Initializing Stream Downloader...<br>` +
-        `[PHASE 1] Loading YouTube link... <span style="color:#00ff66;">[SUCCESS ✓]</span><br>` +
-        `[PHASE 2] Extracting stream into high-fidelity audio... <span style="color:#00ff66;">[SUCCESS ✓]</span>`
-      );
+      setStepStatus("step-download", "success");
+      // FASA 3: Salin fail audio ke ruang kerja sementara
+      setStepStatus("step-temp", "loading");
 
       setTimeout(() => {
-        updateTerminalText(
-          `[T1ERA ENGINE] Initializing Stream Downloader...<br>` +
-          `[PHASE 1] Loading YouTube link... <span style="color:#00ff66;">[SUCCESS ✓]</span><br>` +
-          `[PHASE 2] Extracting stream into high-fidelity audio... <span style="color:#00ff66;">[SUCCESS ✓]</span><br>` +
-          `[PHASE 3] Caching raw track to local temp workspace... <span style="color:#00ff66;">[SUCCESS ✓]</span>`
-        );
+        setStepStatus("step-temp", "success");
 
-        // PAPARKAN BUTANG CONTINUE UNTUK MEMICU ALIRAN KERJA PIPELINE PENUH
-        const continueBtnId = `continue-btn-${jobId}`;
-        verificationTerminal.innerHTML += `
-          <br><br>
-          <button id="${continueBtnId}" class="web3-action-btn pulse-glow-blue" style="margin-top:15px; padding:10px 24px; font-size:0.85rem; border-color:#ff914d; color:#ff914d; font-weight:bold;">
-            [ CONTINUE TO STUDIO SCORING ]
-          </button>
-        `;
+        // PAPARKAN BUTANG CONTINUE UNTUK MEMICU ALIRAN KERJA PIPELINE PENUH DI RENDER
+        const actionArea = document.getElementById("proc-action-area");
+        if (actionArea) {
+          actionArea.innerHTML = `
+            <button id="continue-scoring-btn" class="web3-action-btn pulse-glow-blue" style="margin-top:15px; padding:10px 24px; font-size:0.85rem; border-color:#ff914d; color:#ff914d; font-weight:bold; width: 100%;">
+              [ CONTINUE TO STUDIO SCORING ]
+            </button>
+          `;
 
-        // Daftar pendengar klik pada butang Continue
-        document.getElementById(continueBtnId).addEventListener("click", () => {
-          updateTerminalText(`[SYSTEM] Starting transcription pipeline sequence...`);
-          
-          // Daftarkan dokumen kerja (Job Document) baru ke Firestore subcollection
-          const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
-          setDoc(jobRef, {
-            status: "QUEUED",
-            progress: 0,
-            youtubeUrl: urlValue,
-            createdAt: serverTimestamp()
-          })
-          .then(() => {
-            // Tukar mod terminal untuk mendengar kemas kini progress secara langsung dari Render
-            openLiveTerminalConsole(userId, jobId);
+          // Buka pendengar klik untuk memulakan pemprosesan sebenar
+          document.getElementById("continue-scoring-btn").addEventListener("click", () => {
+            // Bersihkan butang tindakan semasa berjalan
+            actionArea.innerHTML = "";
+            
+            // Sediakan dokumen tugasan di Firestore (Ini akan memicu Render)
+            const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
+            setDoc(jobRef, {
+              status: "QUEUED",
+              progress: 0,
+              youtubeUrl: urlValue,
+              createdAt: serverTimestamp()
+            })
+            .then(() => {
+              // Beralih ke pemantauan penalaan progress secara langsung dari Firestore
+              openLiveTerminalConsole(userId, jobId);
 
-            // Kirim permintaan HTTP POST ke pelayan Render untuk memicu transkripsi Stage 0 - 6
-            fetch(RENDER_BACKEND_URL, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                userId: userId,
-                jobId: jobId,
-                youtubeUrl: urlValue
+              // Kirim permintaan HTTP POST ke pelayan Render
+              fetch(RENDER_BACKEND_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  userId: userId,
+                  jobId: jobId,
+                  youtubeUrl: urlValue
+                })
               })
-            })
-            .then(res => {
-              if (!res.ok) throw new Error("Server failed to respond.");
-              return res.json();
-            })
-            .then(data => {
-              console.log("Render T1era Music backend transcription triggered:", data);
+              .then(res => {
+                if (!res.ok) throw new Error("Server failed to respond.");
+                return res.json();
+              })
+              .then(data => {
+                console.log("Render T1era Music backend transcription triggered:", data);
+              })
+              .catch(err => {
+                console.warn("Render waking up (Cold start latency normal):", err);
+              });
             })
             .catch(err => {
-              console.warn("Render waking up (Cold start latency normal):", err);
+              alert("Failed to register job document in Firestore: " + err.message);
             });
-          })
-          .catch(err => {
-            alert("Failed to register job document in Firestore: " + err.message);
           });
-        });
+        }
 
       }, 1200);
     }, 1200);
@@ -684,7 +890,10 @@ audioFileInput.addEventListener("change", (event) => {
 
   // Tampilkan Konsol Skrin Terminal untuk memaparkan status muat naik
   verificationScreen.classList.add("active");
-  updateTerminalText(`[STORAGE] Initiating upload for: ${selectedFile.name.substring(0, 15)}...`);
+  verificationTerminal.innerHTML = createProgressCardMarkup();
+
+  // Aktifkan visual muat naik storan awan (Stage 0)
+  setStepStatus("step-init", "loading");
 
   // Takrifkan rujukan muat naik Firebase Storage
   const storageRef = ref(storage, `users/${userId}/transcriptions/${jobId}/${selectedFile.name}`);
@@ -693,7 +902,13 @@ audioFileInput.addEventListener("change", (event) => {
   uploadTask.on("state_changed", 
     (snapshot) => {
       const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-      updateTerminalText(`[STORAGE] Uploading file to Cloud: ${percent}%`);
+      const progressBar = document.getElementById("proc-bar");
+      const progressPct = document.getElementById("proc-pct");
+      if (progressBar) progressBar.style.width = `${percent / 4}%`; // Skala muat naik adalah 25% dari bar kemajuan penuh
+      if (progressPct) progressPct.textContent = `${Math.round(percent / 4)}%`;
+      
+      const stepInitLabel = document.querySelector("#step-init .step-label");
+      if (stepInitLabel) stepInitLabel.textContent = `Uploading File: ${percent}%`;
     }, 
     (error) => {
       alert("Failed to upload audio to Cloud Storage: " + error.message);
@@ -702,8 +917,12 @@ audioFileInput.addEventListener("change", (event) => {
     }, 
     () => {
       // Muat naik ke Storage Selesai
+      setStepStatus("step-init", "success");
+      setStepStatus("step-download", "loading");
+
       getDownloadURL(uploadTask.snapshot.ref).then((downloadUrl) => {
-        updateTerminalText("[STORAGE] Upload success. Creating Firestore tracking document...");
+        setStepStatus("step-download", "success");
+        setStepStatus("step-temp", "loading");
         
         // Daftarkan dokumen kerja di Firestore
         const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
@@ -714,7 +933,9 @@ audioFileInput.addEventListener("change", (event) => {
           createdAt: serverTimestamp()
         })
         .then(() => {
-          // Beralih ke paparan pemantauan pipeline Render di terminal
+          setStepStatus("step-temp", "success");
+          
+          // Beralih ke pemantauan pipeline Render di terminal secara real-time
           openLiveTerminalConsole(userId, jobId);
 
           // Trigger API Render
@@ -744,10 +965,19 @@ function updateTerminalText(text) {
 
 // 4. Konsol Pemantauan Status Pipeline Masa Nyata & Automasi Redirection `midiano.html`
 function openLiveTerminalConsole(userId, jobId) {
-  verificationScreen.classList.add("active");
-  verificationTerminal.style.color = "#ffffff";
-  verificationTerminal.style.textShadow = "0 0 10px #ffffff";
-  updateTerminalText("[SYSTEM] Connecting to T1era Cloud Synthesizer...");
+  // Memastikan rupa bentuk progress card sedia aktif
+  const hasCard = document.querySelector(".proc-card");
+  if (!hasCard) {
+    verificationTerminal.innerHTML = createProgressCardMarkup();
+  }
+
+  // Setkan status 3-langkah muat naik awal kepada sukses jika dikesan dari isyarat Render
+  setStepStatus("step-init", "success");
+  setStepStatus("step-download", "success");
+  setStepStatus("step-temp", "success");
+
+  const progressBar = document.getElementById("proc-bar");
+  const progressPct = document.getElementById("proc-pct");
 
   const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
   
@@ -759,40 +989,78 @@ function openLiveTerminalConsole(userId, jobId) {
     const status = data.status;
     const progress = data.progress || 0;
 
+    // Laraskan bar kemajuan linear dan peratusan di skrin secara dinamik
+    if (progressBar) progressBar.style.width = `${progress}%`;
+    if (progressPct) progressPct.textContent = `${progress}%`;
+
     // Menampilkan status kemajuan peringkat pemprosesan sepadan dengan nama pipeline Render
     if (status === "QUEUED") {
-      updateTerminalText(`[SYSTEM] Job queued. Render is waking up...<br>[PROGRESS] ${progress}%`);
-    } else if (status === "DOWNLOADING_YOUTUBE") {
-      updateTerminalText(`[STAGE 0] Downloading YouTube Audio stream...<br>[PROGRESS] ${progress}%`);
-    } else if (status === "DOWNLOADING_AUDIO") {
-      updateTerminalText(`[STAGE 0] Downloading raw audio file...<br>[PROGRESS] ${progress}%`);
+      setStepStatus("step-transcribe", "loading");
+    } else if (status === "DOWNLOADING_YOUTUBE" || status === "DOWNLOADING_AUDIO") {
+      setStepStatus("step-init", "success");
+      setStepStatus("step-download", "success");
+      setStepStatus("step-temp", "success");
     } else if (status === "TRANSCRIBING_AUDIO") {
-      updateTerminalText(`[STAGE 0] Running Basic Pitch model transcribing...<br>[PROGRESS] ${progress}%`);
+      setStepStatus("step-transcribe", "loading");
     } else if (status === "CLEANING_MIDI") {
-      updateTerminalText(`[STAGE 1] Running Stage 1 MIDI Cleanup...<br>[PROGRESS] ${progress}%`);
+      setStepStatus("step-transcribe", "success");
+      setStepStatus("step-repair", "loading");
     } else if (status === "REPAIRING_NOTES") {
-      updateTerminalText(`[STAGE 2] Register-Aware Fragmented Note Repairing...<br>[PROGRESS] ${progress}%`);
+      setStepStatus("step-transcribe", "success");
+      setStepStatus("step-repair", "loading");
     } else if (status === "RECONSTRUCTING_MELODY") {
-      updateTerminalText(`[STAGE 3] Melody Contour & Melodic Reconstruction...<br>[PROGRESS] ${progress}%`);
+      setStepStatus("step-transcribe", "success");
+      setStepStatus("step-repair", "success");
+      setStepStatus("step-reconstruct", "loading");
     } else if (status === "STABILIZING_PITCH") {
-      updateTerminalText(`[STAGE 4] Octave Correction & Pitch Stabilization...<br>[PROGRESS] ${progress}%`);
+      setStepStatus("step-transcribe", "success");
+      setStepStatus("step-repair", "success");
+      setStepStatus("step-reconstruct", "success");
+      setStepStatus("step-stabilize", "loading");
     } else if (status === "ARRANGING_PIANO_STYLE") {
-      updateTerminalText(`[STAGE 5] Arranging Piano Accompaniment (TestPopPiano)...<br>[PROGRESS] ${progress}%`);
+      setStepStatus("step-transcribe", "success");
+      setStepStatus("step-repair", "success");
+      setStepStatus("step-reconstruct", "success");
+      setStepStatus("step-stabilize", "success");
+      setStepStatus("step-styling", "loading");
     } else if (status === "QUANTIZING_TIMELINE") {
-      updateTerminalText(`[STAGE 6] Timeline Warping & Quantization...<br>[PROGRESS] ${progress}%`);
+      setStepStatus("step-transcribe", "success");
+      setStepStatus("step-repair", "success");
+      setStepStatus("step-reconstruct", "success");
+      setStepStatus("step-stabilize", "success");
+      setStepStatus("step-styling", "success");
+      setStepStatus("step-quantize", "loading");
     } else if (status === "UPLOADING_RESULTS") {
-      updateTerminalText(`[SUCCESS] Compiling results. Uploading MIDI file...<br>[PROGRESS] ${progress}%`);
+      setStepStatus("step-transcribe", "success");
+      setStepStatus("step-repair", "success");
+      setStepStatus("step-reconstruct", "success");
+      setStepStatus("step-stabilize", "success");
+      setStepStatus("step-styling", "success");
+      setStepStatus("step-quantize", "success");
+      setStepStatus("step-complete", "loading");
     } else if (status === "COMPLETED") {
+      setStepStatus("step-transcribe", "success");
+      setStepStatus("step-repair", "success");
+      setStepStatus("step-reconstruct", "success");
+      setStepStatus("step-stabilize", "success");
+      setStepStatus("step-styling", "success");
+      setStepStatus("step-quantize", "success");
+      setStepStatus("step-complete", "success");
+
       const midiUrl = data.midiUrl;
 
       // SIMPAN URL FAIL MIDI KE LOCAL STORAGE (Sistem Autoload Fail Fail-Safe)
       localStorage.setItem("t1era_current_midi", midiUrl);
 
-      updateTerminalText(
-        `[SYSTEM] CONSOLE OK.<br>` +
-        `[SUCCESS] MIDI Generated!<br>` +
-        `[REDIRECT] Launching T1era Player...`
-      );
+      // Berikan maklum balas visual pemprosesan selesai di atas kad
+      const actionArea = document.getElementById("proc-action-area");
+      if (actionArea) {
+        actionArea.innerHTML = `
+          <div style="color:#00df89; font-weight:bold; letter-spacing:1px; font-size:0.9rem; margin-top:10px; animation: proc-pop 0.3s ease;">
+            [ REDIRECTING TO PIANO STUDIO... ]
+          </div>
+        `;
+      }
       
       // Hentikan pendengar Firestore secara selamat sebelum pusingan navigasi
       unsubscribe();
@@ -804,7 +1072,24 @@ function openLiveTerminalConsole(userId, jobId) {
 
     } else if (status === "FAILED") {
       const error = data.error || "Unknown pipeline error.";
-      updateTerminalText(`[ERROR] Processing failed: ${error}<br><br><span style="color:#ff4a4a; cursor:pointer;" onclick="document.getElementById('verification-screen').classList.remove('active')">[ CLOSE TERMINAL ]</span>`);
+      
+      // Setkan bar berwarna merah jika gagal
+      if (progressBar) {
+        progressBar.style.background = "#ff4a4a";
+        progressBar.style.boxShadow = "0 0 12px rgba(255, 74, 74, 0.5)";
+      }
+
+      const actionArea = document.getElementById("proc-action-area");
+      if (actionArea) {
+        actionArea.innerHTML = `
+          <div style="color:#ff4a4a; font-weight:bold; font-size:0.8rem; margin-top:10px; line-height:1.4;">
+            PROCESSING FAILED: ${error.toUpperCase()}
+          </div>
+          <button onclick="document.getElementById('verification-screen').classList.remove('active')" class="web3-action-btn" style="margin-top:10px; border-color:#ff4a4a; color:#ff4a4a; font-size:0.75rem;">
+            [ CLOSE KONSOL ]
+          </button>
+        `;
+      }
       unsubscribe();
     }
   });
@@ -812,8 +1097,8 @@ function openLiveTerminalConsole(userId, jobId) {
   // Benarkan terminal ditutup apabila di klik di luar ruang teks (hanya apabila Selesai/Gagal)
   verificationScreen.addEventListener("click", (e) => {
     if (e.target === verificationScreen) {
-      const text = verificationTerminal.innerHTML;
-      if (text.includes("CONSOLE OK") || text.includes("ERROR") || text.includes("REDIRECT")) {
+      const actionArea = document.getElementById("proc-action-area");
+      if (actionArea && (actionArea.innerHTML.includes("REDIRECTING") || actionArea.innerHTML.includes("FAILED"))) {
         verificationScreen.classList.remove("active");
         dropzoneLabelText.textContent = "Select Music File";
       }
