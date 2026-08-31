@@ -2,7 +2,7 @@
 """
 T1era Music MIDI Transcription & Styling Central Orchestrator
 Meredamkan semua log amaran TensorFlow, menyokong pemprosesan fail sementara,
-dan berjalan menggunakan pelayan produksi WSGI Gunicorn untuk prestasi optimum [PerQueryResult].
+mengaktifkan sekatan CORS untuk keselamatan, dan berjalan menggunakan pelayan produksi WSGI Gunicorn [PerQueryResult].
 """
 
 import os
@@ -21,12 +21,13 @@ import tempfile
 import traceback
 from pathlib import Path
 
-# Impor Flask untuk binaan API Web awan
+# Impor Flask & CORS untuk binaan API Web awan yang selamat
 try:
     from flask import Flask, request, jsonify
+    from flask_cors import CORS
 except ImportError:
-    print("Error: 'flask' diperlukan untuk menjalankan pelayan API.")
-    print("Sila pasang melalui: pip install flask")
+    print("Error: 'flask' dan 'flask-cors' diperlukan untuk menjalankan pelayan API.")
+    print("Sila pasang melalui: pip install flask flask-cors")
     sys.exit(1)
 
 # Impor yt-dlp untuk muat turun audio YouTube secara langsung
@@ -314,9 +315,22 @@ class CentralOrchestrator:
 
 
 # =========================================================
-# PRODUCTION FLASK APP DECLARATION (GUNICORN EXPOSED APP)
+# PRODUCTION FLASK APP DECLARATION (GUNICORN EXPOSED APP WITH CORS)
 # =========================================================
 app = Flask(__name__)
+
+# Membenarkan akses merentas domain (CORS) hanya untuk Netlify dan localhost pembangunan anda demi keselamatan optimum [PerQueryResult]
+CORS(app, resources={
+    r"/*": {
+        "origins": [
+            "https://t1era-music.netlify.app", 
+            "http://localhost:3000", 
+            "http://127.0.0.1:5500", 
+            "http://localhost:5000"
+        ]
+    }
+})
+
 orchestrator = CentralOrchestrator()
 
 @app.route("/", methods=["GET"])
