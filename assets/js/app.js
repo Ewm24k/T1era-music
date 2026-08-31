@@ -539,7 +539,7 @@ function isValidYouTubeUrl(url) {
   return pattern.test(url);
 }
 
-// 1. Pengendali Import Aliran Penstriman YouTube (Auto-wake)
+// 1. PENGENDALI TRANSAKSI ALIRAN YOUTUBE (Dengan Simulasi 3-Fasa Pengesahan & Butang Continue)
 youtubeSubmitBtn.addEventListener("click", () => {
   const urlValue = youtubeLinkInput.value.trim();
   
@@ -561,46 +561,92 @@ youtubeSubmitBtn.addEventListener("click", () => {
   const userId = currentUserObj.uid;
   const jobId = "yt_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
 
-  // Tutup panel konsol perkhidmatan
+  // Tutup panel konsol perkhidmatan utama
   servicesOverlay.classList.remove("active");
 
-  // Daftarkan dokumen kerja (Job Document) baru ke Firestore subcollection
-  const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
-  
-  setDoc(jobRef, {
-    status: "QUEUED",
-    progress: 0,
-    youtubeUrl: urlValue,
-    createdAt: serverTimestamp()
-  })
-  .then(() => {
-    // Tampilkan Konsol Terminal Masa Nyata untuk menjejaki progress
-    openLiveTerminalConsole(userId, jobId);
+  // Tampilkan skrin terminal untuk visualisasi muat turun YouTube
+  verificationScreen.classList.add("active");
+  verificationTerminal.style.color = "#ffffff";
+  verificationTerminal.style.textShadow = "0 0 10px #ffffff";
 
-    // Kirim permintaan HTTP POST ke pelayan Render untuk mengejutkannya
-    fetch(RENDER_BACKEND_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId: userId,
-        jobId: jobId,
-        youtubeUrl: urlValue
-      })
-    })
-    .then(res => {
-      if (!res.ok) throw new Error("Server failed to respond.");
-      return res.json();
-    })
-    .then(data => {
-      console.log("Render T1era Music backend transcription triggered:", data);
-    })
-    .catch(err => {
-      console.warn("Render waking up (Cold start latency normal):", err);
-    });
-  })
-  .catch(err => {
-    alert("Failed to register job document in Firestore: " + err.message);
-  });
+  // SIMULASI DETAL 3-FASA MUAT TURUN & EKSTRAKSI YOUTUBE
+  updateTerminalText(`[T1ERA ENGINE] Initializing Stream Downloader...`);
+
+  setTimeout(() => {
+    updateTerminalText(
+      `[T1ERA ENGINE] Initializing Stream Downloader...<br>` +
+      `[PHASE 1] Loading YouTube link... <span style="color:#00ff66;">[SUCCESS ✓]</span>`
+    );
+
+    setTimeout(() => {
+      updateTerminalText(
+        `[T1ERA ENGINE] Initializing Stream Downloader...<br>` +
+        `[PHASE 1] Loading YouTube link... <span style="color:#00ff66;">[SUCCESS ✓]</span><br>` +
+        `[PHASE 2] Extracting stream into high-fidelity audio... <span style="color:#00ff66;">[SUCCESS ✓]</span>`
+      );
+
+      setTimeout(() => {
+        updateTerminalText(
+          `[T1ERA ENGINE] Initializing Stream Downloader...<br>` +
+          `[PHASE 1] Loading YouTube link... <span style="color:#00ff66;">[SUCCESS ✓]</span><br>` +
+          `[PHASE 2] Extracting stream into high-fidelity audio... <span style="color:#00ff66;">[SUCCESS ✓]</span><br>` +
+          `[PHASE 3] Caching raw track to local temp workspace... <span style="color:#00ff66;">[SUCCESS ✓]</span>`
+        );
+
+        // PAPARKAN BUTANG CONTINUE UNTUK MEMICU ALIRAN KERJA PIPELINE PENUH
+        const continueBtnId = `continue-btn-${jobId}`;
+        verificationTerminal.innerHTML += `
+          <br><br>
+          <button id="${continueBtnId}" class="web3-action-btn pulse-glow-blue" style="margin-top:15px; padding:10px 24px; font-size:0.85rem; border-color:#ff914d; color:#ff914d; font-weight:bold;">
+            [ CONTINUE TO STUDIO SCORING ]
+          </button>
+        `;
+
+        // Daftar pendengar klik pada butang Continue
+        document.getElementById(continueBtnId).addEventListener("click", () => {
+          updateTerminalText(`[SYSTEM] Starting transcription pipeline sequence...`);
+          
+          // Daftarkan dokumen kerja (Job Document) baru ke Firestore subcollection
+          const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
+          setDoc(jobRef, {
+            status: "QUEUED",
+            progress: 0,
+            youtubeUrl: urlValue,
+            createdAt: serverTimestamp()
+          })
+          .then(() => {
+            // Tukar mod terminal untuk mendengar kemas kini progress secara langsung dari Render
+            openLiveTerminalConsole(userId, jobId);
+
+            // Kirim permintaan HTTP POST ke pelayan Render untuk memicu transkripsi Stage 0 - 6
+            fetch(RENDER_BACKEND_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userId: userId,
+                jobId: jobId,
+                youtubeUrl: urlValue
+              })
+            })
+            .then(res => {
+              if (!res.ok) throw new Error("Server failed to respond.");
+              return res.json();
+            })
+            .then(data => {
+              console.log("Render T1era Music backend transcription triggered:", data);
+            })
+            .catch(err => {
+              console.warn("Render waking up (Cold start latency normal):", err);
+            });
+          })
+          .catch(err => {
+            alert("Failed to register job document in Firestore: " + err.message);
+          });
+        });
+
+      }, 1200);
+    }, 1200);
+  }, 1000);
 });
 
 // 2. Trigger native device folder selection on click
@@ -696,7 +742,7 @@ function updateTerminalText(text) {
   verificationTerminal.innerHTML = text;
 }
 
-// 4. Konsol Pemantauan Status Pipeline Masa Nyata (Real-Time Terminal Monitor)
+// 4. Konsol Pemantauan Status Pipeline Masa Nyata & Automasi Redirection `midiano.html`
 function openLiveTerminalConsole(userId, jobId) {
   verificationScreen.classList.add("active");
   verificationTerminal.style.color = "#ffffff";
@@ -737,14 +783,25 @@ function openLiveTerminalConsole(userId, jobId) {
     } else if (status === "UPLOADING_RESULTS") {
       updateTerminalText(`[SUCCESS] Compiling results. Uploading MIDI file...<br>[PROGRESS] ${progress}%`);
     } else if (status === "COMPLETED") {
-      updateTerminalText(`[SYSTEM] CONSOLE OK.<br>[SUCCESS] MIDI Generated! Please close this terminal.`);
-      
-      // Paparkan pautan muat turun fail MIDI akhir di dalam terminal secara langsung
       const midiUrl = data.midiUrl;
-      verificationTerminal.innerHTML += `<br><br><a href="${midiUrl}" download style="color:#00df89; font-weight:bold; letter-spacing:2px; text-decoration:underline; font-size:1.1rem; display:block;">[ DOWNLOAD MIDI FILE ]</a>`;
+
+      // SIMPAN URL FAIL MIDI KE LOCAL STORAGE (Sistem Autoload Fail Fail-Safe)
+      localStorage.setItem("t1era_current_midi", midiUrl);
+
+      updateTerminalText(
+        `[SYSTEM] CONSOLE OK.<br>` +
+        `[SUCCESS] MIDI Generated!<br>` +
+        `[REDIRECT] Launching T1era Player...`
+      );
       
-      // Hentikan pendengar Firestore secara selamat
+      // Hentikan pendengar Firestore secara selamat sebelum pusingan navigasi
       unsubscribe();
+
+      // AUTOMATIK BUKA DAN AUTOLOAD FAIL MIDI DI MIDIANO.HTML SELEPAS 1.5 SAAT
+      setTimeout(() => {
+        window.location.href = "midiano.html?midi=" + encodeURIComponent(midiUrl);
+      }, 1500);
+
     } else if (status === "FAILED") {
       const error = data.error || "Unknown pipeline error.";
       updateTerminalText(`[ERROR] Processing failed: ${error}<br><br><span style="color:#ff4a4a; cursor:pointer;" onclick="document.getElementById('verification-screen').classList.remove('active')">[ CLOSE TERMINAL ]</span>`);
@@ -756,7 +813,7 @@ function openLiveTerminalConsole(userId, jobId) {
   verificationScreen.addEventListener("click", (e) => {
     if (e.target === verificationScreen) {
       const text = verificationTerminal.innerHTML;
-      if (text.includes("CONSOLE OK") || text.includes("ERROR")) {
+      if (text.includes("CONSOLE OK") || text.includes("ERROR") || text.includes("REDIRECT")) {
         verificationScreen.classList.remove("active");
         dropzoneLabelText.textContent = "Select Music File";
       }
