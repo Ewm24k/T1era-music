@@ -3026,5 +3026,60 @@
             });
         }
     </script>
+
+    <!-- Letakkan skrip ini di bahagian bawah fail midiano.html sebelum tag penutup </body> -->
+<script>
+  window.addEventListener("DOMContentLoaded", () => {
+    // 1. Ekstrak URL fail MIDI daripada parameter URL (?midi=...) atau Storage tempatan
+    const urlParams = new URLSearchParams(window.location.search);
+    const midiUrl = urlParams.get("midi") || localStorage.getItem("t1era_current_midi");
+
+    if (midiUrl) {
+      console.log("[T1ERA AUTO-LOAD] Aliran fail MIDI dikesan:", midiUrl);
+      
+      // 2. Muat turun fail MIDI asal sebagai data binari (ArrayBuffer)
+      fetch(midiUrl)
+        .then(res => {
+          if (!res.ok) throw new Error("Gagal mengambil fail MIDI dari Firebase Storage.");
+          return res.arrayBuffer();
+        })
+        .then(arrayBuffer => {
+          // 3. Masukkan data binari fail ke dalam sistem pemain Midiano anda
+          
+          // KES A: Jika Midiano sedia ada anda mendedahkan fungsi pemuatan ArrayBuffer global
+          if (window.midiano && typeof window.midiano.loadArrayBuffer === "function") {
+            window.midiano.loadArrayBuffer(arrayBuffer, "t1era_score.mid");
+            console.log("[T1ERA AUTO-LOAD] Fail MIDI berjaya disuap ke objek midiano.");
+          } 
+          // KES B: Jika menggunakan fungsi tersuai
+          else if (typeof window.loadMidiArrayBuffer === "function") {
+            window.loadMidiArrayBuffer(arrayBuffer);
+            console.log("[T1ERA AUTO-LOAD] Fail MIDI berjaya disuap ke fungsi global.");
+          } 
+          // KES C (Fail-Safe): Mensimulasikan kemasukan fail terus ke dalam kotak input fail <input type="file">
+          // yang biasa digunakan oleh pelantar asal Midiano untuk memuat turun fail
+          else {
+            const file = new File([arrayBuffer], "t1era_score.mid", { type: "audio/midi" });
+            const container = new DataTransfer();
+            container.items.add(file);
+            
+            // Cari input fail asli di halaman midiano.html anda
+            const fileInput = document.querySelector("input[type='file']");
+            if (fileInput) {
+              fileInput.files = container.files;
+              // Cetuskan acara tukar (change event) supaya Midiano sedar fail baru telah dimasukkan
+              fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+              console.log("[T1ERA AUTO-LOAD] Fail MIDI disimulasikan ke input fail Midiano.");
+            } else {
+              console.warn("[T1ERA AUTO-LOAD] Tiada input fail atau fungsi pemuatan dikesan di midiano.html.");
+            }
+          }
+        })
+        .catch(err => {
+          console.error("[T1ERA AUTO-LOAD ERROR] Gagal memuatkan fail MIDI secara automatik:", err);
+        });
+    }
+  });
+</script>
 </body>
 </html>
