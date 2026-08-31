@@ -1,0 +1,11 @@
+# Pakej Pangkalan Data & Integrasi Awan
+firebase-admin>=6.2.0
+
+# Pakej Manipulasi & Analisis Fail MIDI
+mido>=1.3.0
+pretty_midi>=0.2.10
+
+# Pakej Pemprosesan Isyarat Digital & Transkripsi Audio
+basic-pitch>=0.2.4
+numpy>=1.23.0
+scipy>=1.9.0
