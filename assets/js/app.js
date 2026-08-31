@@ -641,7 +641,7 @@ function setStepStatus(stepId, state) {
   }
 }
 
-// 1. PENGENDALI TRANSAKSI ALIRAN YOUTUBE (Direct-Trigger Pipeline dengan Firestore-Bypass Fail-Safe)
+// 1. PENGENDALI TRANSAKSI ALIRAN YOUTUBE (Direct-Trigger Pipeline Serta-merta)
 youtubeSubmitBtn.addEventListener("click", () => {
   const urlValue = youtubeLinkInput.value.trim();
   
@@ -659,15 +659,18 @@ youtubeSubmitBtn.addEventListener("click", () => {
   const userId = currentUserObj ? currentUserObj.uid : "guest_studio_creator";
   const jobId = "yt_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
 
+  // Tutup panel konsol pilihan serta-merta
   servicesOverlay.classList.remove("active");
+
+  // Buka skrin terminal serta-merta
   verificationScreen.classList.add("active");
   verificationTerminal.innerHTML = createProgressCardMarkup();
 
-  // Langkah pertama: Mengesahkan pautan & memuat turun
+  // Aktifkan langkah pertama secara langsung
   setStepStatus("step-init", "loading");
 
   const triggerDynamicPipeline = () => {
-    // Jalankan monitor masa nyata
+    // Mulakan pendengar snap Firestore masa nyata serta-merta
     openLiveTerminalConsole(userId, jobId);
 
     // Kirim terus isyarat HTTP POST ke pelayan Render
@@ -688,7 +691,7 @@ youtubeSubmitBtn.addEventListener("click", () => {
     .catch(err => { console.warn("Render waking up (Cold start latency normal):", err); });
   };
 
-  // FAIL-SAFE: Mengelakkan ranap sistem jika peraturan Firestore menyekat kebenaran menulis
+  // FAIL-SAFE: Pintasan Firestore jika Rules menyekat kebenaran menulis
   if (db && userId !== "guest_studio_creator") {
     const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
     setDoc(jobRef, {
@@ -701,12 +704,10 @@ youtubeSubmitBtn.addEventListener("click", () => {
       triggerDynamicPipeline();
     })
     .catch(err => {
-      // Kebenaran dihalang? Pintas Firestore dan terus hantar data ke Render (Kalis Ralat!)
       console.warn("[FIRESTORE BYPASS] Write blocked by Rules. Bypassing straight to Render...", err);
       triggerDynamicPipeline();
     });
   } else {
-    // Mod pelawat terus dicetuskan
     triggerDynamicPipeline();
   }
 });
@@ -842,13 +843,12 @@ function openLiveTerminalConsole(userId, jobId) {
     }, 1500);
   };
 
-  // FAIL-SAFE 3: Menggunakan Pembinaan URL Matematik Storage Firebase jika Firestore Rules menyekat pembacaan snapshot
+  // FAIL-SAFE 3: Menggunakan Pembinaan URL Storage Firebase secara Matematik jika Firestore Rules menyekat pembacaan snapshot
   const fallbackTimeout = setTimeout(() => {
     if (isFirestoreActive) {
       isFirestoreActive = false;
       console.warn("[FIRESTORE BYPASS] Active snapshot listening blocked. Switching to mathematical storage URL fallback...");
       
-      // Bina URL Storage Secara Matematik mengikut laluan folder storan kekal anda di Firebase Storage
       const constructedMidiUrl = `https://firebasestorage.googleapis.com/v0/b/t1era-music.appspot.com/o/users%2F${userId}%2Ftranscriptions%2F${jobId}%2Ffinal_score.mid?alt=media`;
       
       // Simulasi visual bar kemajuan linear bertema 25 saat
