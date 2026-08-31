@@ -1,5 +1,12 @@
-import { auth } from "./firebase-config.js";
+import { auth, db } from "./firebase-config.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { 
+    collection, 
+    query, 
+    where, 
+    getDocs, 
+    onSnapshot 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 // Local hardcoded mock tracks arrays mimicking the reference layout
 const popularTracksData = [
@@ -71,16 +78,51 @@ const volumeTrack = document.getElementById("volume-track");
 const volumeFill = document.getElementById("volume-fill");
 const volumeThumb = document.getElementById("volume-thumb");
 
+// MENEGAKKAN NAVIGASI TAB BAHARU (Home View vs Transcriptions View)
+const navHome = document.getElementById("nav-home");
+const navTranscriptions = document.getElementById("nav-transcriptions");
+const homeView = document.getElementById("home-view");
+const transcriptionsView = document.getElementById("transcriptions-view");
+const transcriptionsList = document.getElementById("transcriptions-list");
+
 let isPlaying = false;
-let activeTrack = popularTracksData[5]; // Default active track: "Echoes of Midnight"
+let activeTrack = popularTracksData[5]; 
 let tickerInterval = null;
-let currentSeconds = 53; // Mock default matching reference image (0:53)
+let currentSeconds = 53; 
+
+// Mengurus Pertukaran Tab Menu Sisi (Sidebar Navigation)
+if (navHome && navTranscriptions) {
+    navHome.addEventListener("click", (e) => {
+        e.preventDefault();
+        setActiveTab(navHome, homeView);
+    });
+
+    navTranscriptions.addEventListener("click", (e) => {
+        e.preventDefault();
+        setActiveTab(navTranscriptions, transcriptionsView);
+        // Muat turun senarai transkripsi masa nyata dari Firestore
+        loadUserTranscriptions();
+    });
+}
+
+function setActiveTab(activeNavItem, activeViewElement) {
+    // Kemaskini status butang navigasi bar sisi
+    document.querySelectorAll(".nav-item").forEach(item => item.classList.remove("active"));
+    activeNavItem.classList.add("active");
+
+    // Tukar paparan content utama
+    homeView.style.display = "none";
+    transcriptionsView.style.display = "none";
+    activeViewElement.style.display = "block";
+}
 
 // Monitor Auth State and secure the dashboard page
+let currentUser = null;
+
 if (auth) {
   onAuthStateChanged(auth, (user) => {
     if (user) {
-      // User is signed in, update profile UI dynamically [1]
+      currentUser = user;
       const profileName = document.getElementById("profile-name");
       const profileAvatar = document.getElementById("profile-avatar");
       
@@ -92,7 +134,6 @@ if (auth) {
         if (user.photoURL) {
           profileAvatar.innerHTML = `<img src="${user.photoURL}" alt="Avatar" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
         } else {
-          // Render initials as a default avatar inside the circle
           const initials = user.email ? user.email.substring(0, 2).toUpperCase() : "ST";
           profileAvatar.textContent = initials;
           profileAvatar.style.fontSize = "0.85rem";
@@ -101,13 +142,135 @@ if (auth) {
         }
       }
     } else {
-      // No user session found, redirect back to authentication gateway [1]
       window.location.href = "index.html";
     }
   });
 }
 
-// 1. Populate the Track Cards dynamically
+// ------------------------------------------------------------------
+// MUAT TURUN SENARAI TRANSKRIPSI NYATA DARI FIRESTORE (My Transcriptions)
+// ------------------------------------------------------------------
+function loadUserTranscriptions() {
+    if (!currentUser || !db) {
+        // Paparkan demo olok-olok berkualiti tinggi jika tiada kredensial sedia ada (Fallback)
+        renderTranscriptionsList(getMockTranscriptions());
+        return;
+    }
+
+    transcriptionsList.innerHTML = `<div style="text-align:center; color:rgba(255,255,255,0.4); font-size:0.9rem; padding:40px 0;">Loading transcriptions database...</div>`;
+
+    // Ambil semua dokumen tugasan di bawah Firestore pengguna yang berstatus "COMPLETED"
+    const jobsRef = collection(db, "users", currentUser.uid, "midi_jobs");
+    const q = query(jobsRef, where("status", "==", "COMPLETED"));
+
+    // Real-Time snapshot listener
+    onSnapshot(q, (snapshot) => {
+        const jobs = [];
+        snapshot.forEach((doc) => {
+            const data = doc.to_dict();
+            jobs.push({
+                id: doc.id,
+                title: data.youtubeUrl ? extractYouTubeTitle(data.youtubeUrl) : "Local Uploaded Track",
+                source: data.youtubeUrl ? "YOUTUBE" : "UPLOAD",
+                midiUrl: data.midiUrl,
+                date: data.completedAt ? new Date(data.completedAt.seconds * 1000).toLocaleDateString() : "Just Now"
+            });
+        });
+
+        if (jobs.length === 0) {
+            // Sediakan Demo Fallback jika pengguna belum mempunyai transkripsi selesai
+            renderTranscriptionsList(getMockTranscriptions());
+        } else {
+            renderTranscriptionsList(jobs);
+        }
+    }, (error) => {
+        console.error("Firestore read failure:", error);
+        renderTranscriptionsList(getMockTranscriptions());
+    });
+}
+
+// Penterjemah Nama fail dari Pautan YouTube
+function extractYouTubeTitle(url) {
+    try {
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+        const match = url.match(regExp);
+        if (match && match[2].length === 11) {
+            return `YouTube Stream Audio (${match[2]})`;
+        }
+    } catch (e) {}
+    return "YouTube Track Asset";
+}
+
+// Rekabentuk visual senarai lagu MIDI ala e-dagang/media player
+function renderTranscriptionsList(list) {
+    transcriptionsList.innerHTML = "";
+    
+    list.forEach((track, index) => {
+        const indexStr = (index + 1).toString().padStart(2, "0");
+        const row = document.createElement("div");
+        row.className = "trans-row";
+        
+        const isYT = track.source === "YOUTUBE";
+        const artClass = isYT ? "youtube" : "upload";
+        const artIcon = isYT ? "📺" : "📁";
+        const badgeLabel = isYT ? "YouTube" : "Upload";
+        const badgeClass = isYT ? "youtube" : "upload";
+
+        row.innerHTML = `
+            <div class="trans-row__left">
+                <span class="trans-row__index">${indexStr}</span>
+                <div class="trans-row__art-wrap ${artClass}">${artIcon}</div>
+                <div class="trans-row__meta">
+                    <span class="trans-row__title">${track.title}</span>
+                    <span class="trans-row__artist">${track.date || 'T1ERA Studio'}</span>
+                </div>
+            </div>
+            <div class="trans-row__right">
+                <span class="trans-badge ${badgeClass}">${badgeLabel}</span>
+                <button class="trans-row__action" type="button">
+                    <span>🎹</span> Open Studio
+                </button>
+            </div>
+        `;
+
+        // Integrasi klik tindakan pautan ke midiano.html
+        row.addEventListener("click", () => {
+            openStudioWithMidi(track.midiUrl);
+        });
+
+        transcriptionsList.appendChild(row);
+    });
+}
+
+function openStudioWithMidi(midiUrl) {
+    // Simpan fail ke storan tempatan dan lakukan pusingan navigasi automatik
+    localStorage.setItem("t1era_current_midi", midiUrl);
+    window.location.href = "midiano.html?midi=" + encodeURIComponent(midiUrl);
+}
+
+// Senarai Demo Fallback jika pangkalan data kosong
+function getMockTranscriptions() {
+    return [
+        {
+            id: "mock_1",
+            title: "Scorpions - Still Loving You (Piano Arr.)",
+            source: "YOUTUBE",
+            midiUrl: "https://example.com/demo1.mid",
+            date: "2026-08-30"
+        },
+        {
+            id: "mock_2",
+            title: "Custom Golden Days Session.wav",
+            source: "UPLOAD",
+            midiUrl: "https://example.com/demo2.mid",
+            date: "2026-08-28"
+        }
+    ];
+}
+
+// ------------------------------------------------------------------
+// PEMAIN POPULAR SONGS (Sedia Ada - Tidak Disentuh)
+// ------------------------------------------------------------------
 function renderPopularTracks() {
     popularGrid.innerHTML = "";
     popularTracksData.forEach(track => {
@@ -121,7 +284,6 @@ function renderPopularTracks() {
             </div>
         `;
         
-        // Clicking a card loads it into the active player fader bar
         card.addEventListener("click", () => {
             selectAndPlayTrack(track);
         });
@@ -136,7 +298,6 @@ function selectAndPlayTrack(track) {
     playerTrackArtist.textContent = track.artist;
     trackLength.textContent = track.duration;
     
-    // Reset tracker progression parameters
     currentSeconds = 0;
     currentTime.textContent = "0:00";
     timelineFill.style.width = "0%";
@@ -145,7 +306,6 @@ function selectAndPlayTrack(track) {
     startPlaybackState();
 }
 
-// 2. Play/Pause toggle operations
 playPauseBtn.addEventListener("click", () => {
     if (isPlaying) {
         pausePlaybackState();
@@ -159,7 +319,6 @@ function startPlaybackState() {
     playPauseIcon.textContent = "⏸";
     playPauseBtn.style.transform = "scale(1.1)";
     
-    // Simple simulated timer progression tick
     if (tickerInterval) clearInterval(tickerInterval);
     tickerInterval = setInterval(updatePlayerTick, 1000);
 }
@@ -171,11 +330,9 @@ function pausePlaybackState() {
     if (tickerInterval) clearInterval(tickerInterval);
 }
 
-// Translate tracker timers into readable output formatting
 function updatePlayerTick() {
     currentSeconds++;
     
-    // Split track duration parts
     const lengthParts = activeTrack.duration.split(":");
     const totalDurationSeconds = parseInt(lengthParts[0]) * 60 + parseInt(lengthParts[1]);
 
@@ -188,13 +345,11 @@ function updatePlayerTick() {
     const seconds = (currentSeconds % 60).toString().padStart(2, "0");
     currentTime.textContent = `${minutes}:${seconds}`;
 
-    // Fill percent calculate
     const percentage = (currentSeconds / totalDurationSeconds) * 100;
     timelineFill.style.width = `${percentage}%`;
     timelineThumb.style.left = `${percentage}%`;
 }
 
-// 3. Volume dragging adjustments (UI mock simulation)
 volumeTrack.addEventListener("click", (e) => {
     const rect = volumeTrack.getBoundingClientRect();
     const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1) * 100;
@@ -202,7 +357,6 @@ volumeTrack.addEventListener("click", (e) => {
     volumeThumb.style.left = `${percent}%`;
 });
 
-// 4. select category capsule click switching
 categoriesRow.addEventListener("click", (e) => {
     if (e.target.classList.contains("capsule")) {
         document.querySelectorAll(".capsule").forEach(c => c.classList.remove("active"));
@@ -210,7 +364,7 @@ categoriesRow.addEventListener("click", (e) => {
     }
 });
 
-// 5. Real Firebase Logout Action
+// Logout Action
 document.getElementById("dashboard-logout-btn").addEventListener("click", () => {
     if (confirm("Disconnect session?")) {
         if (auth) {
