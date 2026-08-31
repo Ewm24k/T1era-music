@@ -3,9 +3,10 @@
 # Mengunci versi binari stabil untuk mengelakkan ralat kompilasi Cython [PerQueryResult].
 # =========================================================
 
-# Alat Pembinaan Asas (Wajib diletakkan teratas)
+# Alat Pembinaan Asas & Pelayan Produksi WSGI (Render Native)
 setuptools>=65.0.0
 wheel>=0.38.0
+gunicorn>=21.2.0
 
 # Pakej Pelayan Web API (Auto-Wake)
 Flask>=2.2.0
