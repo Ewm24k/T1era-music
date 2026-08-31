@@ -1,3 +1,12 @@
+# =========================================================
+# T1era Music — requirements.txt Configuration
+# Memastikan alat pembinaan dan pakej terpasang dengan betul di Render [PerQueryResult].
+# =========================================================
+
+# Alat Pembinaan Asas (Wajib untuk mengelakkan ralat setuptools.build_meta)
+setuptools>=65.0.0
+wheel>=0.38.0
+
 # Pakej Pelayan Web API (Auto-Wake)
 Flask>=2.2.0
 
