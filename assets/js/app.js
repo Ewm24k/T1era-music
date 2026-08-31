@@ -1,10 +1,24 @@
-import { auth, googleProvider } from "./firebase-config.js";
+import { auth, googleProvider, db, storage } from "./firebase-config.js";
 import {
   signInWithEmailAndPassword,
   signInWithPopup,
   onAuthStateChanged,
   signOut,
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import {
+  doc,
+  setDoc,
+  onSnapshot,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import {
+  ref,
+  uploadBytesResumable,
+  getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+
+// Pautan URL Pelayan Render API T1era Music
+const RENDER_BACKEND_URL = "https://t1era-music.onrender.com/transcribe";
 
 // UI DOM Elements
 const overlay = document.getElementById("interactive-overlay");
@@ -439,7 +453,7 @@ function runSessionVerification() {
             setTimeout(() => {
               verificationScreen.classList.remove("active");
               
-              // FIX: Show the 3-option menu overlay on the landing page instead of redirecting directly [1]
+              // FIX: Show the 3-option menu overlay on the landing page instead of redirecting directly
               servicesOverlay.classList.add("active"); 
             }, 1200);
           }, 1200);
@@ -515,9 +529,17 @@ logoutBtn.addEventListener("click", () => {
 });
 
 
-// --- WEB3 UPLOAD FUNCTIONALITIES & EVENT HANDLERS ---
+// =========================================================
+// --- T1ERA MUSIC WEB3 UPLOAD & PIPELINE INTEGRATION ---
+// =========================================================
 
-// 1. YouTube Action validation handling
+// Pembantu pengesanan format URL YouTube sedia ada
+function isValidYouTubeUrl(url) {
+  const pattern = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/;
+  return pattern.test(url);
+}
+
+// 1. Pengendali Import Aliran Penstriman YouTube (Auto-wake)
 youtubeSubmitBtn.addEventListener("click", () => {
   const urlValue = youtubeLinkInput.value.trim();
   
@@ -526,14 +548,59 @@ youtubeSubmitBtn.addEventListener("click", () => {
     return;
   }
   
-  // Basic Regex checks to ensure link structure
-  const ytRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/./;
-  if (!ytRegex.test(urlValue)) {
+  if (!isValidYouTubeUrl(urlValue)) {
     alert("Invalid address. Please enter a structured YouTube link.");
     return;
   }
 
-  alert(`Design State Verified: YouTube stream queued for generation:\n${urlValue}`);
+  if (!currentUserObj) {
+    alert("Authorization lost. Please sign in again.");
+    return;
+  }
+
+  const userId = currentUserObj.uid;
+  const jobId = "yt_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
+
+  // Tutup panel konsol perkhidmatan
+  servicesOverlay.classList.remove("active");
+
+  // Daftarkan dokumen kerja (Job Document) baru ke Firestore subcollection
+  const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
+  
+  setDoc(jobRef, {
+    status: "QUEUED",
+    progress: 0,
+    youtubeUrl: urlValue,
+    createdAt: serverTimestamp()
+  })
+  .then(() => {
+    // Tampilkan Konsol Terminal Masa Nyata untuk menjejaki progress
+    openLiveTerminalConsole(userId, jobId);
+
+    // Kirim permintaan HTTP POST ke pelayan Render untuk mengejutkannya
+    fetch(RENDER_BACKEND_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: userId,
+        jobId: jobId,
+        youtubeUrl: urlValue
+      })
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("Server failed to respond.");
+      return res.json();
+    })
+    .then(data => {
+      console.log("Render T1era Music backend transcription triggered:", data);
+    })
+    .catch(err => {
+      console.warn("Render waking up (Cold start latency normal):", err);
+    });
+  })
+  .catch(err => {
+    alert("Failed to register job document in Firestore: " + err.message);
+  });
 });
 
 // 2. Trigger native device folder selection on click
@@ -541,48 +608,158 @@ fileDropzoneTrigger.addEventListener("click", () => {
   audioFileInput.click();
 });
 
-// 3. Update Dropzone UI text automatically when file selection changes
+// 3. Pengendali Muat Naik Fail Audio Tempatan (Firebase Storage Upload + Render Trigger)
 audioFileInput.addEventListener("change", (event) => {
   const files = event.target.files;
-  if (files && files.length > 0) {
-    const selectedFile = files[0];
-    
-    // Update the visual text label to confirm file selection state
-    dropzoneLabelText.textContent = selectedFile.name;
-    dropzoneLabelText.style.color = "#10b981"; // Emerald confirmation green
-    dropzoneLabelText.style.textShadow = "0 0 10px rgba(16, 185, 129, 0.4)";
-    
-    console.log("Device file select verified:", selectedFile);
-  } else {
-    // Revert state if no file was chosen
+  if (!files || files.length === 0) {
     dropzoneLabelText.textContent = "Select Music File";
     dropzoneLabelText.style.color = "";
     dropzoneLabelText.style.textShadow = "";
+    return;
   }
-});
 
-// 4. Drag & Drop Visual Handlers for the Dropzone UI
-fileDropzoneTrigger.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  fileDropzoneTrigger.style.borderColor = "rgba(16, 185, 129, 1)";
-  fileDropzoneTrigger.style.background = "rgba(16, 185, 129, 0.15)";
-});
-
-fileDropzoneTrigger.addEventListener("dragleave", () => {
-  fileDropzoneTrigger.style.borderColor = "";
-  fileDropzoneTrigger.style.background = "";
-});
-
-fileDropzoneTrigger.addEventListener("drop", (e) => {
-  e.preventDefault();
-  fileDropzoneTrigger.style.borderColor = "";
-  fileDropzoneTrigger.style.background = "";
-
-  const files = e.dataTransfer.files;
-  if (files && files.length > 0) {
-    audioFileInput.files = files; // Sync drag-dropped files with native input element
-    
-    // Trigger custom select event manually
-    audioFileInput.dispatchEvent(new Event('change'));
+  const selectedFile = files[0];
+  
+  if (!currentUserObj) {
+    alert("Authorization lost. Please sign in again.");
+    return;
   }
+
+  const userId = currentUserObj.uid;
+  const jobId = "file_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
+
+  // Tutup panel konsol perkhidmatan
+  servicesOverlay.classList.remove("active");
+
+  // Kemaskini teks Dropzone sementara memproses
+  dropzoneLabelText.textContent = "UPLOADING...";
+  dropzoneLabelText.style.color = "#10b981";
+  dropzoneLabelText.style.textShadow = "0 0 10px rgba(16, 185, 129, 0.4)";
+
+  // Tampilkan Konsol Skrin Terminal untuk memaparkan status muat naik
+  verificationScreen.classList.add("active");
+  updateTerminalText(`[STORAGE] Initiating upload for: ${selectedFile.name.substring(0, 15)}...`);
+
+  // Takrifkan rujukan muat naik Firebase Storage
+  const storageRef = ref(storage, `users/${userId}/transcriptions/${jobId}/${selectedFile.name}`);
+  const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+
+  uploadTask.on("state_changed", 
+    (snapshot) => {
+      const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+      updateTerminalText(`[STORAGE] Uploading file to Cloud: ${percent}%`);
+    }, 
+    (error) => {
+      alert("Failed to upload audio to Cloud Storage: " + error.message);
+      verificationScreen.classList.remove("active");
+      dropzoneLabelText.textContent = "Select Music File";
+    }, 
+    () => {
+      // Muat naik ke Storage Selesai
+      getDownloadURL(uploadTask.snapshot.ref).then((downloadUrl) => {
+        updateTerminalText("[STORAGE] Upload success. Creating Firestore tracking document...");
+        
+        // Daftarkan dokumen kerja di Firestore
+        const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
+        setDoc(jobRef, {
+          status: "QUEUED",
+          progress: 0,
+          audioUrl: downloadUrl,
+          createdAt: serverTimestamp()
+        })
+        .then(() => {
+          // Beralih ke paparan pemantauan pipeline Render di terminal
+          openLiveTerminalConsole(userId, jobId);
+
+          // Trigger API Render
+          fetch(RENDER_BACKEND_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: userId,
+              jobId: jobId,
+              audioUrl: downloadUrl
+            })
+          });
+        })
+        .catch(err => {
+          alert("Failed to write tracking document in Firestore: " + err.message);
+          verificationScreen.classList.remove("active");
+        });
+      });
+    }
+  );
 });
+
+// Helper untuk mengemas kini teks terminal
+function updateTerminalText(text) {
+  verificationTerminal.innerHTML = text;
+}
+
+// 4. Konsol Pemantauan Status Pipeline Masa Nyata (Real-Time Terminal Monitor)
+function openLiveTerminalConsole(userId, jobId) {
+  verificationScreen.classList.add("active");
+  verificationTerminal.style.color = "#ffffff";
+  verificationTerminal.style.textShadow = "0 0 10px #ffffff";
+  updateTerminalText("[SYSTEM] Connecting to T1era Cloud Synthesizer...");
+
+  const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
+  
+  // Daftarkan Firestore onSnapshot Listener secara real-time
+  const unsubscribe = onSnapshot(jobRef, (snapshot) => {
+    if (!snapshot.exists()) return;
+
+    const data = snapshot.to_dict();
+    const status = data.status;
+    const progress = data.progress || 0;
+
+    // Menampilkan status kemajuan peringkat pemprosesan sepadan dengan nama pipeline Render
+    if (status === "QUEUED") {
+      updateTerminalText(`[SYSTEM] Job queued. Render is waking up...<br>[PROGRESS] ${progress}%`);
+    } else if (status === "DOWNLOADING_YOUTUBE") {
+      updateTerminalText(`[STAGE 0] Downloading YouTube Audio stream...<br>[PROGRESS] ${progress}%`);
+    } else if (status === "DOWNLOADING_AUDIO") {
+      updateTerminalText(`[STAGE 0] Downloading raw audio file...<br>[PROGRESS] ${progress}%`);
+    } else if (status === "TRANSCRIBING_AUDIO") {
+      updateTerminalText(`[STAGE 0] Running Basic Pitch model transcribing...<br>[PROGRESS] ${progress}%`);
+    } else if (status === "CLEANING_MIDI") {
+      updateTerminalText(`[STAGE 1] Running Stage 1 MIDI Cleanup...<br>[PROGRESS] ${progress}%`);
+    } else if (status === "REPAIRING_NOTES") {
+      updateTerminalText(`[STAGE 2] Register-Aware Fragmented Note Repairing...<br>[PROGRESS] ${progress}%`);
+    } else if (status === "RECONSTRUCTING_MELODY") {
+      updateTerminalText(`[STAGE 3] Melody Contour & Melodic Reconstruction...<br>[PROGRESS] ${progress}%`);
+    } else if (status === "STABILIZING_PITCH") {
+      updateTerminalText(`[STAGE 4] Octave Correction & Pitch Stabilization...<br>[PROGRESS] ${progress}%`);
+    } else if (status === "ARRANGING_PIANO_STYLE") {
+      updateTerminalText(`[STAGE 5] Arranging Piano Accompaniment (TestPopPiano)...<br>[PROGRESS] ${progress}%`);
+    } else if (status === "QUANTIZING_TIMELINE") {
+      updateTerminalText(`[STAGE 6] Timeline Warping & Quantization...<br>[PROGRESS] ${progress}%`);
+    } else if (status === "UPLOADING_RESULTS") {
+      updateTerminalText(`[SUCCESS] Compiling results. Uploading MIDI file...<br>[PROGRESS] ${progress}%`);
+    } else if (status === "COMPLETED") {
+      updateTerminalText(`[SYSTEM] CONSOLE OK.<br>[SUCCESS] MIDI Generated! Please close this terminal.`);
+      
+      // Paparkan pautan muat turun fail MIDI akhir di dalam terminal secara langsung
+      const midiUrl = data.midiUrl;
+      verificationTerminal.innerHTML += `<br><br><a href="${midiUrl}" download style="color:#00df89; font-weight:bold; letter-spacing:2px; text-decoration:underline; font-size:1.1rem; display:block;">[ DOWNLOAD MIDI FILE ]</a>`;
+      
+      // Hentikan pendengar Firestore secara selamat
+      unsubscribe();
+    } else if (status === "FAILED") {
+      const error = data.error || "Unknown pipeline error.";
+      updateTerminalText(`[ERROR] Processing failed: ${error}<br><br><span style="color:#ff4a4a; cursor:pointer;" onclick="document.getElementById('verification-screen').classList.remove('active')">[ CLOSE TERMINAL ]</span>`);
+      unsubscribe();
+    }
+  });
+
+  // Benarkan terminal ditutup apabila di klik di luar ruang teks (hanya apabila Selesai/Gagal)
+  verificationScreen.addEventListener("click", (e) => {
+    if (e.target === verificationScreen) {
+      const text = verificationTerminal.innerHTML;
+      if (text.includes("CONSOLE OK") || text.includes("ERROR")) {
+        verificationScreen.classList.remove("active");
+        dropzoneLabelText.textContent = "Select Music File";
+      }
+    }
+  });
+}
