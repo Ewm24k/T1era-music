@@ -5,8 +5,9 @@ Meredamkan semua log amaran TensorFlow, menyokong pemprosesan fail sementara,
 mengaktifkan sekatan CORS, dan berjalan menggunakan pelayan produksi WSGI Gunicorn.
 
 NOTA PERUBAHAN:
-Sokongan YouTube diaktifkan menggunakan enjin hibrid: yt-dlp tempatan pantas 
-(menyamar sebagai Android Client) dengan fallback automatik ke RapidAPI (/ajax/download.php).
+Sokongan YouTube diaktifkan menggunakan enjin hibrid: Mengambil info video dari RapidAPI,
+tetapi memuat turun fail secara tempatan dan pantas menggunakan yt-dlp (penyamaran Android Client)
+bagi mengelakkan ralat sekatan muat turun pihak ketiga.
 """
 
 import os
@@ -275,146 +276,69 @@ class CentralOrchestrator:
 
                 suffix = ".mp3"
                 bucket_name = OrchestratorConfig.BUCKET_NAME
-                download_success = False
 
-                # JIKA INPUT IALAH PAUTAN YOUTUBE (Gunakan Enjin Hibrid)
+                # JIKA INPUT IALAH PAUTAN YOUTUBE (Gunakan API Info + Muat Turun Tempatan Pantas)
                 if youtube_url:
-                    # Set status kepada REQUESTING_YT_LINK serta-merta pada permulaan
+                    # 1. Mulakan fasa memanggil RapidAPI untuk mendapatkan maklumat video
                     self.update_status(user_id, job_id, "REQUESTING_YT_LINK", 5)
-                    print(f"[{job_id}] Mengesan pautan YouTube: {youtube_url}.")
+                    print(f"[{job_id}] Mengesan pautan YouTube: {youtube_url}. Memanggil RapidAPI untuk info video...")
                     
-                    # -------------------------------------------------------------
-                    # STRATEGI 1: Muat Turun Tempatan Pantas (yt-dlp + Android Spoofing)
-                    # -------------------------------------------------------------
-                    try:
-                        print(f"[{job_id}] Mencuba muat turun tempatan pantas menggunakan yt-dlp + Android Client Spoofing...")
-                        import subprocess
-                        local_audio_path = local_audio_path.with_suffix(suffix)
-                        
-                        cmd = [
-                            "yt-dlp",
-                            "-x",
-                            "--audio-format", "mp3",
-                            "--audio-quality", "0",
-                            "--no-playlist",
-                            "--extractor-args", "youtube:player_client=android,web",
-                            "-o", str(local_audio_path.with_suffix(""))
-                        ]
-                        
-                        # Tambah cookies jika ada
-                        cookies_path = "/home/tengkufiboking/T1era-music/cookies.txt"
-                        if os.path.exists(cookies_path):
-                            cmd.insert(1, "--cookies")
-                            cmd.insert(2, cookies_path)
-                            
-                        cmd.append(youtube_url)
-                        yt_result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
-                        
-                        if yt_result.returncode == 0:
-                            print(f"[{job_id}] Muat turun tempatan berjaya dalam masa kurang 5 saat!")
-                            download_success = True
-                        else:
-                            print(f"[YT-DLP WARNING] Percubaan tempatan gagal: {yt_result.stderr}. Beralih ke RapidAPI...")
-                    except Exception as e:
-                        print(f"[YT-DLP WARNING] Ralat semasa mencuba yt-dlp tempatan: {e}. Beralih ke RapidAPI...")
+                    import requests
+                    headers = {
+                        "X-RapidAPI-Key": "4bad7baac7msha8abfe0fc35b3a2p1baa6ajsn281427eb1961",
+                        "X-RapidAPI-Host": "youtube-info-download-api.p.rapidapi.com"
+                    }
+                    params = {
+                        "format": "mp3",
+                        "url": youtube_url,
+                        "audio_quality": "128",
+                        "add_info": "0",
+                        "audio_language": "en",
+                        "no_merge": "false",
+                        "allow_extended_duration": "false"
+                    }
+                    api_url = "https://youtube-info-download-api.p.rapidapi.com/ajax/download.php"
+                    response = requests.get(api_url, headers=headers, params=params)
+                    
+                    if response.status_code != 200:
+                        raise RuntimeError(f"RapidAPI gagal mengembalikan pautan dengan kod status {response.status_code}. Detail: {response.text}")
+                    
+                    response_data = response.json()
+                    video_title = response_data.get("TITLE") or response_data.get("title") or "YouTube Track"
+                    print(f"[{job_id}] Info Video Diterima daripada RapidAPI: '{video_title}'")
 
-                    # -------------------------------------------------------------
-                    # STRATEGI 2: Fallback ke RapidAPI (Jika yt-dlp tempatan disekat)
-                    # -------------------------------------------------------------
-                    if not download_success:
-                        print(f"[{job_id}] Memulakan muat turun fallback melalui terowong RapidAPI...")
-                        import requests
-                        headers = {
-                            "X-RapidAPI-Key": "4bad7baac7msha8abfe0fc35b3a2p1baa6ajsn281427eb1961",
-                            "X-RapidAPI-Host": "youtube-info-download-api.p.rapidapi.com"
-                        }
-                        params = {
-                            "format": "mp3",
-                            "url": youtube_url,
-                            "audio_quality": "128",
-                            "add_info": "0",
-                            "audio_language": "en",
-                            "no_merge": "false",
-                            "allow_extended_duration": "false"
-                        }
-                        api_url = "https://youtube-info-download-api.p.rapidapi.com/ajax/download.php"
-                        response = requests.get(api_url, headers=headers, params=params)
+                    # 2. Muat turun fail audio terus secara tempatan & pantas menggunakan yt-dlp (Bypass sekat API)
+                    self.update_status(user_id, job_id, "CACHING_AUDIO", 10)
+                    print(f"[{job_id}] Memulakan muat turun tempatan menggunakan yt-dlp + Android Spoofing...")
+                    
+                    import subprocess
+                    local_audio_path = local_audio_path.with_suffix(suffix)
+                    
+                    cmd = [
+                        "yt-dlp",
+                        "-x",
+                        "--audio-format", "mp3",
+                        "--audio-quality", "0",
+                        "--no-playlist",
+                        "--extractor-args", "youtube:player_client=android,web",
+                        "-o", str(local_audio_path.with_suffix(""))
+                    ]
+                    
+                    # Tambah cookies jika dikesan dalam direktori
+                    cookies_path = "/home/tengkufiboking/T1era-music/cookies.txt"
+                    if os.path.exists(cookies_path):
+                        print(f"[{job_id}] Cookies.txt dikesan. Menggunakan cookies...")
+                        cmd.insert(1, "--cookies")
+                        cmd.insert(2, cookies_path)
                         
-                        if response.status_code != 200:
-                            raise RuntimeError(f"RapidAPI gagal memulakan muat turun dengan kod status {response.status_code}. Detail: {response.text}")
-                        
-                        response_data = response.json()
-                        print(f"[{job_id}] Respon Permulaan RapidAPI: {response_data}")
-
-                        if not response_data.get("success") and not response_data.get("SUCCESS"):
-                            raise ValueError(f"Gagal memulakan tugasan RapidAPI. Respon: {response_data}")
-
-                        download_id = response_data.get("id") or response_data.get("ID")
-                        
-                        # Mengundi status kemajuan melalui PROGRESS_URL dinamik secara terus
-                        progress_url = response_data.get("PROGRESS_URL") or response_data.get("progress_url")
-                        if not progress_url:
-                            progress_url = f"https://p.savenow.to/api/progress?id={download_id}"
-                            
-                        print(f"[{job_id}] Mengundi status kemajuan melalui: {progress_url}")
-                        download_link = None
-                        max_attempts = 80  # 80 percubaan * 3 saat = 240 saat had masa (4 minit)
-                        
-                        for attempt in range(max_attempts):
-                            time.sleep(3)
-                            print(f"[{job_id}] Mengundi kemajuan (Percubaan {attempt + 1}/{max_attempts})...")
-                            progress_response = requests.get(progress_url) # Pengundian terus tanpa API key / RapidAPI header
-                            
-                            if progress_response.status_code != 200:
-                                print(f"[POLLING WARNING] Gagal menghubungi pelayan progress: {progress_response.text}")
-                                continue
-                            
-                            progress_data = progress_response.json()
-                            print(f"[{job_id}] Status progress: {progress_data}")
-
-                            # 1. Semak jika pautan muat turun sedia dikesan (Keadaan Berjaya)
-                            download_link = progress_data.get("download_url") or progress_data.get("downloadUrl") or progress_data.get("url")
-                            if download_link:
-                                break
-
-                            # 2. Penapis Status Defensif (MENGELAKKAN ralat "PREPARING" sebagai kegagalan)
-                            status_text = str(progress_data.get("text", "")).lower()
-                            error_msg = progress_data.get("error") or progress_data.get("message")
-                            
-                            is_failed = False
-                            if error_msg:
-                                is_failed = True
-                            elif "fail" in status_text or "error" in status_text or "deprecat" in status_text:
-                                is_failed = True
-                            elif (progress_data.get("success") == 0 or progress_data.get("success") is False) and "prepare" not in status_text and "download" not in status_text:
-                                is_failed = True
-
-                            if is_failed:
-                                fail_reason = error_msg or progress_data.get("text") or "Ralat proses tidak diketahui"
-                                raise RuntimeError(f"Pelayan melaporkan ralat proses: {fail_reason}")
-
-                            # Kemaskini progress peratusan muat turun video ke Firestore secara langsung
-                            progress_percentage = int(5 + (progress_data.get("progress", 0) / 1000) * 4)
-                            self.update_status(user_id, job_id, "REQUESTING_YT_LINK", progress_percentage)
-
-                        if not download_link:
-                            raise TimeoutError("Had masa mengundi (timeout) tamat sebelum pautan muat turun sedia.")
-
-                        # Mula memuat turun audio ke VM (Step-Temp -> Loading)
-                        self.update_status(user_id, job_id, "CACHING_AUDIO", 10)
-                        print(f"[{job_id}] Pautan muat turun sedia: {download_link}. Memulakan muat turun ke VM...")
-                        local_audio_path = local_audio_path.with_suffix(suffix)
-                        
-                        # Muat turun fail audio terus
-                        audio_response = requests.get(download_link, stream=True)
-                        if audio_response.status_code != 200:
-                            raise RuntimeError(f"Gagal memuat turun MP3 dari pautan akhir. Status: {audio_response.status_code}")
-                        
-                        with open(local_audio_path, "wb") as f:
-                            for chunk in audio_response.iter_content(chunk_size=8192):
-                                if chunk:
-                                    f.write(chunk)
-                        print(f"[{job_id}] Fail MP3 dari YouTube berjaya dimuat turun ke: {local_audio_path}")
+                    cmd.append(youtube_url)
+                    yt_result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+                    
+                    if yt_result.returncode != 0:
+                        print(f"[YT-DLP ERROR] Gagal memuat turun: {yt_result.stderr}")
+                        raise RuntimeError(f"yt-dlp gagal memuat turun audio dari YouTube. Detail: {yt_result.stderr}")
+                    
+                    print(f"[{job_id}] Fail MP3 dari YouTube berjaya dimuat turun secara tempatan ke: {local_audio_path}")
 
                 # JIKA INPUT IALAH AUDIO URL DARI STORAGE
                 else:
