@@ -11,6 +11,19 @@ tail -f ~/T1era-music/error.log
 sudo systemctl restart t1era-music
 ```
 
+==================================================
+Do this when has new update file on Github
+==================================================
+```
+cd ~/T1era-music
+```
+```
+git pull
+```
+```
+sudo systemctl restart t1era-music
+```
+
 
 
 This guide contains the exact commands and workflows to start, check, and maintain your T1ERA Music server.
