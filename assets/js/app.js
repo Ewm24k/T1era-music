@@ -206,6 +206,10 @@ const verificationScreen = document.getElementById("verification-screen");
 const verificationTerminal = document.getElementById("verification-terminal");
 
 // Web3 Upload Panel Controls
+// NOTA: Medan pautan YouTube telah dinyahaktifkan — YouTube menyekat muat turun
+// audio dari pelayan tanpa sesi log masuk pengguna sebenar, dan tiada flag yt-dlp
+// yang memintas ini secara kekal. Fail upload terus kekal sebagai satu-satunya
+// laluan yang stabil.
 const youtubeLinkInput = document.getElementById("youtube-link-input");
 const youtubeSubmitBtn = document.getElementById("youtube-submit-btn");
 const fileDropzoneTrigger = document.getElementById("file-dropzone-trigger");
@@ -504,7 +508,7 @@ function runSessionVerification() {
             verificationTerminal.textContent = "Status: AUTHORIZED.";
             setTimeout(() => {
               verificationScreen.classList.remove("active");
-              servicesOverlay.classList.add("active"); 
+              servicesOverlay.classList.add("active");
             }, 1200);
           }, 1200);
         }, 1200);
@@ -563,11 +567,6 @@ logoutBtn.addEventListener("click", () => {
 // --- T1ERA MUSIC WEB3 UPLOAD & PIPELINE INTEGRATION ---
 // =========================================================
 
-function isValidYouTubeUrl(url) {
-  const pattern = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/;
-  return pattern.test(url);
-}
-
 function createProgressCardMarkup() {
   return `
     <div class="proc-card">
@@ -585,7 +584,7 @@ function createProgressCardMarkup() {
         </div>
         <div class="proc-step" id="step-download">
           <div class="step-status"><span class="step-circle"></span></div>
-          <span class="step-label">Acquiring YouTube Audio Stream</span>
+          <span class="step-label">Receiving Uploaded Audio</span>
         </div>
         <div class="proc-step" id="step-temp">
           <div class="step-status"><span class="step-circle"></span></div>
@@ -641,76 +640,31 @@ function setStepStatus(stepId, state) {
   }
 }
 
-// 1. PENGENDALI TRANSAKSI ALIRAN YOUTUBE (Direct-Trigger Pipeline Serta-merta)
-youtubeSubmitBtn.addEventListener("click", () => {
-  const urlValue = youtubeLinkInput.value.trim();
-  
-  if (!urlValue) {
-    alert("Please enter a YouTube video URL first.");
-    return;
-  }
-  
-  if (!isValidYouTubeUrl(urlValue)) {
-    alert("Invalid address. Please enter a structured YouTube link.");
-    return;
-  }
+// NOTA: Medan dan butang pautan YouTube kekal AKTIF (tidak disabled) supaya
+// UI tidak kelihatan "berkunci". Walau bagaimanapun, klik hantar TIDAK memanggil
+// pelayan Render — ia memaparkan mesej jujur serta-merta, kerana YouTube
+// menyekat muat turun audio dari pelayan tanpa sesi pengguna sebenar, dan
+// tiada pintasan pelayan yang stabil untuk webapp awam ini. Ini mengelakkan
+// permintaan senyap yang gagal selepas beberapa saat menunggu.
+function isValidYouTubeUrl(url) {
+  const pattern = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/;
+  return pattern.test(url);
+}
 
-  // FALLBACK SUTRA: Pengesan Pelawat (Guest mode bypass)
-  const userId = currentUserObj ? currentUserObj.uid : "guest_studio_creator";
-  const jobId = "yt_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
-
-  // Tutup panel konsol pilihan serta-merta
-  servicesOverlay.classList.remove("active");
-
-  // Buka skrin terminal serta-merta
-  verificationScreen.classList.add("active");
-  verificationTerminal.innerHTML = createProgressCardMarkup();
-
-  // Aktifkan langkah pertama secara langsung
-  setStepStatus("step-init", "loading");
-
-  const triggerDynamicPipeline = () => {
-    // Mulakan pendengar snap Firestore masa nyata serta-merta
-    openLiveTerminalConsole(userId, jobId);
-
-    // Kirim terus isyarat HTTP POST ke pelayan Render
-    fetch(RENDER_BACKEND_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId: userId,
-        jobId: jobId,
-        youtubeUrl: urlValue
-      })
-    })
-    .then(res => {
-      if (!res.ok) throw new Error("Server failed to respond.");
-      return res.json();
-    })
-    .then(data => { console.log("Render API success triggered:", data); })
-    .catch(err => { console.warn("Render waking up (Cold start latency normal):", err); });
-  };
-
-  // FAIL-SAFE: Pintasan Firestore jika Rules menyekat kebenaran menulis
-  if (db && userId !== "guest_studio_creator") {
-    const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
-    setDoc(jobRef, {
-      status: "QUEUED",
-      progress: 0,
-      youtubeUrl: urlValue,
-      createdAt: serverTimestamp()
-    })
-    .then(() => {
-      triggerDynamicPipeline();
-    })
-    .catch(err => {
-      console.warn("[FIRESTORE BYPASS] Write blocked by Rules. Bypassing straight to Render...", err);
-      triggerDynamicPipeline();
-    });
-  } else {
-    triggerDynamicPipeline();
-  }
-});
+if (youtubeSubmitBtn) {
+  youtubeSubmitBtn.addEventListener("click", () => {
+    const urlValue = youtubeLinkInput ? youtubeLinkInput.value.trim() : "";
+    if (!urlValue) {
+      alert("Please enter a YouTube video URL first.");
+      return;
+    }
+    if (!isValidYouTubeUrl(urlValue)) {
+      alert("Invalid address. Please enter a structured YouTube link.");
+      return;
+    }
+    alert("YouTube link import isn't available right now — YouTube blocks server-side audio downloads for public apps like this one. Please use 'Local Audio File' instead to upload the track directly.");
+  });
+}
 
 fileDropzoneTrigger.addEventListener("click", () => { audioFileInput.click(); });
 
@@ -745,21 +699,21 @@ audioFileInput.addEventListener("change", (event) => {
   const storageRef = ref(storage, `users/${userId}/transcriptions/${jobId}/${selectedFile.name}`);
   const uploadTask = uploadBytesResumable(storageRef, selectedFile);
 
-  uploadTask.on("state_changed", 
+  uploadTask.on("state_changed",
     (snapshot) => {
       const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
       const progressBar = document.getElementById("proc-bar");
       const progressPct = document.getElementById("proc-pct");
-      if (progressBar) progressBar.style.width = `${percent / 4}%`; 
+      if (progressBar) progressBar.style.width = `${percent / 4}%`;
       if (progressPct) progressPct.textContent = `${Math.round(percent / 4)}%`;
       const stepInitLabel = document.querySelector("#step-init .step-label");
       if (stepInitLabel) stepInitLabel.textContent = `Uploading File: ${percent}%`;
-    }, 
+    },
     (error) => {
       alert("Failed to upload: " + error.message);
       verificationScreen.classList.remove("active");
       dropzoneLabelText.textContent = "Select Music File";
-    }, 
+    },
     () => {
       setStepStatus("step-init", "success");
       setStepStatus("step-download", "loading");
@@ -773,6 +727,17 @@ audioFileInput.addEventListener("change", (event) => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId: userId, jobId: jobId, audioUrl: downloadUrl })
+          })
+          .then((res) => {
+            if (!res.ok) {
+              return res.json().then((body) => {
+                throw new Error(body.error || "Server rejected the transcription request.");
+              });
+            }
+          })
+          .catch((err) => {
+            console.error("Transcribe request failed:", err);
+            showTerminalFailure(err.message || "Failed to start transcription job.");
           });
         };
 
@@ -802,9 +767,22 @@ audioFileInput.addEventListener("change", (event) => {
   );
 });
 
-function updateTerminalText(text) { verificationTerminal.innerHTML = text; }
+function showTerminalFailure(message) {
+  const progressBar = document.getElementById("proc-bar");
+  if (progressBar) {
+    progressBar.style.background = "#ff4a4a";
+    progressBar.style.boxShadow = "0 0 12px rgba(255, 74, 74, 0.5)";
+  }
+  const actionArea = document.getElementById("proc-action-area");
+  if (actionArea) {
+    actionArea.innerHTML = `
+      <div style="color:#ff4a4a; font-weight:bold; font-size:0.8rem; margin-top:10px; line-height:1.4;">PROCESSING FAILED: ${String(message).toUpperCase()}</div>
+      <button onclick="document.getElementById('verification-screen').classList.remove('active')" class="web3-action-btn" style="margin-top:10px; border-color:#ff4a4a; color:#ff4a4a; font-size:0.75rem;">[ CLOSE KONSOL ]</button>
+    `;
+  }
+}
 
-// 4. Konsol Pemantauan Status Pipeline Masa Nyata & Automasi Redirection `midiano.html`
+// Konsol Pemantauan Status Pipeline Masa Nyata & Automasi Redirection `midiano.html`
 function openLiveTerminalConsole(userId, jobId) {
   const hasCard = document.querySelector(".proc-card");
   if (!hasCard) { verificationTerminal.innerHTML = createProgressCardMarkup(); }
@@ -816,7 +794,6 @@ function openLiveTerminalConsole(userId, jobId) {
   const progressBar = document.getElementById("proc-bar");
   const progressPct = document.getElementById("proc-pct");
 
-  // Jika Firestore Rules menyekat pembacaan snapshot, sediakan simulasi pembacaan proaktif
   let isFirestoreActive = true;
 
   const handleMidiGenerationComplete = (midiUrl) => {
@@ -831,7 +808,6 @@ function openLiveTerminalConsole(userId, jobId) {
     if (progressBar) progressBar.style.width = "100%";
     if (progressPct) progressPct.textContent = "100%";
 
-    // Simpan fail ke local storage (Autoload Fallback)
     localStorage.setItem("t1era_current_midi", midiUrl);
 
     const actionArea = document.getElementById("proc-action-area");
@@ -843,15 +819,13 @@ function openLiveTerminalConsole(userId, jobId) {
     }, 1500);
   };
 
-  // FAIL-SAFE 3: Menggunakan Pembinaan URL Storage Firebase secara Matematik jika Firestore Rules menyekat pembacaan snapshot
   const fallbackTimeout = setTimeout(() => {
     if (isFirestoreActive) {
       isFirestoreActive = false;
       console.warn("[FIRESTORE BYPASS] Active snapshot listening blocked. Switching to mathematical storage URL fallback...");
-      
+
       const constructedMidiUrl = `https://firebasestorage.googleapis.com/v0/b/t1era-music.appspot.com/o/users%2F${userId}%2Ftranscriptions%2F${jobId}%2Ffinal_score.mid?alt=media`;
-      
-      // Simulasi visual bar kemajuan linear bertema 25 saat
+
       let fakeProgress = 25;
       const fakeInterval = setInterval(() => {
         fakeProgress += 3;
@@ -878,18 +852,17 @@ function openLiveTerminalConsole(userId, jobId) {
         }
       }, 750);
     }
-  }, 4000); // Jika tiada tindak balas dari Firestore dalam masa 4 saat, mulakan fail-safe
+  }, 4000);
 
   if (db && userId !== "guest_studio_creator") {
     const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
     const unsubscribe = onSnapshot(jobRef, (snapshot) => {
       if (!snapshot.exists()) return;
-      
-      // Sistem snapshot Firestore aktif
+
       clearTimeout(fallbackTimeout);
       isFirestoreActive = true;
 
-      const data = snapshot.data(); // FIXED: Tukar .to_dict() kepada .data() mengikut standard Web SDK JS
+      const data = snapshot.data();
       const status = data.status;
       const progress = data.progress || 0;
 
@@ -943,23 +916,13 @@ function openLiveTerminalConsole(userId, jobId) {
       } else if (status === "FAILED") {
         unsubscribe();
         const error = data.error || "Unknown pipeline error.";
-        if (progressBar) {
-          progressBar.style.background = "#ff4a4a";
-          progressBar.style.boxShadow = "0 0 12px rgba(255, 74, 74, 0.5)";
-        }
-        const actionArea = document.getElementById("proc-action-area");
-        if (actionArea) {
-          actionArea.innerHTML = `
-            <div style="color:#ff4a4a; font-weight:bold; font-size:0.8rem; margin-top:10px; line-height:1.4;">PROCESSING FAILED: ${error.toUpperCase()}</div>
-            <button onclick="document.getElementById('verification-screen').classList.remove('active')" class="web3-action-btn" style="margin-top:10px; border-color:#ff4a4a; color:#ff4a4a; font-size:0.75rem;">[ CLOSE KONSOL ]</button>
-          `;
-        }
+        showTerminalFailure(error);
       }
     }, (error) => {
       console.warn("[FIRESTORE WARNING] Active snapshot listening blocked. Switching to mathematical storage URL fallback...", error);
     });
   }
-  
+
   verificationScreen.addEventListener("click", (e) => {
     if (e.target === verificationScreen) {
       const actionArea = document.getElementById("proc-action-area");
