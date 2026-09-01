@@ -1,6 +1,9 @@
 # pyright: reportMissingImports=false
-import os
 import sys
+# Force basic-pitch to bypass the heavy TensorFlow library and use lightweight TFLite/ONNX instead
+sys.modules['tensorflow'] = None
+
+import os
 import time
 from pathlib import Path
 # Import the free local audio-to-midi model
