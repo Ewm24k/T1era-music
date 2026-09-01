@@ -46,8 +46,6 @@ except ImportError:
     FIREBASE_AVAILABLE = False
 
 # Import semua peringkat pipeline sedia ada anda (T1era-music)
-# NOTA: input_file_0 sengaja tidak diimport di sini untuk mengelakkan TensorFlow dimuatkan
-# dalam utas utama Flask, yang boleh menyebabkan ralat deadlock/thread-lock.
 try:
     import input_file_1  # Stage 1: MIDI Cleanup
     import input_file_2  # Stage 2: Fragmented Note Repair
@@ -67,8 +65,12 @@ class OrchestratorConfig:
 
 class CentralOrchestrator:
     def __init__(self):
+        # Mulakan dengan False. Jangan panggil _init_firebase di sini (Pre-fork Gunicorn)
         self.firebase_active = False
-        if FIREBASE_AVAILABLE:
+
+    def _ensure_firebase(self):
+        """Memastikan Firebase hanya diaktifkan secara 'lazy-loading' dalam utas pekerja aktif"""
+        if not self.firebase_active and FIREBASE_AVAILABLE:
             self._init_firebase()
 
     def _init_firebase(self):
@@ -82,7 +84,7 @@ class CentralOrchestrator:
                     self.db = firestore.client()
                     self.bucket = storage.bucket()
                     self.firebase_active = True
-                    print("[FIREBASE] Cloud Mode T1era Music Aktif.")
+                    print("[FIREBASE] Cloud Mode T1era Music Aktif di dalam Pekerja Gunicorn.")
                 else:
                     print("[FIREBASE] Fail kredensial tidak ditemui. Berjalan dalam Mod Tempatan (VS Code).")
         except Exception as e:
@@ -90,6 +92,7 @@ class CentralOrchestrator:
             self.firebase_active = False
 
     def update_status(self, user_id: str, job_id: str, status: str, progress: int, error_msg: str = None):
+        self._ensure_firebase()
         if self.firebase_active and user_id and job_id:
             try:
                 job_ref = self.db.collection("users").document(user_id).collection("midi_jobs").document(job_id)
@@ -108,6 +111,7 @@ class CentralOrchestrator:
 
     def upload_final_midi(self, local_path: Path, remote_path: str, bucket_name: str = None) -> str:
         """Hanya memuat naik fail MIDI akhir yang telah ditala (Stage 6) ke Firebase Storage"""
+        self._ensure_firebase()
         if self.firebase_active:
             target_bucket = storage.bucket(bucket_name) if bucket_name else self.bucket
             blob = target_bucket.blob(remote_path)
@@ -140,7 +144,6 @@ class CentralOrchestrator:
             import subprocess
             print(f"[STAGE 0] Melarikan transkripsi di dalam subprocess berasingan untuk mengelakkan ralat deadlock...")
             
-            # Panggil fail input_file_0.py secara luaran
             cmd = [sys.executable, "input_file_0.py", str(input_audio_path), str(stage0_raw_mid)]
             result = subprocess.run(cmd, capture_output=True, text=True)
             
@@ -262,10 +265,9 @@ class CentralOrchestrator:
                 self.update_status(user_id, job_id, "FAILED", 100, error_msg=str(e))
 
     def process_incoming_cloud_job(self, user_id: str, job_id: str, audio_url: str = None):
-        """Memproses tugasan individu di dalam workspace sementara Render.
-        Hanya menerima fail audio yang telah dimuat naik terus (audioUrl) — laluan
-        pautan YouTube telah dibuang sepenuhnya."""
+        """Memproses tugasan individu di dalam workspace sementara Render."""
         print(f"[CLOUD PROCESSING] Memulakan tugasan: {job_id} untuk Pengguna: {user_id}")
+        self._ensure_firebase()
 
         with tempfile.TemporaryDirectory(prefix=f"t1era_{job_id}_") as tmp_dir:
             temp_work_path = Path(tmp_dir)
@@ -345,6 +347,7 @@ orchestrator = CentralOrchestrator()
 
 @app.route("/", methods=["GET"])
 def index():
+    orchestrator._ensure_firebase()
     return jsonify({
         "server": "T1era Music API",
         "status": "ONLINE",
