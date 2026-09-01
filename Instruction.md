@@ -17,6 +17,10 @@ Do this when has new update file on Github
 ```
 cd ~/T1era-music
 ```
+
+```
+git reset --hard HEAD
+```
 ```
 git pull
 ```
