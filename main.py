@@ -2,7 +2,7 @@
 """
 T1era Music MIDI Transcription & Styling Central Orchestrator
 Meredamkan semua log amaran TensorFlow, menyokong pemprosesan fail sementara,
-mengaktifkan sekatan CORS, dan berjalan menggunakan pelayan produksi WSGI Gunicorn [PerQueryResult].
+mengaktifkan sekatan CORS, dan berjalan menggunakan pelayan produksi WSGI Gunicorn.
 
 NOTA PERUBAHAN:
 Laluan input "youtubeUrl" telah DIBUANG. YouTube secara aktif menyekat muat turun
@@ -61,7 +61,8 @@ except ImportError as e:
 
 class OrchestratorConfig:
     FIREBASE_KEY_PATH = os.environ.get("FIREBASE_SERVICE_ACCOUNT_KEY", "firebase-key.json")
-    BUCKET_NAME = os.environ.get("FIREBASE_STORAGE_BUCKET", "t1era-music.appspot.com")
+    # Ditukar secara default ke bucket yang dikesan: t1era-musicv1.firebasestorage.app
+    BUCKET_NAME = os.environ.get("FIREBASE_STORAGE_BUCKET", "t1era-musicv1.firebasestorage.app")
 
 
 class CentralOrchestrator:
@@ -303,8 +304,9 @@ CORS(app, resources={
         "origins": [
             "https://t1era-music.netlify.app",
             "http://localhost:3000",
-            "http://127.0.0.1:5500",
-            "http://localhost:5000"
+            "http://localhost:5173",
+            "http://localhost:5000",
+            "http://127.0.0.1:5500"
         ]
     }
 })
