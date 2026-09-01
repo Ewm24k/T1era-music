@@ -7,6 +7,10 @@ FILE 1: Daily Operator Quick-Reference Guide
 tail -f ~/T1era-music/error.log
 ```
 
+```
+sudo systemctl restart t1era-music
+```
+
 
 
 This guide contains the exact commands and workflows to start, check, and maintain your T1ERA Music server.
