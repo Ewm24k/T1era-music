@@ -1,4 +1,14 @@
 FILE 1: Daily Operator Quick-Reference Guide
+
+```
+ conda activate t1era
+```
+```
+tail -f ~/T1era-music/error.log
+```
+
+
+
 This guide contains the exact commands and workflows to start, check, and maintain your T1ERA Music server.
 1. How to Connect via SSH
 Whenever you start or restart your VM in the Google Cloud Console, you need to open a terminal connection.
