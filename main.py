@@ -46,8 +46,9 @@ except ImportError:
     FIREBASE_AVAILABLE = False
 
 # Import semua peringkat pipeline sedia ada anda (T1era-music)
+# NOTA: input_file_0 sengaja tidak diimport di sini untuk mengelakkan TensorFlow dimuatkan
+# dalam utas utama Flask, yang boleh menyebabkan ralat deadlock/thread-lock.
 try:
-    import input_file_0  # Stage 0: Basic Pitch Transcription
     import input_file_1  # Stage 1: MIDI Cleanup
     import input_file_2  # Stage 2: Fragmented Note Repair
     import input_file_3  # Stage 3: Melodic Reconstruction
@@ -108,7 +109,6 @@ class CentralOrchestrator:
     def upload_final_midi(self, local_path: Path, remote_path: str, bucket_name: str = None) -> str:
         """Hanya memuat naik fail MIDI akhir yang telah ditala (Stage 6) ke Firebase Storage"""
         if self.firebase_active:
-            # Gunakan baldi dinamik jika dibekalkan
             target_bucket = storage.bucket(bucket_name) if bucket_name else self.bucket
             blob = target_bucket.blob(remote_path)
             blob.upload_from_filename(str(local_path))
@@ -133,10 +133,25 @@ class CentralOrchestrator:
 
         try:
             # -------------------------------------------------------------
-            # STAGE 0: Basic Pitch Transcription
+            # STAGE 0: Basic Pitch Transcription (Subprocess Isolation)
             # -------------------------------------------------------------
             self.update_status(user_id, job_id, "TRANSCRIBING_AUDIO", 15)
-            input_file_0.run_stage0(input_audio_path, stage0_raw_mid)
+            
+            import subprocess
+            print(f"[STAGE 0] Melarikan transkripsi di dalam subprocess berasingan untuk mengelakkan ralat deadlock...")
+            
+            # Panggil fail input_file_0.py secara luaran
+            cmd = [sys.executable, "input_file_0.py", str(input_audio_path), str(stage0_raw_mid)]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                print(f"[STAGE 0 ERROR] Subprocess gagal dengan kod exit {result.returncode}")
+                print(f"STDOUT:\n{result.stdout}")
+                print(f"STDERR:\n{result.stderr}")
+                raise RuntimeError(f"Tahap 0 (Basic Pitch) gagal menghasilkan output: {result.stderr}")
+            else:
+                print(f"[STAGE 0 SUCCESS] Subprocess selesai dengan jayanya.")
+                print(f"STDOUT:\n{result.stdout}")
 
             # -------------------------------------------------------------
             # STAGE 1: MIDI Cleanup
