@@ -5,7 +5,8 @@ Meredamkan semua log amaran TensorFlow, menyokong pemprosesan fail sementara,
 mengaktifkan sekatan CORS, dan berjalan menggunakan pelayan produksi WSGI Gunicorn.
 
 NOTA PERUBAHAN:
-Sokongan YouTube diaktifkan menggunakan RapidAPI YouTube Info & Download API (/ajax/download.php).
+Sokongan YouTube diaktifkan menggunakan RapidAPI YouTube Info & Download API.
+Ditambah gelung pengundian (polling loop) untuk memantau progress sehingga pautan download sedia.
 """
 
 import os
@@ -277,9 +278,9 @@ class CentralOrchestrator:
                 suffix = ".mp3"
                 bucket_name = OrchestratorConfig.BUCKET_NAME
 
-                # JIKA INPUT IALAH PAUTAN YOUTUBE (Gunakan RapidAPI untuk memuat turun)
+                # JIKA INPUT IALAH PAUTAN YOUTUBE (Gunakan RapidAPI dengan Polling)
                 if youtube_url:
-                    print(f"[{job_id}] Mengesan pautan YouTube: {youtube_url}. Memanggil RapidAPI untuk memuat turun...")
+                    print(f"[{job_id}] Mengesan pautan YouTube: {youtube_url}. Memanggil RapidAPI untuk memulakan muat turun...")
                     import requests
                     headers = {
                         "X-RapidAPI-Key": "4bad7baac7msha8abfe0fc35b3a2p1baa6ajsn281427eb1961",
@@ -294,33 +295,57 @@ class CentralOrchestrator:
                         "no_merge": "false",
                         "allow_extended_duration": "false"
                     }
-                    # Dialihkan ke endpoint RapidAPI yang betul: /ajax/download.php
                     api_url = "https://youtube-info-download-api.p.rapidapi.com/ajax/download.php"
                     response = requests.get(api_url, headers=headers, params=params)
                     
                     if response.status_code != 200:
-                        raise RuntimeError(f"RapidAPI gagal mengembalikan pautan dengan kod status {response.status_code}. Detail: {response.text}")
+                        raise RuntimeError(f"RapidAPI gagal memulakan muat turun dengan kod status {response.status_code}. Detail: {response.text}")
                     
                     response_data = response.json()
-                    print(f"[{job_id}] Respon RapidAPI Diterima: {response_data}")
+                    print(f"[{job_id}] Respon Permulaan RapidAPI: {response_data}")
 
-                    # Ekstrak pautan muat turun secara dinamik dari respon JSON
+                    if not response_data.get("success") or not response_data.get("id"):
+                        raise ValueError(f"Gagal memulakan tugasan RapidAPI. Respon: {response_data}")
+
+                    download_id = response_data["id"]
+                    print(f"[{job_id}] Tugasan dimulakan dengan ID: {download_id}. Memulakan proses pengundian (polling)...")
+
+                    # Mengundi status kemajuan sehingga progress = 1000 dan download_url sedia
+                    progress_url = "https://youtube-info-download-api.p.rapidapi.com/ajax/progress.php"
                     download_link = None
-                    for key in ["link", "url", "download_url", "downloadUrl", "download"]:
-                        if key in response_data and response_data[key]:
-                            download_link = response_data[key]
-                            break
+                    max_attempts = 45  # 45 percubaan * 2 saat = 90 saat had masa
                     
-                    if not download_link:
-                        raise ValueError(f"Tidak dapat mencari pautan muat turun dalam respon RapidAPI. Respon: {response_data}")
+                    for attempt in range(max_attempts):
+                        time.sleep(2)
+                        print(f"[{job_id}] Mengundi kemajuan (Percubaan {attempt + 1}/{max_attempts})...")
+                        progress_response = requests.get(progress_url, headers=headers, params={"id": download_id})
+                        
+                        if progress_response.status_code != 200:
+                            print(f"[POLLING WARNING] Gagal menghubungi pelayan progress: {progress_response.text}")
+                            continue
+                        
+                        progress_data = progress_response.json()
+                        print(f"[{job_id}] Status progress: {progress_data}")
 
-                    print(f"[{job_id}] Pautan muat turun MP3 ditemui: {download_link}. Memulakan muat turun...")
+                        # Jika ralat berlaku di pelayan download
+                        if progress_data.get("success") == 0:
+                            raise RuntimeError(f"RapidAPI melaporkan ralat proses: {progress_data.get('text', 'Ralat tidak diketahui')}")
+
+                        # Selesai apabila progress mencapai 1000 dan download_url wujud
+                        if progress_data.get("progress") == 1000 and progress_data.get("download_url"):
+                            download_link = progress_data["download_url"]
+                            break
+
+                    if not download_link:
+                        raise TimeoutError("Had masa mengundi (timeout) tamat sebelum pautan muat turun sedia.")
+
+                    print(f"[{job_id}] Pautan muat turun sedia: {download_link}. Memulakan muat turun ke VM...")
                     local_audio_path = local_audio_path.with_suffix(suffix)
                     
-                    # Muat turun fail audio dari terowong RapidAPI
+                    # Muat turun fail audio terus
                     audio_response = requests.get(download_link, stream=True)
                     if audio_response.status_code != 200:
-                        raise RuntimeError(f"Gagal memuat turun MP3 dari pautan RapidAPI. Status: {audio_response.status_code}")
+                        raise RuntimeError(f"Gagal memuat turun MP3 dari pautan akhir RapidAPI. Status: {audio_response.status_code}")
                     
                     with open(local_audio_path, "wb") as f:
                         for chunk in audio_response.iter_content(chunk_size=8192):
@@ -343,12 +368,12 @@ class CentralOrchestrator:
                         parsed_url = urlparse(audio_url)
                         path = parsed_url.path
                         
-                        # 1. Ekstrak nama baldi secara dinamik jika ada di dalam URL
+                        # 1. Ekstrak nama baldi secara dinamik jika ada di dalam URL (Pencegahan Ralat Hardcode)
                         if "/v0/b/" in path and "/o/" in path:
                             bucket_name = path[path.find("/v0/b/") + 6 : path.find("/o/")]
                             print(f"[{job_id}] Baldi dinamik dikesan secara automatik: {bucket_name}")
                         
-                        # 2. Parsing URL ke nama laluan yang selamat dan utuh
+                        # 2. Parsing URL ke nama laluan yang selamat dan utuh (Membetulkan Ralat Pemotongan / Slicing)
                         if "/o/" in path:
                             audio_url = unquote(path.split("/o/", 1)[1])
 
