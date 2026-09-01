@@ -206,10 +206,6 @@ const verificationScreen = document.getElementById("verification-screen");
 const verificationTerminal = document.getElementById("verification-terminal");
 
 // Web3 Upload Panel Controls
-// NOTA: Medan pautan YouTube telah dinyahaktifkan — YouTube menyekat muat turun
-// audio dari pelayan tanpa sesi log masuk pengguna sebenar, dan tiada flag yt-dlp
-// yang memintas ini secara kekal. Fail upload terus kekal sebagai satu-satunya
-// laluan yang stabil.
 const youtubeLinkInput = document.getElementById("youtube-link-input");
 const youtubeSubmitBtn = document.getElementById("youtube-submit-btn");
 const fileDropzoneTrigger = document.getElementById("file-dropzone-trigger");
@@ -640,12 +636,6 @@ function setStepStatus(stepId, state) {
   }
 }
 
-// NOTA: Medan dan butang pautan YouTube kekal AKTIF (tidak disabled) supaya
-// UI tidak kelihatan "berkunci". Walau bagaimanapun, klik hantar TIDAK memanggil
-// pelayan Render — ia memaparkan mesej jujur serta-merta, kerana YouTube
-// menyekat muat turun audio dari pelayan tanpa sesi pengguna sebenar, dan
-// tiada pintasan pelayan yang stabil untuk webapp awam ini. Ini mengelakkan
-// permintaan senyap yang gagal selepas beberapa saat menunggu.
 function isValidYouTubeUrl(url) {
   const pattern = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+$/;
   return pattern.test(url);
@@ -662,7 +652,54 @@ if (youtubeSubmitBtn) {
       alert("Invalid address. Please enter a structured YouTube link.");
       return;
     }
-    alert("YouTube link import isn't available right now — YouTube blocks server-side audio downloads for public apps like this one. Please use 'Local Audio File' instead to upload the track directly.");
+
+    const userId = currentUserObj ? currentUserObj.uid : "guest_studio_creator";
+    const jobId = "yt_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
+
+    // Tutup menu overlay services, buka konsol progress terminal
+    servicesOverlay.classList.remove("active");
+    verificationScreen.classList.add("active");
+    verificationTerminal.innerHTML = createProgressCardMarkup();
+
+    setStepStatus("step-init", "loading");
+
+    // Mulakan visual handshake proses
+    setTimeout(() => {
+      setStepStatus("step-init", "success");
+      setStepStatus("step-download", "loading");
+      
+      const stepDownloadLabel = document.querySelector("#step-download .step-label");
+      if (stepDownloadLabel) stepDownloadLabel.textContent = "Requesting YouTube Audio Link";
+
+      setTimeout(() => {
+        setStepStatus("step-download", "success");
+        setStepStatus("step-temp", "loading");
+        
+        const stepTempLabel = document.querySelector("#step-temp .step-label");
+        if (stepTempLabel) stepTempLabel.textContent = "Downloading Audio on Server";
+
+        openLiveTerminalConsole(userId, jobId);
+
+        // Hantar payload pautan YouTube ke pelayan API GCP VM
+        fetch(RENDER_BACKEND_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: userId, jobId: jobId, youtubeUrl: urlValue })
+        })
+        .then((res) => {
+          if (!res.ok) {
+            return res.json().then((body) => {
+              throw new Error(body.error || "Server rejected the YouTube transcription request.");
+            });
+          }
+        })
+        .catch((err) => {
+          console.error("YouTube Transcribe request failed:", err);
+          showTerminalFailure(err.message || "Failed to start YouTube transcription job.");
+        });
+
+      }, 1000);
+    }, 1000);
   });
 }
 
