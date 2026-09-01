@@ -5,8 +5,8 @@ Meredamkan semua log amaran TensorFlow, menyokong pemprosesan fail sementara,
 mengaktifkan sekatan CORS, dan berjalan menggunakan pelayan produksi WSGI Gunicorn.
 
 NOTA PERUBAHAN:
-Sokongan YouTube diaktifkan menggunakan RapidAPI YouTube Info & Download API (/ajax/download.php).
-Menggunakan pengundian terus (direct polling) ke PROGRESS_URL untuk memintas had sekatan RapidAPI.
+Sokongan YouTube diaktifkan menggunakan enjin hibrid: yt-dlp tempatan pantas 
+(menyamar sebagai Android Client) dengan fallback automatik ke RapidAPI (/ajax/download.php).
 """
 
 import os
@@ -80,7 +80,7 @@ class CentralOrchestrator:
                     self.db = firestore.client()
                     self.bucket = storage.bucket()
                     self.firebase_active = True
-                    print("[FIREBASE] Cloud Mode T1era Music Aktif di dalam Pekerja Gunicorn.")
+                    print("[FIREBASE] Cloud Mode T1era Music Active.")
                 else:
                     print("[FIREBASE] Fail kredensial tidak ditemui. Berjalan dalam Mod Tempatan (VS Code).")
         except Exception as e:
@@ -275,96 +275,146 @@ class CentralOrchestrator:
 
                 suffix = ".mp3"
                 bucket_name = OrchestratorConfig.BUCKET_NAME
+                download_success = False
 
-                # JIKA INPUT IALAH PAUTAN YOUTUBE (Gunakan RapidAPI dengan Polling)
+                # JIKA INPUT IALAH PAUTAN YOUTUBE (Gunakan Enjin Hibrid)
                 if youtube_url:
                     # Set status kepada REQUESTING_YT_LINK serta-merta pada permulaan
                     self.update_status(user_id, job_id, "REQUESTING_YT_LINK", 5)
-                    print(f"[{job_id}] Mengesan pautan YouTube: {youtube_url}. Memanggil RapidAPI untuk memulakan muat turun...")
-                    import requests
-                    headers = {
-                        "X-RapidAPI-Key": "4bad7baac7msha8abfe0fc35b3a2p1baa6ajsn281427eb1961",
-                        "X-RapidAPI-Host": "youtube-info-download-api.p.rapidapi.com"
-                    }
-                    params = {
-                        "format": "mp3",
-                        "url": youtube_url,
-                        "audio_quality": "128",
-                        "add_info": "0",
-                        "audio_language": "en",
-                        "no_merge": "false",
-                        "allow_extended_duration": "false"
-                    }
-                    api_url = "https://youtube-info-download-api.p.rapidapi.com/ajax/download.php"
-                    response = requests.get(api_url, headers=headers, params=params)
+                    print(f"[{job_id}] Mengesan pautan YouTube: {youtube_url}.")
                     
-                    if response.status_code != 200:
-                        raise RuntimeError(f"RapidAPI gagal memulakan muat turun dengan kod status {response.status_code}. Detail: {response.text}")
-                    
-                    response_data = response.json()
-                    print(f"[{job_id}] Respon Permulaan RapidAPI: {response_data}")
-
-                    if not response_data.get("success") or not response_data.get("id"):
-                        raise ValueError(f"Gagal memulakan tugasan RapidAPI. Respon: {response_data}")
-
-                    download_id = response_data["id"]
-                    print(f"[{job_id}] Tugasan dimulakan dengan ID: {download_id}. Memulakan proses pengundian (polling)...")
-
-                    # Mengundi status kemajuan melalui PROGRESS_URL dinamik secara terus (lebih stabil & jimat kuota)
-                    progress_url = response_data.get("PROGRESS_URL")
-                    if not progress_url:
-                        progress_url = f"https://p.savenow.to/api/progress?id={download_id}"
+                    # -------------------------------------------------------------
+                    # STRATEGI 1: Muat Turun Tempatan Pantas (yt-dlp + Android Spoofing)
+                    # -------------------------------------------------------------
+                    try:
+                        print(f"[{job_id}] Mencuba muat turun tempatan pantas menggunakan yt-dlp + Android Client Spoofing...")
+                        import subprocess
+                        local_audio_path = local_audio_path.with_suffix(suffix)
                         
-                    print(f"[{job_id}] Mengundi status kemajuan melalui: {progress_url}")
-                    download_link = None
-                    max_attempts = 60  # 60 percubaan * 2 saat = 120 saat
-                    
-                    for attempt in range(max_attempts):
-                        time.sleep(2)
-                        print(f"[{job_id}] Mengundi kemajuan (Percubaan {attempt + 1}/{max_attempts})...")
-                        progress_response = requests.get(progress_url) # Pengundian terus tanpa API key / RapidAPI header
+                        cmd = [
+                            "yt-dlp",
+                            "-x",
+                            "--audio-format", "mp3",
+                            "--audio-quality", "0",
+                            "--no-playlist",
+                            "--extractor-args", "youtube:player_client=android,web",
+                            "-o", str(local_audio_path.with_suffix(""))
+                        ]
                         
-                        if progress_response.status_code != 200:
-                            print(f"[POLLING WARNING] Gagal menghubungi pelayan progress: {progress_response.text}")
-                            continue
+                        # Tambah cookies jika ada
+                        cookies_path = "/home/tengkufiboking/T1era-music/cookies.txt"
+                        if os.path.exists(cookies_path):
+                            cmd.insert(1, "--cookies")
+                            cmd.insert(2, cookies_path)
+                            
+                        cmd.append(youtube_url)
+                        yt_result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
                         
-                        progress_data = progress_response.json()
-                        print(f"[{job_id}] Status progress: {progress_data}")
+                        if yt_result.returncode == 0:
+                            print(f"[{job_id}] Muat turun tempatan berjaya dalam masa kurang 5 saat!")
+                            download_success = True
+                        else:
+                            print(f"[YT-DLP WARNING] Percubaan tempatan gagal: {yt_result.stderr}. Beralih ke RapidAPI...")
+                    except Exception as e:
+                        print(f"[YT-DLP WARNING] Ralat semasa mencuba yt-dlp tempatan: {e}. Beralih ke RapidAPI...")
 
-                        # Jika ralat berlaku di pelayan download
-                        if progress_data.get("success") == 0 or progress_data.get("success") is False:
-                            raise RuntimeError(f"Pelayan melaporkan ralat proses: {progress_data.get('text', 'Ralat tidak diketahui')}")
+                    # -------------------------------------------------------------
+                    # STRATEGI 2: Fallback ke RapidAPI (Jika yt-dlp tempatan disekat)
+                    # -------------------------------------------------------------
+                    if not download_success:
+                        print(f"[{job_id}] Memulakan muat turun fallback melalui terowong RapidAPI...")
+                        import requests
+                        headers = {
+                            "X-RapidAPI-Key": "4bad7baac7msha8abfe0fc35b3a2p1baa6ajsn281427eb1961",
+                            "X-RapidAPI-Host": "youtube-info-download-api.p.rapidapi.com"
+                        }
+                        params = {
+                            "format": "mp3",
+                            "url": youtube_url,
+                            "audio_quality": "128",
+                            "add_info": "0",
+                            "audio_language": "en",
+                            "no_merge": "false",
+                            "allow_extended_duration": "false"
+                        }
+                        api_url = "https://youtube-info-download-api.p.rapidapi.com/ajax/download.php"
+                        response = requests.get(api_url, headers=headers, params=params)
+                        
+                        if response.status_code != 200:
+                            raise RuntimeError(f"RapidAPI gagal memulakan muat turun dengan kod status {response.status_code}. Detail: {response.text}")
+                        
+                        response_data = response.json()
+                        print(f"[{job_id}] Respon Permulaan RapidAPI: {response_data}")
 
-                        # Kemaskini progress peratusan muat turun video ke Firestore secara langsung
-                        progress_percentage = int(5 + (progress_data.get("progress", 0) / 1000) * 4)
-                        self.update_status(user_id, job_id, "REQUESTING_YT_LINK", progress_percentage)
+                        if not response_data.get("success") and not response_data.get("SUCCESS"):
+                            raise ValueError(f"Gagal memulakan tugasan RapidAPI. Respon: {response_data}")
 
-                        # Selesai apabila progress mencapai 1000 atau pautan download_url sudah sedia
-                        if (progress_data.get("progress") == 1000 or progress_data.get("progress") == 100) and progress_data.get("download_url"):
-                            download_link = progress_data["download_url"]
-                            break
-                        elif progress_data.get("download_url"):
-                            download_link = progress_data["download_url"]
-                            break
+                        download_id = response_data.get("id") or response_data.get("ID")
+                        
+                        # Mengundi status kemajuan melalui PROGRESS_URL dinamik secara terus
+                        progress_url = response_data.get("PROGRESS_URL") or response_data.get("progress_url")
+                        if not progress_url:
+                            progress_url = f"https://p.savenow.to/api/progress?id={download_id}"
+                            
+                        print(f"[{job_id}] Mengundi status kemajuan melalui: {progress_url}")
+                        download_link = None
+                        max_attempts = 80  # 80 percubaan * 3 saat = 240 saat had masa (4 minit)
+                        
+                        for attempt in range(max_attempts):
+                            time.sleep(3)
+                            print(f"[{job_id}] Mengundi kemajuan (Percubaan {attempt + 1}/{max_attempts})...")
+                            progress_response = requests.get(progress_url) # Pengundian terus tanpa API key / RapidAPI header
+                            
+                            if progress_response.status_code != 200:
+                                print(f"[POLLING WARNING] Gagal menghubungi pelayan progress: {progress_response.text}")
+                                continue
+                            
+                            progress_data = progress_response.json()
+                            print(f"[{job_id}] Status progress: {progress_data}")
 
-                    if not download_link:
-                        raise TimeoutError("Had masa mengundi (timeout) tamat sebelum pautan muat turun sedia.")
+                            # 1. Semak jika pautan muat turun sedia dikesan (Keadaan Berjaya)
+                            download_link = progress_data.get("download_url") or progress_data.get("downloadUrl") or progress_data.get("url")
+                            if download_link:
+                                break
 
-                    # Mula memuat turun audio ke VM (Step-Temp -> Loading)
-                    self.update_status(user_id, job_id, "CACHING_AUDIO", 10)
-                    print(f"[{job_id}] Pautan muat turun sedia: {download_link}. Memulakan muat turun ke VM...")
-                    local_audio_path = local_audio_path.with_suffix(suffix)
-                    
-                    # Muat turun fail audio terus
-                    audio_response = requests.get(download_link, stream=True)
-                    if audio_response.status_code != 200:
-                        raise RuntimeError(f"Gagal memuat turun MP3 dari pautan akhir. Status: {audio_response.status_code}")
-                    
-                    with open(local_audio_path, "wb") as f:
-                        for chunk in audio_response.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                    print(f"[{job_id}] Fail MP3 dari YouTube berjaya dimuat turun ke: {local_audio_path}")
+                            # 2. Penapis Status Defensif (MENGELAKKAN ralat "PREPARING" sebagai kegagalan)
+                            status_text = str(progress_data.get("text", "")).lower()
+                            error_msg = progress_data.get("error") or progress_data.get("message")
+                            
+                            is_failed = False
+                            if error_msg:
+                                is_failed = True
+                            elif "fail" in status_text or "error" in status_text or "deprecat" in status_text:
+                                is_failed = True
+                            elif (progress_data.get("success") == 0 or progress_data.get("success") is False) and "prepare" not in status_text and "download" not in status_text:
+                                is_failed = True
+
+                            if is_failed:
+                                fail_reason = error_msg or progress_data.get("text") or "Ralat proses tidak diketahui"
+                                raise RuntimeError(f"Pelayan melaporkan ralat proses: {fail_reason}")
+
+                            # Kemaskini progress peratusan muat turun video ke Firestore secara langsung
+                            progress_percentage = int(5 + (progress_data.get("progress", 0) / 1000) * 4)
+                            self.update_status(user_id, job_id, "REQUESTING_YT_LINK", progress_percentage)
+
+                        if not download_link:
+                            raise TimeoutError("Had masa mengundi (timeout) tamat sebelum pautan muat turun sedia.")
+
+                        # Mula memuat turun audio ke VM (Step-Temp -> Loading)
+                        self.update_status(user_id, job_id, "CACHING_AUDIO", 10)
+                        print(f"[{job_id}] Pautan muat turun sedia: {download_link}. Memulakan muat turun ke VM...")
+                        local_audio_path = local_audio_path.with_suffix(suffix)
+                        
+                        # Muat turun fail audio terus
+                        audio_response = requests.get(download_link, stream=True)
+                        if audio_response.status_code != 200:
+                            raise RuntimeError(f"Gagal memuat turun MP3 dari pautan akhir. Status: {audio_response.status_code}")
+                        
+                        with open(local_audio_path, "wb") as f:
+                            for chunk in audio_response.iter_content(chunk_size=8192):
+                                if chunk:
+                                    f.write(chunk)
+                        print(f"[{job_id}] Fail MP3 dari YouTube berjaya dimuat turun ke: {local_audio_path}")
 
                 # JIKA INPUT IALAH AUDIO URL DARI STORAGE
                 else:
