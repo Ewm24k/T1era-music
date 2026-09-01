@@ -61,7 +61,6 @@ except ImportError as e:
 
 class OrchestratorConfig:
     FIREBASE_KEY_PATH = os.environ.get("FIREBASE_SERVICE_ACCOUNT_KEY", "firebase-key.json")
-    # Ditukar secara default ke bucket yang dikesan: t1era-musicv1.firebasestorage.app
     BUCKET_NAME = os.environ.get("FIREBASE_STORAGE_BUCKET", "t1era-musicv1.firebasestorage.app")
 
 
@@ -106,16 +105,18 @@ class CentralOrchestrator:
 
         print(f"[PROGRESS] {progress}% | Status: {status}")
 
-    def upload_final_midi(self, local_path: Path, remote_path: str) -> str:
+    def upload_final_midi(self, local_path: Path, remote_path: str, bucket_name: str = None) -> str:
         """Hanya memuat naik fail MIDI akhir yang telah ditala (Stage 6) ke Firebase Storage"""
         if self.firebase_active:
-            blob = self.bucket.blob(remote_path)
+            # Gunakan baldi dinamik jika dibekalkan
+            target_bucket = storage.bucket(bucket_name) if bucket_name else self.bucket
+            blob = target_bucket.blob(remote_path)
             blob.upload_from_filename(str(local_path))
             blob.make_public()
             return blob.public_url
         return ""
 
-    def run_pipeline(self, input_audio_path: Path, temp_work_dir: Path, is_cloud: bool, user_id: str = None, job_id: str = None):
+    def run_pipeline(self, input_audio_path: Path, temp_work_dir: Path, is_cloud: bool, user_id: str = None, job_id: str = None, bucket_name: str = None):
         """Menjalankan rantaian transkripsi Stage 0 ke 6 secara berturutan"""
         start_time = time.time()
         print("\n" + "=" * 70)
@@ -225,7 +226,7 @@ class CentralOrchestrator:
                 self.update_status(user_id, job_id, "UPLOADING_RESULTS", 95)
 
                 remote_path = f"users/{user_id}/transcriptions/{job_id}/final_score.mid"
-                download_url = self.upload_final_midi(stage6_final_mid, remote_path)
+                download_url = self.upload_final_midi(stage6_final_mid, remote_path, bucket_name)
 
                 # Kemaskini Firestore
                 job_ref = self.db.collection("users").document(user_id).collection("midi_jobs").document(job_id)
@@ -270,13 +271,26 @@ class CentralOrchestrator:
 
                 local_audio_path = local_audio_path.with_suffix(suffix)
 
+                bucket_name = OrchestratorConfig.BUCKET_NAME
                 if "firebasestorage.googleapis.com" in audio_url:
-                    path_start = audio_url.find("/o/") + 3
-                    path_end = audio_url.find("?alt=media")
-                    from urllib.parse import unquote
-                    audio_url = unquote(audio_url[path_start:path_end])
+                    from urllib.parse import urlparse, unquote
+                    parsed_url = urlparse(audio_url)
+                    path = parsed_url.path
+                    
+                    # 1. Ekstrak nama baldi secara dinamik jika ada di dalam URL (Pencegahan Ralat Hardcode)
+                    if "/v0/b/" in path and "/o/" in path:
+                        b_start = path.find("/v0/b/") + 6
+                        b_end = path.find("/o/")
+                        bucket_name = path[b_start:b_end]
+                        print(f"[{job_id}] Baldi dinamik dikesan secara automatik: {bucket_name}")
+                    
+                    # 2. Parsing URL ke nama laluan yang selamat dan utuh (Membetulkan Ralat Pemotongan / Slicing)
+                    if "/o/" in path:
+                        audio_url = unquote(path.split("/o/", 1)[1])
 
-                blob = self.bucket.blob(audio_url)
+                # Gunakan baldi yang telah disahkan secara dinamik untuk memuat turun
+                target_bucket = storage.bucket(bucket_name) if self.firebase_active else self.bucket
+                blob = target_bucket.blob(audio_url)
                 blob.download_to_filename(str(local_audio_path))
 
                 # Jalankan pipeline pemprosesan menggunakan fail sementara tersebut
@@ -285,7 +299,8 @@ class CentralOrchestrator:
                     temp_work_dir=temp_work_path,
                     is_cloud=True,
                     user_id=user_id,
-                    job_id=job_id
+                    job_id=job_id,
+                    bucket_name=bucket_name
                 )
 
             except Exception as e:
