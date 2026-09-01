@@ -18,7 +18,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 // Pautan URL Pelayan GCP VM API T1era Music (Menggunakan Terowong Selamat Ngrok)
-const RENDER_BACKEND_URL = "https://472d-35-247-154-247.ngrok-free.app/transcribe";
+const RENDER_BACKEND_URL = " https://472d-35-247-154-247.ngrok-free.app/transcribe";
 
 // =========================================================
 // INJEKSI STYLING NEON KONSOL PEMPROSESAN (AAA GRADE UI/UX)
@@ -713,16 +713,13 @@ if (youtubeSubmitBtn) {
             createdAt: serverTimestamp()
           })
           .then(() => {
-            setStepStatus("step-temp", "success");
             triggerYoutubeSequence();
           })
           .catch(err => {
             console.warn("[FIRESTORE BYPASS] Write blocked by Rules. Bypassing straight to Render...", err);
-            setStepStatus("step-temp", "success");
             triggerYoutubeSequence();
           });
         } else {
-          setStepStatus("step-temp", "success");
           triggerYoutubeSequence();
         }
 
@@ -938,12 +935,27 @@ function openLiveTerminalConsole(userId, jobId) {
       if (progressPct) progressPct.textContent = `${progress}%`;
 
       if (status === "QUEUED") {
-        setStepStatus("step-transcribe", "loading");
-      } else if (status === "DOWNLOADING_YOUTUBE" || status === "DOWNLOADING_AUDIO") {
+        setStepStatus("step-init", "success");
+        setStepStatus("step-download", "loading");
+      } else if (status === "REQUESTING_YT_LINK" || status === "DOWNLOADING_AUDIO") {
+        setStepStatus("step-init", "success");
+        setStepStatus("step-download", "loading");
+        const stepDownloadLabel = document.querySelector("#step-download .step-label");
+        if (stepDownloadLabel) {
+          if (status === "REQUESTING_YT_LINK") {
+            stepDownloadLabel.textContent = `Requesting YouTube Link: ${progress}%`;
+          } else {
+            stepDownloadLabel.textContent = "Downloading Storage Audio";
+          }
+        }
+      } else if (status === "CACHING_AUDIO") {
+        setStepStatus("step-init", "success");
+        setStepStatus("step-download", "success");
+        setStepStatus("step-temp", "loading");
+      } else if (status === "TRANSCRIBING_AUDIO") {
         setStepStatus("step-init", "success");
         setStepStatus("step-download", "success");
         setStepStatus("step-temp", "success");
-      } else if (status === "TRANSCRIBING_AUDIO") {
         setStepStatus("step-transcribe", "loading");
       } else if (status === "CLEANING_MIDI" || status === "REPAIRING_NOTES") {
         setStepStatus("step-transcribe", "success");
