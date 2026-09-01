@@ -5,9 +5,8 @@ Meredamkan semua log amaran TensorFlow, menyokong pemprosesan fail sementara,
 mengaktifkan sekatan CORS, dan berjalan menggunakan pelayan produksi WSGI Gunicorn.
 
 NOTA PERUBAHAN:
-Sokongan YouTube diaktifkan menggunakan enjin hibrid: Mengambil info video dari RapidAPI,
-tetapi memuat turun fail secara tempatan dan pantas menggunakan yt-dlp (penyamaran Android Client)
-bagi mengelakkan ralat sekatan muat turun pihak ketiga.
+Sokongan YouTube diaktifkan menggunakan enjin hibrid: yt-dlp tempatan pantas 
+(cookies.txt) dengan fallback automatik ke API Cobalt untuk memintas sekatan PO Token.
 """
 
 import os
@@ -276,69 +275,93 @@ class CentralOrchestrator:
 
                 suffix = ".mp3"
                 bucket_name = OrchestratorConfig.BUCKET_NAME
+                download_success = False
 
-                # JIKA INPUT IALAH PAUTAN YOUTUBE (Gunakan API Info + Muat Turun Tempatan Pantas)
+                # JIKA INPUT IALAH PAUTAN YOUTUBE (Enjin Hibrid)
                 if youtube_url:
-                    # 1. Mulakan fasa memanggil RapidAPI untuk mendapatkan maklumat video
+                    # Set status kepada REQUESTING_YT_LINK serta-merta pada permulaan
                     self.update_status(user_id, job_id, "REQUESTING_YT_LINK", 5)
-                    print(f"[{job_id}] Mengesan pautan YouTube: {youtube_url}. Memanggil RapidAPI untuk info video...")
+                    print(f"[{job_id}] Mengesan pautan YouTube: {youtube_url}.")
                     
-                    import requests
-                    headers = {
-                        "X-RapidAPI-Key": "4bad7baac7msha8abfe0fc35b3a2p1baa6ajsn281427eb1961",
-                        "X-RapidAPI-Host": "youtube-info-download-api.p.rapidapi.com"
-                    }
-                    params = {
-                        "format": "mp3",
-                        "url": youtube_url,
-                        "audio_quality": "128",
-                        "add_info": "0",
-                        "audio_language": "en",
-                        "no_merge": "false",
-                        "allow_extended_duration": "false"
-                    }
-                    api_url = "https://youtube-info-download-api.p.rapidapi.com/ajax/download.php"
-                    response = requests.get(api_url, headers=headers, params=params)
-                    
-                    if response.status_code != 200:
-                        raise RuntimeError(f"RapidAPI gagal mengembalikan pautan dengan kod status {response.status_code}. Detail: {response.text}")
-                    
-                    response_data = response.json()
-                    video_title = response_data.get("TITLE") or response_data.get("title") or "YouTube Track"
-                    print(f"[{job_id}] Info Video Diterima daripada RapidAPI: '{video_title}'")
-
-                    # 2. Muat turun fail audio terus secara tempatan & pantas menggunakan yt-dlp (Bypass sekat API)
-                    self.update_status(user_id, job_id, "CACHING_AUDIO", 10)
-                    print(f"[{job_id}] Memulakan muat turun tempatan menggunakan yt-dlp + Android Spoofing...")
-                    
-                    import subprocess
-                    local_audio_path = local_audio_path.with_suffix(suffix)
-                    
-                    cmd = [
-                        "yt-dlp",
-                        "-x",
-                        "--audio-format", "mp3",
-                        "--audio-quality", "0",
-                        "--no-playlist",
-                        "--extractor-args", "youtube:player_client=android,web",
-                        "-o", str(local_audio_path.with_suffix(""))
-                    ]
-                    
-                    # Tambah cookies jika dikesan dalam direktori
-                    cookies_path = "/home/tengkufiboking/T1era-music/cookies.txt"
-                    if os.path.exists(cookies_path):
-                        print(f"[{job_id}] Cookies.txt dikesan. Menggunakan cookies...")
-                        cmd.insert(1, "--cookies")
-                        cmd.insert(2, cookies_path)
+                    # -------------------------------------------------------------
+                    # STRATEGI 1: Muat Turun Tempatan Pantas (yt-dlp + Cookies)
+                    # -------------------------------------------------------------
+                    try:
+                        print(f"[{job_id}] Mencuba muat turun tempatan pantas menggunakan yt-dlp + Cookies...")
+                        import subprocess
+                        local_audio_path = local_audio_path.with_suffix(suffix)
                         
-                    cmd.append(youtube_url)
-                    yt_result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-                    
-                    if yt_result.returncode != 0:
-                        print(f"[YT-DLP ERROR] Gagal memuat turun: {yt_result.stderr}")
-                        raise RuntimeError(f"yt-dlp gagal memuat turun audio dari YouTube. Detail: {yt_result.stderr}")
-                    
-                    print(f"[{job_id}] Fail MP3 dari YouTube berjaya dimuat turun secara tempatan ke: {local_audio_path}")
+                        cmd = [
+                            "yt-dlp",
+                            "-x",
+                            "--audio-format", "mp3",
+                            "--audio-quality", "0",
+                            "--no-playlist",
+                            "-o", str(local_audio_path.with_suffix(""))
+                        ]
+                        
+                        # Tambah cookies jika ada
+                        cookies_path = "/home/tengkufiboking/T1era-music/cookies.txt"
+                        if os.path.exists(cookies_path):
+                            print(f"[{job_id}] Fail cookies.txt dikesan. Menggunakan cookies...")
+                            cmd.insert(1, "--cookies")
+                            cmd.insert(2, cookies_path)
+                            
+                        cmd.append(youtube_url)
+                        yt_result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+                        
+                        if yt_result.returncode == 0:
+                            print(f"[{job_id}] Muat turun tempatan berjaya!")
+                            download_success = True
+                        else:
+                            print(f"[YT-DLP WARNING] Percubaan tempatan disekat: {yt_result.stderr}. Beralih ke Cobalt API...")
+                    except Exception as e:
+                        print(f"[YT-DLP WARNING] Ralat semasa mencuba yt-dlp: {e}. Beralih ke Cobalt API...")
+
+                    # -------------------------------------------------------------
+                    # STRATEGI 2: Fallback ke Cobalt API (Bypass Sekatan PO Token / Bot)
+                    # -------------------------------------------------------------
+                    if not download_success:
+                        print(f"[{job_id}] Memulakan muat turun fallback melalui Cobalt API...")
+                        import requests
+                        
+                        payload = {
+                            "url": youtube_url,
+                            "isAudioOnly": True,
+                            "aFormat": "mp3"
+                        }
+                        headers = {
+                            "Accept": "application/json",
+                            "Content-Type": "application/json"
+                        }
+                        
+                        # Menggunakan pelayan API Cobalt (Wuk.sh / Cobalt.tools) yang bebas dari sekatan bot
+                        cobalt_url = "https://co.wuk.sh/"
+                        print(f"[{job_id}] Memanggil API Cobalt di: {cobalt_url}")
+                        
+                        cob_response = requests.post(cobalt_url, json=payload, headers=headers)
+                        if cob_response.status_code != 200:
+                            raise RuntimeError(f"API Cobalt gagal mengembalikan pautan dengan kod status {cob_response.status_code}")
+                            
+                        cob_data = cob_response.json()
+                        download_link = cob_data.get("url")
+                        
+                        if not download_link:
+                            raise ValueError(f"Tidak dapat mencari pautan muat turun dalam respon Cobalt. Respon: {cob_data}")
+
+                        print(f"[{job_id}] Pautan muat turun ditemui: {download_link}. Memulakan muat turun ke VM...")
+                        local_audio_path = local_audio_path.with_suffix(suffix)
+                        
+                        # Muat turun fail audio dari pautan Cobalt
+                        audio_response = requests.get(download_link, stream=True)
+                        if audio_response.status_code != 200:
+                            raise RuntimeError(f"Gagal memuat turun MP3 dari pautan Cobalt. Status: {audio_response.status_code}")
+                        
+                        with open(local_audio_path, "wb") as f:
+                            for chunk in audio_response.iter_content(chunk_size=8192):
+                                if chunk:
+                                    f.write(chunk)
+                        print(f"[{job_id}] Fail MP3 dari YouTube berjaya dimuat turun ke: {local_audio_path}")
 
                 # JIKA INPUT IALAH AUDIO URL DARI STORAGE
                 else:
