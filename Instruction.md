@@ -53,12 +53,14 @@ Check your active Conda environments:
 code
 Bash
 conda env list
-3. How to Start or Update Ngrok (If a new secure link is needed)
+###3. How to Start or Update Ngrok (If a new secure link is needed)
 If you restart your VM or restart your Ngrok process, Ngrok will generate a brand-new secure https:// address. You must run Ngrok and update your frontend configuration.
 Open an SSH window and start the tunnel:
 code
 Bash
+```
 ./ngrok http 5000
+```
 Copy the new secure URL:
 Look at the terminal output for the line starting with Forwarding. It will look like this:
 Forwarding https://a1b2-35-247-154-247.ngrok-free.app -> http://localhost:5000
