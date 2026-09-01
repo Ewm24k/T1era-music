@@ -17,8 +17,8 @@ import {
   getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
-// Pautan URL Pelayan Render API T1era Music
-const RENDER_BACKEND_URL = "https://t1era-music-api.onrender.com/transcribe";
+// Pautan URL Pelayan GCP VM API T1era Music
+const RENDER_BACKEND_URL = "http://35.247.154.247:5000/transcribe";
 
 // =========================================================
 // INJEKSI STYLING NEON KONSOL PEMPROSESAN (AAA GRADE UI/UX)
@@ -824,7 +824,7 @@ function openLiveTerminalConsole(userId, jobId) {
       isFirestoreActive = false;
       console.warn("[FIRESTORE BYPASS] Active snapshot listening blocked. Switching to mathematical storage URL fallback...");
 
-      const constructedMidiUrl = `https://firebasestorage.googleapis.com/v0/b/t1era-music.appspot.com/o/users%2F${userId}%2Ftranscriptions%2F${jobId}%2Ffinal_score.mid?alt=media`;
+      const constructedMidiUrl = `https://firebasestorage.googleapis.com/v0/b/t1era-musicv1.firebasestorage.app/o/users%2F${userId}%2Ftranscriptions%2F${jobId}%2Ffinal_score.mid?alt=media`;
 
       let fakeProgress = 25;
       const fakeInterval = setInterval(() => {
