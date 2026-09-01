@@ -678,28 +678,53 @@ if (youtubeSubmitBtn) {
         const stepTempLabel = document.querySelector("#step-temp .step-label");
         if (stepTempLabel) stepTempLabel.textContent = "Downloading Audio on Server";
 
-        openLiveTerminalConsole(userId, jobId);
+        const triggerYoutubeSequence = () => {
+          openLiveTerminalConsole(userId, jobId);
 
-        // Hantar payload pautan YouTube ke pelayan API GCP VM
-        fetch(RENDER_BACKEND_URL, {
-          method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-            "ngrok-skip-browser-warning": "true"
-          },
-          body: JSON.stringify({ userId: userId, jobId: jobId, youtubeUrl: urlValue })
-        })
-        .then((res) => {
-          if (!res.ok) {
-            return res.json().then((body) => {
-              throw new Error(body.error || "Server rejected the YouTube transcription request.");
-            });
-          }
-        })
-        .catch((err) => {
-          console.error("YouTube Transcribe request failed:", err);
-          showTerminalFailure(err.message || "Failed to start YouTube transcription job.");
-        });
+          // Hantar payload pautan YouTube ke pelayan API GCP VM
+          fetch(RENDER_BACKEND_URL, {
+            method: "POST",
+            headers: { 
+              "Content-Type": "application/json",
+              "ngrok-skip-browser-warning": "true"
+            },
+            body: JSON.stringify({ userId: userId, jobId: jobId, youtubeUrl: urlValue })
+          })
+          .then((res) => {
+            if (!res.ok) {
+              return res.json().then((body) => {
+                throw new Error(body.error || "Server rejected the YouTube transcription request.");
+              });
+            }
+          })
+          .catch((err) => {
+            console.error("YouTube Transcribe request failed:", err);
+            showTerminalFailure(err.message || "Failed to start YouTube transcription job.");
+          });
+        };
+
+        // KREAT DOKUMEN FIRESTORE UNTUK YOUTUBE JOB UNTUK MENGELAKKAN SYNC GAGAL
+        if (db && userId !== "guest_studio_creator") {
+          const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
+          setDoc(jobRef, {
+            status: "QUEUED",
+            progress: 0,
+            youtubeUrl: urlValue,
+            createdAt: serverTimestamp()
+          })
+          .then(() => {
+            setStepStatus("step-temp", "success");
+            triggerYoutubeSequence();
+          })
+          .catch(err => {
+            console.warn("[FIRESTORE BYPASS] Write blocked by Rules. Bypassing straight to Render...", err);
+            setStepStatus("step-temp", "success");
+            triggerYoutubeSequence();
+          });
+        } else {
+          setStepStatus("step-temp", "success");
+          triggerYoutubeSequence();
+        }
 
       }, 1000);
     }, 1000);
