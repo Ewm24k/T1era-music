@@ -5,8 +5,8 @@ Meredamkan semua log amaran TensorFlow, menyokong pemprosesan fail sementara,
 mengaktifkan sekatan CORS, dan berjalan menggunakan pelayan produksi WSGI Gunicorn.
 
 NOTA PERUBAHAN:
-Sokongan YouTube diaktifkan menggunakan RapidAPI YouTube Info & Download API.
-Ditambah gelung pengundian (polling loop) untuk memantau progress sehingga pautan download sedia.
+Sokongan YouTube diaktifkan menggunakan RapidAPI YouTube Info & Download API (/ajax/download.php).
+Menggunakan pengundian terus (direct polling) ke PROGRESS_URL untuk memintas had sekatan RapidAPI.
 """
 
 import os
@@ -273,13 +273,13 @@ class CentralOrchestrator:
                 if not audio_url and not youtube_url:
                     raise ValueError("Tiada fail audio (audioUrl) atau pautan YouTube (youtubeUrl) diterima.")
 
-                self.update_status(user_id, job_id, "DOWNLOADING_AUDIO", 5)
-
                 suffix = ".mp3"
                 bucket_name = OrchestratorConfig.BUCKET_NAME
 
                 # JIKA INPUT IALAH PAUTAN YOUTUBE (Gunakan RapidAPI dengan Polling)
                 if youtube_url:
+                    # Set status kepada REQUESTING_YT_LINK serta-merta pada permulaan
+                    self.update_status(user_id, job_id, "REQUESTING_YT_LINK", 5)
                     print(f"[{job_id}] Mengesan pautan YouTube: {youtube_url}. Memanggil RapidAPI untuk memulakan muat turun...")
                     import requests
                     headers = {
@@ -310,15 +310,19 @@ class CentralOrchestrator:
                     download_id = response_data["id"]
                     print(f"[{job_id}] Tugasan dimulakan dengan ID: {download_id}. Memulakan proses pengundian (polling)...")
 
-                    # Mengundi status kemajuan sehingga progress = 1000 dan download_url sedia
-                    progress_url = "https://youtube-info-download-api.p.rapidapi.com/ajax/progress.php"
+                    # Mengundi status kemajuan melalui PROGRESS_URL dinamik secara terus (lebih stabil & jimat kuota)
+                    progress_url = response_data.get("PROGRESS_URL")
+                    if not progress_url:
+                        progress_url = f"https://p.savenow.to/api/progress?id={download_id}"
+                        
+                    print(f"[{job_id}] Mengundi status kemajuan melalui: {progress_url}")
                     download_link = None
-                    max_attempts = 45  # 45 percubaan * 2 saat = 90 saat had masa
+                    max_attempts = 60  # 60 percubaan * 2 saat = 120 saat
                     
                     for attempt in range(max_attempts):
                         time.sleep(2)
                         print(f"[{job_id}] Mengundi kemajuan (Percubaan {attempt + 1}/{max_attempts})...")
-                        progress_response = requests.get(progress_url, headers=headers, params={"id": download_id})
+                        progress_response = requests.get(progress_url) # Pengundian terus tanpa API key / RapidAPI header
                         
                         if progress_response.status_code != 200:
                             print(f"[POLLING WARNING] Gagal menghubungi pelayan progress: {progress_response.text}")
@@ -328,24 +332,33 @@ class CentralOrchestrator:
                         print(f"[{job_id}] Status progress: {progress_data}")
 
                         # Jika ralat berlaku di pelayan download
-                        if progress_data.get("success") == 0:
-                            raise RuntimeError(f"RapidAPI melaporkan ralat proses: {progress_data.get('text', 'Ralat tidak diketahui')}")
+                        if progress_data.get("success") == 0 or progress_data.get("success") is False:
+                            raise RuntimeError(f"Pelayan melaporkan ralat proses: {progress_data.get('text', 'Ralat tidak diketahui')}")
 
-                        # Selesai apabila progress mencapai 1000 dan download_url wujud
-                        if progress_data.get("progress") == 1000 and progress_data.get("download_url"):
+                        # Kemaskini progress peratusan muat turun video ke Firestore secara langsung
+                        progress_percentage = int(5 + (progress_data.get("progress", 0) / 1000) * 4)
+                        self.update_status(user_id, job_id, "REQUESTING_YT_LINK", progress_percentage)
+
+                        # Selesai apabila progress mencapai 1000 atau pautan download_url sudah sedia
+                        if (progress_data.get("progress") == 1000 or progress_data.get("progress") == 100) and progress_data.get("download_url"):
+                            download_link = progress_data["download_url"]
+                            break
+                        elif progress_data.get("download_url"):
                             download_link = progress_data["download_url"]
                             break
 
                     if not download_link:
                         raise TimeoutError("Had masa mengundi (timeout) tamat sebelum pautan muat turun sedia.")
 
+                    # Mula memuat turun audio ke VM (Step-Temp -> Loading)
+                    self.update_status(user_id, job_id, "CACHING_AUDIO", 10)
                     print(f"[{job_id}] Pautan muat turun sedia: {download_link}. Memulakan muat turun ke VM...")
                     local_audio_path = local_audio_path.with_suffix(suffix)
                     
                     # Muat turun fail audio terus
                     audio_response = requests.get(download_link, stream=True)
                     if audio_response.status_code != 200:
-                        raise RuntimeError(f"Gagal memuat turun MP3 dari pautan akhir RapidAPI. Status: {audio_response.status_code}")
+                        raise RuntimeError(f"Gagal memuat turun MP3 dari pautan akhir. Status: {audio_response.status_code}")
                     
                     with open(local_audio_path, "wb") as f:
                         for chunk in audio_response.iter_content(chunk_size=8192):
@@ -355,6 +368,7 @@ class CentralOrchestrator:
 
                 # JIKA INPUT IALAH AUDIO URL DARI STORAGE
                 else:
+                    self.update_status(user_id, job_id, "DOWNLOADING_AUDIO", 5)
                     print(f"[{job_id}] Memuat turun audio sedia ada dari Storage...")
                     if ".wav" in audio_url.lower():
                         suffix = ".wav"
@@ -368,12 +382,12 @@ class CentralOrchestrator:
                         parsed_url = urlparse(audio_url)
                         path = parsed_url.path
                         
-                        # 1. Ekstrak nama baldi secara dinamik jika ada di dalam URL (Pencegahan Ralat Hardcode)
+                        # 1. Ekstrak nama baldi secara dinamik jika ada di dalam URL
                         if "/v0/b/" in path and "/o/" in path:
                             bucket_name = path[path.find("/v0/b/") + 6 : path.find("/o/")]
                             print(f"[{job_id}] Baldi dinamik dikesan secara automatik: {bucket_name}")
                         
-                        # 2. Parsing URL ke nama laluan yang selamat dan utuh (Membetulkan Ralat Pemotongan / Slicing)
+                        # 2. Parsing URL ke nama laluan yang selamat dan utuh
                         if "/o/" in path:
                             audio_url = unquote(path.split("/o/", 1)[1])
 
@@ -381,6 +395,9 @@ class CentralOrchestrator:
                     target_bucket = storage.bucket(bucket_name) if self.firebase_active else self.bucket
                     blob = target_bucket.blob(audio_url)
                     blob.download_to_filename(str(local_audio_path))
+                    
+                    # Caching audio ke workspace tempatan
+                    self.update_status(user_id, job_id, "CACHING_AUDIO", 10)
 
                 # Jalankan pipeline pemprosesan menggunakan fail sementara tersebut
                 self.run_pipeline(
