@@ -294,7 +294,7 @@ class CentralOrchestrator:
                         "no_merge": "false",
                         "allow_extended_duration": "false"
                     }
-                    api_url = "https://youtube-info-download-api.p.rapidapi.com/api"
+                    api_url = "https://youtube-info-download-api.p.rapidapi.com"
                     response = requests.get(api_url, headers=headers, params=params)
                     
                     if response.status_code != 200:
