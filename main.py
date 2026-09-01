@@ -2,8 +2,14 @@
 """
 T1era Music MIDI Transcription & Styling Central Orchestrator
 Meredamkan semua log amaran TensorFlow, menyokong pemprosesan fail sementara,
-mengaktifkan sekatan CORS, menyokong dwi-pintasan (Android Client & Cookies) memintas bot-blocker YouTube,
-dan berjalan menggunakan pelayan produksi WSGI Gunicorn [PerQueryResult].
+mengaktifkan sekatan CORS, dan berjalan menggunakan pelayan produksi WSGI Gunicorn [PerQueryResult].
+
+NOTA PERUBAHAN:
+Laluan input "youtubeUrl" telah DIBUANG. YouTube secara aktif menyekat muat turun
+audio dari pelayan tanpa sesi log masuk pengguna sebenar ("Sign in to confirm you're
+not a bot"), dan tiada kombinasi flag yt-dlp yang boleh memintas ini secara kekal —
+YouTube menampal pintasan sedemikian dalam masa singkat. Satu-satunya laluan yang
+stabil untuk webapp awam ialah pengguna memuat naik fail audio secara terus.
 """
 
 import os
@@ -29,14 +35,6 @@ try:
 except ImportError:
     print("Error: 'flask' dan 'flask-cors' diperlukan untuk menjalankan pelayan API.")
     print("Sila pasang melalui: pip install flask flask-cors")
-    sys.exit(1)
-
-# Impor yt-dlp untuk muat turun audio YouTube secara langsung
-try:
-    import yt_dlp
-except ImportError:
-    print("Error: 'yt-dlp' diperlukan untuk muat turun audio YouTube.")
-    print("Sila pasang melalui: pip install yt-dlp")
     sys.exit(1)
 
 # Periksa integrasi Firebase
@@ -104,7 +102,7 @@ class CentralOrchestrator:
                 job_ref.update(payload)
             except Exception as e:
                 print(f"[FIREBASE ERROR] Gagal kemaskini status Firestore: {e}")
-        
+
         print(f"[PROGRESS] {progress}% | Status: {status}")
 
     def upload_final_midi(self, local_path: Path, remote_path: str) -> str:
@@ -224,10 +222,10 @@ class CentralOrchestrator:
 
             if is_cloud and self.firebase_active and user_id and job_id:
                 self.update_status(user_id, job_id, "UPLOADING_RESULTS", 95)
-                
+
                 remote_path = f"users/{user_id}/transcriptions/{job_id}/final_score.mid"
                 download_url = self.upload_final_midi(stage6_final_mid, remote_path)
-                
+
                 # Kemaskini Firestore
                 job_ref = self.db.collection("users").document(user_id).collection("midi_jobs").document(job_id)
                 job_ref.update({
@@ -246,47 +244,39 @@ class CentralOrchestrator:
             if is_cloud and self.firebase_active and user_id and job_id:
                 self.update_status(user_id, job_id, "FAILED", 100, error_msg=str(e))
 
-    def process_incoming_cloud_job(self, user_id: str, job_id: str, audio_url: str = None, youtube_url: str = None):
-        """Memproses tugasan individu di dalam workspace sementara Render"""
+    def process_incoming_cloud_job(self, user_id: str, job_id: str, audio_url: str = None):
+        """Memproses tugasan individu di dalam workspace sementara Render.
+        Hanya menerima fail audio yang telah dimuat naik terus (audioUrl) — laluan
+        pautan YouTube telah dibuang sepenuhnya."""
         print(f"[CLOUD PROCESSING] Memulakan tugasan: {job_id} untuk Pengguna: {user_id}")
-        
+
         with tempfile.TemporaryDirectory(prefix=f"t1era_{job_id}_") as tmp_dir:
             temp_work_path = Path(tmp_dir)
             local_audio_path = temp_work_path / "input_audio"
 
             try:
-                # KES A: Menggunakan pautan YouTube
-                if youtube_url:
-                    self.update_status(user_id, job_id, "DOWNLOADING_YOUTUBE", 5)
-                    print(f"[{job_id}] Memulakan muat turun YouTube: {youtube_url}")
-                    
-                    downloaded_file = self.download_youtube_audio(youtube_url, temp_work_path)
-                    local_audio_path = downloaded_file
-                    print(f"[{job_id}] Muat turun YouTube berjaya. Fail disimpan di: {local_audio_path}")
-                
-                # KES B: Menggunakan fail audio muat naik terus
-                elif audio_url:
-                    self.update_status(user_id, job_id, "DOWNLOADING_AUDIO", 5)
-                    print(f"[{job_id}] Memuat turun audio sedia ada dari Storage...")
-                    
-                    suffix = ".mp3"
-                    if ".wav" in audio_url.lower():
-                        suffix = ".wav"
-                    elif ".m4a" in audio_url.lower():
-                        suffix = ".m4a"
-                    
-                    local_audio_path = local_audio_path.with_suffix(suffix)
+                if not audio_url:
+                    raise ValueError("Tiada fail audio (audioUrl) diterima.")
 
-                    if "firebasestorage.googleapis.com" in audio_url:
-                        path_start = audio_url.find("/o/") + 3
-                        path_end = audio_url.find("?alt=media")
-                        from urllib.parse import unquote
-                        audio_url = unquote(audio_url[path_start:path_end])
+                self.update_status(user_id, job_id, "DOWNLOADING_AUDIO", 5)
+                print(f"[{job_id}] Memuat turun audio sedia ada dari Storage...")
 
-                    blob = self.bucket.blob(audio_url)
-                    blob.download_to_filename(str(local_audio_path))
-                else:
-                    raise ValueError("Tiada pautan YouTube (youtubeUrl) atau fail audio (audioUrl) diterima.")
+                suffix = ".mp3"
+                if ".wav" in audio_url.lower():
+                    suffix = ".wav"
+                elif ".m4a" in audio_url.lower():
+                    suffix = ".m4a"
+
+                local_audio_path = local_audio_path.with_suffix(suffix)
+
+                if "firebasestorage.googleapis.com" in audio_url:
+                    path_start = audio_url.find("/o/") + 3
+                    path_end = audio_url.find("?alt=media")
+                    from urllib.parse import unquote
+                    audio_url = unquote(audio_url[path_start:path_end])
+
+                blob = self.bucket.blob(audio_url)
+                blob.download_to_filename(str(local_audio_path))
 
                 # Jalankan pipeline pemprosesan menggunakan fail sementara tersebut
                 self.run_pipeline(
@@ -296,34 +286,10 @@ class CentralOrchestrator:
                     user_id=user_id,
                     job_id=job_id
                 )
-                
+
             except Exception as e:
                 print(f"[{job_id}] Gagal memproses fail awan: {e}")
                 self.update_status(user_id, job_id, "FAILED", 100, error_msg=str(e))
-
-    def download_youtube_audio(self, url: str, dest_dir: Path) -> Path:
-        """Memuat turun aliran audio terbaik secara terus dari YouTube dengan dwi-sistem pintasan"""
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': os.path.join(dest_dir, 'yt_download.%(ext)s'),
-            'quiet': True,
-            'no_warnings': True,
-            # PINTASAN 1: Menyamar sebagai peranti mudah alih Android (Sangat efektif memintas sekatan bot!)
-            'extractor_args': {'youtube': {'player_client': 'android'}}
-        }
-        
-        # PINTASAN 2: Membaca fail kuki jika dibekalkan secara selamat sebagai Render Secret File
-        cookies_file = Path("cookies.txt")
-        if cookies_file.exists():
-            ydl_opts['cookiefile'] = str(cookies_file)
-            print("[YT-DLP] Fail cookies.txt dikesan dan digunakan sebagai kebenaran masuk.")
-        else:
-            print("[YT-DLP] Makluman: cookies.txt tiada. Menggunakan mod pintasan Android player-client sedia ada.")
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
-            return Path(filename)
 
 
 # =========================================================
@@ -335,9 +301,9 @@ app = Flask(__name__)
 CORS(app, resources={
     r"/*": {
         "origins": [
-            "https://t1era-music.netlify.app", 
-            "http://localhost:3000", 
-            "http://127.0.0.1:5500", 
+            "https://t1era-music.netlify.app",
+            "http://localhost:3000",
+            "http://127.0.0.1:5500",
             "http://localhost:5000"
         ]
     }
@@ -361,20 +327,26 @@ def transcribe_trigger():
 
     user_id = data.get("userId")
     job_id = data.get("jobId")
-    audio_url = data.get("audioUrl")       
-    youtube_url = data.get("youtubeUrl")   
+    audio_url = data.get("audioUrl")
+
+    # NOTA: "youtubeUrl" tidak lagi disokong. Dikembalikan sebagai ralat jelas
+    # supaya frontend/pengguna tahu sebabnya, bukan gagal senyap selepas 4 saat.
+    if data.get("youtubeUrl"):
+        return jsonify({
+            "error": "YouTube link import is no longer supported. Please upload an audio file instead."
+        }), 400
 
     if not user_id or not job_id:
         return jsonify({"error": "Missing required fields (userId, jobId)"}), 400
 
-    if not audio_url and not youtube_url:
-        return jsonify({"error": "Please provide either audioUrl or youtubeUrl"}), 400
+    if not audio_url:
+        return jsonify({"error": "Please provide an audioUrl (uploaded audio file)"}), 400
 
     # Jalankan tugasan secara asynchronous
     import threading
     thread = threading.Thread(
         target=orchestrator.process_incoming_cloud_job,
-        args=(user_id, job_id, audio_url, youtube_url)
+        args=(user_id, job_id, audio_url)
     )
     thread.start()
 
@@ -388,20 +360,20 @@ def transcribe_trigger():
 def run_local_test():
     """Mod Ujian Tempatan di PC (VS Code)"""
     print("[LOCAL START] Membina simulasi ujian tempatan T1era Music di PC...")
-    
+
     base_dir = Path(".")
     input_dir = base_dir / "input"
     output_dir = base_dir / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     audio_extensions = {'.mp3', '.wav', '.m4a', '.flac', '.ogg'}
     audio_files = []
     if input_dir.exists():
         audio_files = [
-            f for f in input_dir.iterdir() 
+            f for f in input_dir.iterdir()
             if f.is_file() and f.suffix.lower() in audio_extensions
         ]
-        
+
     if audio_files:
         target_audio = audio_files[0]
         orchestrator.run_pipeline(
