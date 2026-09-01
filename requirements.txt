@@ -1,6 +1,6 @@
 # =========================================================
 # T1era Music — requirements.txt Configuration
-# Mengunci versi binari stabil untuk mengelakkan ralat kompilasi Cython [PerQueryResult].
+# Mengunci versi binari stabil untuk mengelakkan ralat kompilasi Cython.
 # =========================================================
 
 # Alat Pembinaan Asas & Pelayan Produksi WSGI (Render Native)
@@ -27,5 +27,7 @@ scikit-learn==1.3.2
 mido>=1.3.0
 pretty_midi>=0.2.10
 
-# Pakej Transkripsi Audio
+# Pakej Transkripsi Audio (Menggunakan model inference ringan demi mengelakkan ralat OOM di Render)
 basic-pitch>=0.2.4
+tflite-runtime
+onnxruntime
