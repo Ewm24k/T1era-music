@@ -1,0 +1,25 @@
+[
+  {
+    "origin": [
+      "https://t1era-music.netlify.app",
+      "http://localhost:3000",
+      "http://127.0.0.1:5500",
+      "http://localhost:5000"
+    ],
+    "method": ["GET", "PUT", "POST", "DELETE", "HEAD", "OPTIONS"],
+    "responseHeader": [
+      "Content-Type",
+      "Authorization",
+      "Content-Length",
+      "X-Goog-Upload-Protocol",
+      "X-Goog-Upload-Command",
+      "X-Goog-Upload-Offset",
+      "X-Goog-Upload-Status",
+      "X-Goog-Upload-Header-Content-Length",
+      "X-Goog-Upload-Header-Content-Type",
+      "X-Firebase-Storage-Version",
+      "X-Firebase-GMPID"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]
