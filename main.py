@@ -5,7 +5,7 @@ Meredamkan semua log amaran TensorFlow, menyokong pemprosesan fail sementara,
 mengaktifkan sekatan CORS, dan berjalan menggunakan pelayan produksi WSGI Gunicorn.
 
 NOTA PERUBAHAN:
-Sokongan YouTube diaktifkan semula menggunakan RapidAPI YouTube Info & Download API.
+Sokongan YouTube diaktifkan semula secara asli menggunakan yt-dlp tempatan pada VM.
 """
 
 import os
@@ -277,55 +277,32 @@ class CentralOrchestrator:
                 suffix = ".mp3"
                 bucket_name = OrchestratorConfig.BUCKET_NAME
 
-                # JIKA INPUT IALAH PAUTAN YOUTUBE (Gunakan RapidAPI untuk memuat turun)
+                # JIKA INPUT IALAH PAUTAN YOUTUBE (Gunakan yt-dlp tempatan pada VM)
                 if youtube_url:
-                    print(f"[{job_id}] Mengesan pautan YouTube: {youtube_url}. Memanggil RapidAPI untuk memuat turun...")
-                    import requests
-                    headers = {
-                        "X-RapidAPI-Key": "4bad7baac7msha8abfe0fc35b3a2p1baa6ajsn281427eb1961",
-                        "X-RapidAPI-Host": "youtube-info-download-api.p.rapidapi.com"
-                    }
-                    params = {
-                        "format": "mp3",
-                        "url": youtube_url,
-                        "audio_quality": "128",
-                        "add_info": "0",
-                        "audio_language": "en",
-                        "no_merge": "false",
-                        "allow_extended_duration": "false"
-                    }
-                    api_url = "https://youtube-info-download-api.p.rapidapi.com"
-                    response = requests.get(api_url, headers=headers, params=params)
+                    print(f"[{job_id}] Mengesan pautan YouTube: {youtube_url}. Memproses muat turun menggunakan yt-dlp tempatan...")
                     
-                    if response.status_code != 200:
-                        raise RuntimeError(f"RapidAPI gagal mengembalikan pautan dengan kod status {response.status_code}. Detail: {response.text}")
-                    
-                    response_data = response.json()
-                    print(f"[{job_id}] Respon RapidAPI Diterima: {response_data}")
-
-                    # Ekstrak pautan muat turun secara dinamik
-                    download_link = None
-                    for key in ["link", "url", "download_url", "downloadUrl", "download"]:
-                        if key in response_data and response_data[key]:
-                            download_link = response_data[key]
-                            break
-                    
-                    if not download_link:
-                        raise ValueError(f"Tidak dapat mencari pautan muat turun dalam respon RapidAPI. Respon: {response_data}")
-
-                    print(f"[{job_id}] Pautan muat turun MP3 ditemui: {download_link}. Memulakan muat turun...")
+                    import subprocess
                     local_audio_path = local_audio_path.with_suffix(suffix)
                     
-                    # Muat turun fail audio terus
-                    audio_response = requests.get(download_link, stream=True)
-                    if audio_response.status_code != 200:
-                        raise RuntimeError(f"Gagal memuat turun MP3 dari pautan RapidAPI. Status: {audio_response.status_code}")
+                    # Command yt-dlp untuk ekstrak audio sebagai mp3 berkualiti tinggi
+                    cmd = [
+                        "yt-dlp",
+                        "-x",
+                        "--audio-format", "mp3",
+                        "--audio-quality", "0",      # VBR 0 (kualiti tertinggi)
+                        "--no-playlist",             # Pastikan hanya satu video dimuat turun
+                        "-o", str(local_audio_path.with_suffix("")),  # Fail output tanpa akhiran (yt-dlp tambah .mp3)
+                        youtube_url
+                    ]
                     
-                    with open(local_audio_path, "wb") as f:
-                        for chunk in audio_response.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                    print(f"[{job_id}] Fail MP3 dari YouTube berjaya dimuat turun ke: {local_audio_path}")
+                    print(f"[{job_id}] Menjalankan yt-dlp...")
+                    yt_result = subprocess.run(cmd, capture_output=True, text=True)
+                    
+                    if yt_result.returncode != 0:
+                        print(f"[YT-DLP ERROR] Gagal memuat turun: {yt_result.stderr}")
+                        raise RuntimeError(f"yt-dlp gagal memuat turun audio dari YouTube. Detail: {yt_result.stderr}")
+                    
+                    print(f"[{job_id}] Fail MP3 dari YouTube berjaya dimuat turun secara tempatan ke: {local_audio_path}")
 
                 # JIKA INPUT IALAH AUDIO URL DARI STORAGE
                 else:
