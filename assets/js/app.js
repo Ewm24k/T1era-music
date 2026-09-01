@@ -17,7 +17,7 @@ import {
   getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
-// Pautan URL Pelayan GCP VM API T1era Music
+// Pautan URL Pelayan GCP VM API T1era Music (Menggunakan Terowong Selamat Ngrok)
 const RENDER_BACKEND_URL = "https://ddc1-35-247-154-247.ngrok-free.app/transcribe";
 
 // =========================================================
@@ -683,7 +683,10 @@ if (youtubeSubmitBtn) {
         // Hantar payload pautan YouTube ke pelayan API GCP VM
         fetch(RENDER_BACKEND_URL, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true"
+          },
           body: JSON.stringify({ userId: userId, jobId: jobId, youtubeUrl: urlValue })
         })
         .then((res) => {
@@ -762,7 +765,10 @@ audioFileInput.addEventListener("change", (event) => {
           openLiveTerminalConsole(userId, jobId);
           fetch(RENDER_BACKEND_URL, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { 
+              "Content-Type": "application/json",
+              "ngrok-skip-browser-warning": "true"
+            },
             body: JSON.stringify({ userId: userId, jobId: jobId, audioUrl: downloadUrl })
           })
           .then((res) => {
