@@ -5,11 +5,7 @@ Meredamkan semua log amaran TensorFlow, menyokong pemprosesan fail sementara,
 mengaktifkan sekatan CORS, dan berjalan menggunakan pelayan produksi WSGI Gunicorn.
 
 NOTA PERUBAHAN:
-Laluan input "youtubeUrl" telah DIBUANG. YouTube secara aktif menyekat muat turun
-audio dari pelayan tanpa sesi log masuk pengguna sebenar ("Sign in to confirm you're
-not a bot"), dan tiada kombinasi flag yt-dlp yang boleh memintas ini secara kekal —
-YouTube menampal pintasan sedemikian dalam masa singkat. Satu-satunya laluan yang
-stabil untuk webapp awam ialah pengguna memuat naik fail audio secara terus.
+Sokongan YouTube diaktifkan semula menggunakan RapidAPI YouTube Info & Download API.
 """
 
 import os
@@ -65,7 +61,6 @@ class OrchestratorConfig:
 
 class CentralOrchestrator:
     def __init__(self):
-        # Mulakan dengan False. Jangan panggil _init_firebase di sini (Pre-fork Gunicorn)
         self.firebase_active = False
 
     def _ensure_firebase(self):
@@ -264,8 +259,8 @@ class CentralOrchestrator:
             if is_cloud and self.firebase_active and user_id and job_id:
                 self.update_status(user_id, job_id, "FAILED", 100, error_msg=str(e))
 
-    def process_incoming_cloud_job(self, user_id: str, job_id: str, audio_url: str = None):
-        """Memproses tugasan individu di dalam workspace sementara Render."""
+    def process_incoming_cloud_job(self, user_id: str, job_id: str, audio_url: str = None, youtube_url: str = None):
+        """Memproses tugasan individu di dalam workspace sementara."""
         print(f"[CLOUD PROCESSING] Memulakan tugasan: {job_id} untuk Pengguna: {user_id}")
         self._ensure_firebase()
 
@@ -274,41 +269,92 @@ class CentralOrchestrator:
             local_audio_path = temp_work_path / "input_audio"
 
             try:
-                if not audio_url:
-                    raise ValueError("Tiada fail audio (audioUrl) diterima.")
+                if not audio_url and not youtube_url:
+                    raise ValueError("Tiada fail audio (audioUrl) atau pautan YouTube (youtubeUrl) diterima.")
 
                 self.update_status(user_id, job_id, "DOWNLOADING_AUDIO", 5)
-                print(f"[{job_id}] Memuat turun audio sedia ada dari Storage...")
 
                 suffix = ".mp3"
-                if ".wav" in audio_url.lower():
-                    suffix = ".wav"
-                elif ".m4a" in audio_url.lower():
-                    suffix = ".m4a"
-
-                local_audio_path = local_audio_path.with_suffix(suffix)
-
                 bucket_name = OrchestratorConfig.BUCKET_NAME
-                if "firebasestorage.googleapis.com" in audio_url:
-                    from urllib.parse import urlparse, unquote
-                    parsed_url = urlparse(audio_url)
-                    path = parsed_url.path
-                    
-                    # 1. Ekstrak nama baldi secara dinamik jika ada di dalam URL (Pencegahan Ralat Hardcode)
-                    if "/v0/b/" in path and "/o/" in path:
-                        b_start = path.find("/v0/b/") + 6
-                        b_end = path.find("/o/")
-                        bucket_name = path[b_start:b_end]
-                        print(f"[{job_id}] Baldi dinamik dikesan secara automatik: {bucket_name}")
-                    
-                    # 2. Parsing URL ke nama laluan yang selamat dan utuh (Membetulkan Ralat Pemotongan / Slicing)
-                    if "/o/" in path:
-                        audio_url = unquote(path.split("/o/", 1)[1])
 
-                # Gunakan baldi yang telah disahkan secara dinamik untuk memuat turun
-                target_bucket = storage.bucket(bucket_name) if self.firebase_active else self.bucket
-                blob = target_bucket.blob(audio_url)
-                blob.download_to_filename(str(local_audio_path))
+                # JIKA INPUT IALAH PAUTAN YOUTUBE (Gunakan RapidAPI untuk memuat turun)
+                if youtube_url:
+                    print(f"[{job_id}] Mengesan pautan YouTube: {youtube_url}. Memanggil RapidAPI untuk memuat turun...")
+                    import requests
+                    headers = {
+                        "X-RapidAPI-Key": "4bad7baac7msha8abfe0fc35b3a2p1baa6ajsn281427eb1961",
+                        "X-RapidAPI-Host": "youtube-info-download-api.p.rapidapi.com"
+                    }
+                    params = {
+                        "format": "mp3",
+                        "url": youtube_url,
+                        "audio_quality": "128",
+                        "add_info": "0",
+                        "audio_language": "en",
+                        "no_merge": "false",
+                        "allow_extended_duration": "false"
+                    }
+                    api_url = "https://youtube-info-download-api.p.rapidapi.com/api"
+                    response = requests.get(api_url, headers=headers, params=params)
+                    
+                    if response.status_code != 200:
+                        raise RuntimeError(f"RapidAPI gagal mengembalikan pautan dengan kod status {response.status_code}. Detail: {response.text}")
+                    
+                    response_data = response.json()
+                    print(f"[{job_id}] Respon RapidAPI Diterima: {response_data}")
+
+                    # Ekstrak pautan muat turun secara dinamik
+                    download_link = None
+                    for key in ["link", "url", "download_url", "downloadUrl", "download"]:
+                        if key in response_data and response_data[key]:
+                            download_link = response_data[key]
+                            break
+                    
+                    if not download_link:
+                        raise ValueError(f"Tidak dapat mencari pautan muat turun dalam respon RapidAPI. Respon: {response_data}")
+
+                    print(f"[{job_id}] Pautan muat turun MP3 ditemui: {download_link}. Memulakan muat turun...")
+                    local_audio_path = local_audio_path.with_suffix(suffix)
+                    
+                    # Muat turun fail audio terus
+                    audio_response = requests.get(download_link, stream=True)
+                    if audio_response.status_code != 200:
+                        raise RuntimeError(f"Gagal memuat turun MP3 dari pautan RapidAPI. Status: {audio_response.status_code}")
+                    
+                    with open(local_audio_path, "wb") as f:
+                        for chunk in audio_response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                    print(f"[{job_id}] Fail MP3 dari YouTube berjaya dimuat turun ke: {local_audio_path}")
+
+                # JIKA INPUT IALAH AUDIO URL DARI STORAGE
+                else:
+                    print(f"[{job_id}] Memuat turun audio sedia ada dari Storage...")
+                    if ".wav" in audio_url.lower():
+                        suffix = ".wav"
+                    elif ".m4a" in audio_url.lower():
+                        suffix = ".m4a"
+
+                    local_audio_path = local_audio_path.with_suffix(suffix)
+
+                    if "firebasestorage.googleapis.com" in audio_url:
+                        from urllib.parse import urlparse, unquote
+                        parsed_url = urlparse(audio_url)
+                        path = parsed_url.path
+                        
+                        # 1. Ekstrak nama baldi secara dinamik jika ada di dalam URL (Pencegahan Ralat Hardcode)
+                        if "/v0/b/" in path and "/o/" in path:
+                            bucket_name = path[path.find("/v0/b/") + 6 : path.find("/o/")]
+                            print(f"[{job_id}] Baldi dinamik dikesan secara automatik: {bucket_name}")
+                        
+                        # 2. Parsing URL ke nama laluan yang selamat dan utuh (Membetulkan Ralat Pemotongan / Slicing)
+                        if "/o/" in path:
+                            audio_url = unquote(path.split("/o/", 1)[1])
+
+                    # Gunakan baldi yang telah disahkan secara dinamik untuk memuat turun
+                    target_bucket = storage.bucket(bucket_name) if self.firebase_active else self.bucket
+                    blob = target_bucket.blob(audio_url)
+                    blob.download_to_filename(str(local_audio_path))
 
                 # Jalankan pipeline pemprosesan menggunakan fail sementara tersebut
                 self.run_pipeline(
@@ -363,25 +409,19 @@ def transcribe_trigger():
     user_id = data.get("userId")
     job_id = data.get("jobId")
     audio_url = data.get("audioUrl")
-
-    # NOTA: "youtubeUrl" tidak lagi disokong. Dikembalikan sebagai ralat jelas
-    # supaya frontend/pengguna tahu sebabnya, bukan gagal senyap selepas 4 saat.
-    if data.get("youtubeUrl"):
-        return jsonify({
-            "error": "YouTube link import is no longer supported. Please upload an audio file instead."
-        }), 400
+    youtube_url = data.get("youtubeUrl")
 
     if not user_id or not job_id:
         return jsonify({"error": "Missing required fields (userId, jobId)"}), 400
 
-    if not audio_url:
-        return jsonify({"error": "Please provide an audioUrl (uploaded audio file)"}), 400
+    if not audio_url and not youtube_url:
+        return jsonify({"error": "Please provide an audioUrl or a youtubeUrl"}), 400
 
     # Jalankan tugasan secara asynchronous
     import threading
     thread = threading.Thread(
         target=orchestrator.process_incoming_cloud_job,
-        args=(user_id, job_id, audio_url)
+        args=(user_id, job_id, audio_url, youtube_url)
     )
     thread.start()
 
