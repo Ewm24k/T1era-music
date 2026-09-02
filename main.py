@@ -24,6 +24,7 @@ logging.getLogger('tensorflow').setLevel(logging.ERROR)
 import time
 import tempfile
 import traceback
+import re
 from pathlib import Path
 
 # Impor Flask & CORS untuk binaan API Web awan yang selamat
@@ -88,6 +89,47 @@ class CentralOrchestrator:
             print(f"[FIREBASE] Gagal mengaktifkan Firebase: {e}. Mod Tempatan digunakan.")
             self.firebase_active = False
 
+    def _sanitize_filename(self, name: str) -> str:
+        """Menapis tajuk lagu supaya selamat digunakan sebagai nama fail di Firebase Storage"""
+        # Hanya benarkan huruf, nombor, ruang, sempang, dan garis bawah
+        cleaned = re.sub(r'[^a-zA-Z0-9\s\-_]', '', name)
+        cleaned = " ".join(cleaned.split())  # Buang ruang kosong bertindih
+        return cleaned if cleaned else "Track"
+
+    def get_youtube_title_rapid(self, video_id: str) -> str:
+        """Mendapatkan tajuk rasmi video YouTube menggunakan API youtube-media-downloader di RapidAPI"""
+        import requests
+        api_url = "https://youtube-media-downloader.p.rapidapi.com/v2/video/details"
+        headers = {
+            'x-rapidapi-key': "4bad7baac7msha8abfe0fc35b3a2p1baa6ajsn281427eb1961",
+            'x-rapidapi-host': "youtube-media-downloader.p.rapidapi.com",
+            'Content-Type': "application/json"
+        }
+        try:
+            response = requests.get(api_url, headers=headers, params={"videoId": video_id}, timeout=15)
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Cuba dapatkan tajuk dari beberapa struktur objek respons yang mungkin
+                title = data.get("title")
+                if title:
+                    return title
+                    
+                items = data.get("items", [])
+                if items and isinstance(items, list):
+                    title = items[0].get("title")
+                    if title:
+                        return title
+                        
+                video_data = data.get("video", {})
+                if isinstance(video_data, dict):
+                    title = video_data.get("title")
+                    if title:
+                        return title
+        except Exception as e:
+            print(f"[RAPID DETAILS ERROR] Gagal mendapatkan tajuk video menerusi RapidAPI: {e}")
+        return "YouTube Track"
+
     def update_status(self, user_id: str, job_id: str, status: str, progress: int, error_msg: str = None):
         self._ensure_firebase()
         if self.firebase_active and user_id and job_id:
@@ -118,7 +160,7 @@ class CentralOrchestrator:
             return blob.public_url
         return ""
 
-    def run_pipeline(self, input_audio_path: Path, temp_work_dir: Path, is_cloud: bool, user_id: str = None, job_id: str = None, bucket_name: str = None, raw_audio_storage_path: str = None):
+    def run_pipeline(self, input_audio_path: Path, temp_work_dir: Path, is_cloud: bool, user_id: str = None, job_id: str = None, bucket_name: str = None, raw_audio_storage_path: str = None, track_title: str = None):
         """Menjalankan rantaian transkripsi Stage 0 ke 6 secara berturutan"""
         start_time = time.time()
         print("\n" + "=" * 70)
@@ -154,11 +196,15 @@ class CentralOrchestrator:
                 print(f"[STAGE 0 SUCCESS] Subprocess selesai dengan jayanya.")
                 print(f"STDOUT:\n{result.stdout}")
 
-            # [KEMASKINI DUA MIDI] Muat naik MIDI asal dari Stage 0 secara terus
+            # [KEMASKINI DUA MIDI] Muat naik MIDI asal dari Stage 0 secara terus (Menggunakan Tajuk Tersuai)
             original_midi_url = ""
+            filename_base = "final_score"
+            if track_title:
+                filename_base = self._sanitize_filename(track_title)
+
             if is_cloud and self.firebase_active and user_id and job_id:
                 try:
-                    remote_stage0_path = f"users/{user_id}/transcriptions/{job_id}/original_stage0.mid"
+                    remote_stage0_path = f"users/{user_id}/transcriptions/{job_id}/{filename_base}_stage0.mid"
                     print(f"[CLOUD] Memulakan muat naik Stage 0 MIDI ke: {remote_stage0_path}")
                     original_midi_url = self.upload_to_storage(stage0_raw_mid, remote_stage0_path, bucket_name)
                     print(f"[CLOUD SUCCESS] Fail MIDI asal (Stage 0) dimuat naik ke Firebase Storage: {original_midi_url}")
@@ -257,10 +303,10 @@ class CentralOrchestrator:
             if is_cloud and self.firebase_active and user_id and job_id:
                 self.update_status(user_id, job_id, "UPLOADING_RESULTS", 95)
 
-                remote_path = f"users/{user_id}/transcriptions/{job_id}/final_score.mid"
+                remote_path = f"users/{user_id}/transcriptions/{job_id}/{filename_base}.mid"
                 download_url = self.upload_to_storage(stage6_final_mid, remote_path, bucket_name)
 
-                # Kemaskini Firestore dengan kedua-dua URL MIDI
+                # Kemaskini Firestore dengan kedua-dua URL MIDI dan Tajuk Asal
                 job_ref = self.db.collection("users").document(user_id).collection("midi_jobs").document(job_id)
                 job_update_payload = {
                     "status": "COMPLETED",
@@ -270,11 +316,13 @@ class CentralOrchestrator:
                 }
                 if original_midi_url:
                     job_update_payload["originalMidiUrl"] = original_midi_url
+                if track_title:
+                    job_update_payload["title"] = track_title
 
                 job_ref.update(job_update_payload)
                 print(f"[CLOUD] Fail MIDI akhir dimuat naik ke Firebase Storage: {download_url}")
 
-                # [KEMASKINI BERSIH TEGAR] Padam fail audio mentah (MP3/WAV) asal dengan pengendalian ralat terperinci
+                # [KEMASKINI BERSIH TEGAR] Padam fail audio mentah (MP3/WAV) asal dengan pembersihan terperinci
                 if raw_audio_storage_path:
                     try:
                         print(f"[CLOUD CLEANUP] Memulakan pembersihan fail audio mentah dari Firebase Storage: {raw_audio_storage_path}")
@@ -323,6 +371,7 @@ class CentralOrchestrator:
             temp_work_path = Path(tmp_dir)
             local_audio_path = temp_work_path / "input_audio"
             raw_audio_storage_path = None
+            track_title = "Local Uploaded Track"
 
             try:
                 if not audio_url and not youtube_url:
@@ -331,10 +380,9 @@ class CentralOrchestrator:
                 suffix = ".mp3"
                 bucket_name = OrchestratorConfig.BUCKET_NAME
 
-                # JIKA INPUT IALAH PAUTAN YOUTUBE (Gunakan API youtube-mp36 yang munasabah & pantas)
+                # JIKA INPUT IALAH PAUTAN YOUTUBE (Menggunakan muat turun RapidAPI untuk mendapatkan nama tajuk)
                 if youtube_url:
                     # 1. Ekstrak Video ID daripada pautan YouTube secara selamat
-                    import re
                     video_id = None
                     patterns = [
                         r'(?:v=|\/embed\/|\/shorts\/|\/youtu\.be\/|\/v\/|\/e\/|watch\?v=|&v=)([a-zA-Z0-9_-]{11})',
@@ -348,6 +396,10 @@ class CentralOrchestrator:
                     
                     if not video_id:
                         raise ValueError(f"Tidak dapat mengekstrak Video ID dari pautan YouTube: {youtube_url}")
+
+                    # 1.1 Dapatkan tajuk rasmi video YouTube menggunakan API youtube-media-downloader (RapidAPI)
+                    track_title = self.get_youtube_title_rapid(video_id)
+                    print(f"[{job_id}] Tajuk video dikesan: {track_title}")
                         
                     print(f"[{job_id}] Video ID dikesan: {video_id}. Memanggil API youtube-mp36...")
 
@@ -424,10 +476,13 @@ class CentralOrchestrator:
 
                     raw_audio_storage_path = remote_audio_path
 
-                    # Kemaskini dokumen Firestore dengan pautan fail audio di Storage
+                    # Kemaskini dokumen Firestore dengan pautan fail audio di Storage dan tajuk yang diperoleh
                     if self.firebase_active:
                         job_ref = self.db.collection("users").document(user_id).collection("midi_jobs").document(job_id)
-                        job_ref.set({"audioUrl": firebase_audio_url}, merge=True)
+                        job_ref.set({
+                            "audioUrl": firebase_audio_url,
+                            "title": track_title
+                        }, merge=True)
 
                     # 5. KINI: Muat turun balik fail dari Storage (Sama seperti aliran muat naik biasa!)
                     self.update_status(user_id, job_id, "CACHING_AUDIO", 12)
@@ -466,8 +521,15 @@ class CentralOrchestrator:
                         # 2. Parsing URL ke nama laluan yang selamat dan utuh
                         if "/o/" in path:
                             audio_url = unquote(path.split("/o/", 1)[1])
+                            # Ekstrak nama fail asal tempatan untuk dijadikan tajuk secara rawak
+                            track_title = Path(audio_url).stem
 
                     raw_audio_storage_path = audio_url
+
+                    # Simpan tajuk lagu ke dalam Firestore sebelum memulakan pemprosesan
+                    if self.firebase_active:
+                        job_ref = self.db.collection("users").document(user_id).collection("midi_jobs").document(job_id)
+                        job_ref.set({"title": track_title}, merge=True)
 
                     # Gunakan baldi yang telah disahkan secara dinamik untuk memuat turun
                     target_bucket = storage.bucket(bucket_name) if self.firebase_active else self.bucket
@@ -485,7 +547,8 @@ class CentralOrchestrator:
                     user_id=user_id,
                     job_id=job_id,
                     bucket_name=bucket_name,
-                    raw_audio_storage_path=raw_audio_storage_path
+                    raw_audio_storage_path=raw_audio_storage_path,
+                    track_title=track_title
                 )
 
             except Exception as e:
