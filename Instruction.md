@@ -28,6 +28,12 @@ git pull
 sudo systemctl restart t1era-music
 ```
 
+##Check Active Ngrol Url
+
+```
+curl -s http://localhost:4040/api/tunnels | grep -o 'https://[^"]*'
+```
+
 
 
 This guide contains the exact commands and workflows to start, check, and maintain your T1ERA Music server.
