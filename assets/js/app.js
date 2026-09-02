@@ -177,9 +177,6 @@ const authErrorMsg = document.getElementById("auth-error-msg");
 const authSwitchView = document.getElementById("auth-switch-view");
 const googleAuthBtn = document.getElementById("google-auth-btn");
 
-// Premium Top Right Corner Logout Control
-const topLogoutBtn = document.getElementById("top-logout-btn");
-
 // Menu Footer Profile UI elements
 const menuFooter = document.getElementById("menu-footer");
 const userNameEl = document.getElementById("user-name");
@@ -220,6 +217,19 @@ let isSignUpState = false;
 // Track Auth State & Live sync profile variables
 let currentUserObj = null;
 
+const menuToggle = document.getElementById("menu-toggle");
+const sideMenu = document.getElementById("side-menu");
+const menuOverlay = document.getElementById("menu-overlay");
+
+function toggleMenu() {
+  menuToggle.classList.toggle("active");
+  sideMenu.classList.toggle("open");
+  menuOverlay.classList.toggle("active");
+}
+
+menuToggle.addEventListener("click", toggleMenu);
+menuOverlay.addEventListener("click", toggleMenu);
+
 if (auth) {
   onAuthStateChanged(auth, (user) => {
     currentUserObj = user;
@@ -248,8 +258,11 @@ if (auth) {
       localStorage.removeItem("t1era_logged_in");
       menuFooter.style.display = "none";
       
-      // Sembunyikan butang log keluar penjuru kanan atas jika sesi tamat
-      if (topLogoutBtn) topLogoutBtn.style.display = "none";
+      // Sembunyikan dan tutup butang menu sisi jika pengguna tidak aktif terakreditasi
+      if (menuToggle) menuToggle.style.display = "none";
+      if (sideMenu && sideMenu.classList.contains("open")) {
+        toggleMenu();
+      }
 
       // Jika sesyen telah tamat atau log keluar berlaku semasa berada di menu konsol
       if (servicesOverlay.classList.contains("active")) {
@@ -336,19 +349,6 @@ v1.addEventListener("ended", () => {
     })
     .catch((err) => { console.warn("Loop transition failed:", err); });
 });
-
-const menuToggle = document.getElementById("menu-toggle");
-const sideMenu = document.getElementById("side-menu");
-const menuOverlay = document.getElementById("menu-overlay");
-
-function toggleMenu() {
-  menuToggle.classList.toggle("active");
-  sideMenu.classList.toggle("open");
-  menuOverlay.classList.toggle("active");
-}
-
-menuToggle.addEventListener("click", toggleMenu);
-menuOverlay.addEventListener("click", toggleMenu);
 
 enterBtn.addEventListener("click", () => {
   enterBtn.classList.remove("show");
@@ -449,7 +449,10 @@ servicesOverlay.addEventListener("click", (e) => {
     servicesOverlay.classList.remove("active");
     
     // Sembunyikan butang log keluar apabila menu konsol ditutup
-    if (topLogoutBtn) topLogoutBtn.style.display = "none";
+    if (menuToggle) menuToggle.style.display = "none";
+    if (sideMenu && sideMenu.classList.contains("open")) {
+      toggleMenu();
+    }
     
     setTimeout(() => { enterBtn.classList.add("show"); }, 500);
   }
@@ -527,8 +530,8 @@ function runSessionVerification() {
               verificationScreen.classList.remove("active");
               servicesOverlay.classList.add("active");
               
-              // Paparkan butang log keluar penjuru kanan atas apabila menu konsol dipaparkan
-              if (topLogoutBtn) topLogoutBtn.style.display = "flex";
+              // Paparkan butang menu sisi apabila menu konsol dipaparkan menerusi pengesahan
+              if (menuToggle) menuToggle.style.display = "flex";
             }, 1200);
           }, 1200);
         }, 1200);
@@ -579,8 +582,13 @@ function resetToWelcomeState() {
   authOverlay.classList.remove("active");
   enterBtn.classList.remove("show");
   
-  // Sembunyikan butang log keluar penjuru kanan atas semasa pembersihan visual penuh
-  if (topLogoutBtn) topLogoutBtn.style.display = "none";
+  // Sembunyikan dan tutup butang menu sisi semasa pembersihan visual penuh
+  if (menuToggle) menuToggle.style.display = "none";
+  if (sideMenu && sideMenu.classList.contains("open")) {
+    sideMenu.classList.remove("open");
+    menuToggle.classList.remove("active");
+    menuOverlay.classList.remove("active");
+  }
   
   // Padam data profil semasanya
   currentUserObj = null;
@@ -592,8 +600,8 @@ function executeSignoutSequence(isFromSidebar = false) {
     toggleMenu();
   }
   
-  // Sembunyikan butang log keluar secara langsung semasa proses penutupan sesi bermula
-  if (topLogoutBtn) topLogoutBtn.style.display = "none";
+  // Sembunyikan butang menu sisi secara langsung semasa proses penutupan sesi bermula
+  if (menuToggle) menuToggle.style.display = "none";
   
   signoutOverlay.style.display = "flex";
   setTimeout(() => { signoutOverlay.classList.add("active"); }, 10);
@@ -633,16 +641,10 @@ function executeSignoutSequence(isFromSidebar = false) {
   }, 1000);
 }
 
-// Pemantul klik log keluar (Menu Sisi & Penjuru Kanan Atas)
+// Pemantul klik log keluar (Menu Sisi sahaja sekarang)
 logoutBtn.addEventListener("click", () => {
   executeSignoutSequence(true);
 });
-
-if (topLogoutBtn) {
-  topLogoutBtn.addEventListener("click", () => {
-    executeSignoutSequence(false);
-  });
-}
 
 // =========================================================
 // --- T1ERA MUSIC WEB3 UPLOAD & PIPELINE INTEGRATION ---
@@ -741,8 +743,8 @@ if (youtubeSubmitBtn) {
     const userId = currentUserObj ? currentUserObj.uid : "guest_studio_creator";
     const jobId = "yt_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
 
-    // Sembunyikan butang log keluar supaya tidak mengganggu paparan terminal progress
-    if (topLogoutBtn) topLogoutBtn.style.display = "none";
+    // Sembunyikan butang menu sisi supaya tidak mengganggu paparan terminal progress
+    if (menuToggle) menuToggle.style.display = "none";
 
     // Tutup menu overlay services, buka konsol progress terminal
     servicesOverlay.classList.remove("active");
@@ -834,8 +836,8 @@ audioFileInput.addEventListener("change", (event) => {
   const userId = currentUserObj ? currentUserObj.uid : "guest_studio_creator";
   const jobId = "file_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
 
-  // Sembunyikan butang log keluar semasa muat naik tempatan bermula
-  if (topLogoutBtn) topLogoutBtn.style.display = "none";
+  // Sembunyikan butang menu sisi semasa muat naik tempatan bermula
+  if (menuToggle) menuToggle.style.display = "none";
 
   servicesOverlay.classList.remove("active");
   dropzoneLabelText.textContent = "UPLOADING...";
@@ -1142,8 +1144,8 @@ function bypassIntroForAuthenticatedUser() {
     // Paparkan serta-merta 3 Option (Studio Console)
     servicesOverlay.classList.add("active");
     
-    // Paparkan butang log keluar penjuru kanan atas apabila menu konsol dipaparkan menerusi pintasan
-    if (topLogoutBtn) topLogoutBtn.style.display = "flex";
+    // Paparkan butang menu sisi apabila menu konsol dipaparkan menerusi pintasan
+    if (menuToggle) menuToggle.style.display = "flex";
   }
 }
 
