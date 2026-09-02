@@ -342,20 +342,40 @@ class CentralOrchestrator:
                         "Content-Type": "application/json"
                     }
                     api_url = "https://youtube-mp36.p.rapidapi.com/dl"
-                    response = requests.get(api_url, headers=headers, params={"id": video_id})
                     
-                    if response.status_code != 200:
-                        raise RuntimeError(f"API youtube-mp36 gagal dengan kod status {response.status_code}. Detail: {response.text}")
+                    # [PEMBAIKAN TEGAR] Menggunakan gelung polling bagi mengendalikan status 'processing' & ralat 504
+                    max_attempts = 12
+                    delay_seconds = 5
+                    download_link = None
                     
-                    response_data = response.json()
-                    print(f"[{job_id}] Respon API Diterima: {response_data}")
-
-                    if response_data.get("status") != "ok" or not response_data.get("link"):
-                        raise ValueError(f"API youtube-mp36 melaporkan kegagalan atau tiada pautan. Respon: {response_data}")
-
-                    download_link = response_data["link"]
-                    video_title = response_data.get("title") or "YouTube Track"
-                    print(f"[{job_id}] Pautan muat turun MP3 sedia dikesan: {download_link}")
+                    for attempt in range(1, max_attempts + 1):
+                        print(f"[{job_id}] Cubaan memanggil API youtube-mp36 ({attempt}/{max_attempts})...")
+                        try:
+                            # Tetapkan timeout 15 saat bagi mengelakkan permohonan tersangkut secara tidak menentu
+                            response = requests.get(api_url, headers=headers, params={"id": video_id}, timeout=15)
+                            
+                            if response.status_code == 200:
+                                response_data = response.json()
+                                status = response_data.get("status")
+                                
+                                if status == "ok" and response_data.get("link"):
+                                    download_link = response_data["link"]
+                                    print(f"[{job_id}] Pautan muat turun sedia dikesan: {download_link}")
+                                    break
+                                elif status == "processing":
+                                    print(f"[{job_id}] Audio sedang diproses oleh pelayan penukar. Sila tunggu...")
+                                else:
+                                    print(f"[{job_id}] API melaporkan ralat: {response_data.get('msg') or 'Gagal tanpa maklumat'}")
+                            else:
+                                print(f"[{job_id}] API memulangkan status {response.status_code}. Sila tunggu untuk percubaan seterusnya...")
+                        except requests.exceptions.RequestException as req_err:
+                            print(f"[{job_id}] Ralat rangkaian / Gateway Timeout semasa memanggil API: {req_err}")
+                        
+                        if attempt < max_attempts:
+                            time.sleep(delay_seconds)
+                    
+                    if not download_link:
+                        raise RuntimeError("Gagal mendapatkan pautan muat turun YouTube dari API selepas beberapa cubaan (Kemungkinan ralat rangkaian atau pelayan API sibuk).")
 
                     # 3. Muat turun fail audio terus secara tempatan ke VM (CACHING_AUDIO -> Loading)
                     self.update_status(user_id, job_id, "CACHING_AUDIO", 10)
