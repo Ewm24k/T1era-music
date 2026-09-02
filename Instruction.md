@@ -112,3 +112,19 @@ git clone https://github.com/Ewm24k/T1era-music.git
 mv ~/firebase-key.json ~/T1era-music/
 mv ~/cookies.txt ~/T1era-music/
 ```
+
+=====================================================
+
+Check status ngrok
+
+```
+ps aux | grep '[n]grok'
+```
+```
+curl https://crock-blast-purchase.ngrok-free.dev/
+```
+```
+sudo systemctl status t1era-music --no-pager
+ps aux | grep '[n]grok'
+curl https://crock-blast-purchase.ngrok-free.dev/
+```
