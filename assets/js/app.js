@@ -907,12 +907,6 @@ function openLiveTerminalConsole(userId, jobId) {
 
   if (db && userId !== "guest_studio_creator") {
     const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
-
-    // Tracks whether the Storage upload leg has actually started (YouTube flow only).
-    // Defaults to true so the plain file-upload flow (which never sends
-    // REQUESTING_YT_LINK / UPLOADING_AUDIO_TO_CLOUD) behaves exactly as before.
-    let cloudUploadStarted = true;
-
     const unsubscribe = onSnapshot(jobRef, (snapshot) => {
       if (!snapshot.exists()) return;
 
@@ -932,9 +926,6 @@ function openLiveTerminalConsole(userId, jobId) {
       } else if (status === "REQUESTING_YT_LINK" || status === "DOWNLOADING_AUDIO") {
         setStepStatus("step-init", "success");
         setStepStatus("step-download", "loading");
-        if (status === "REQUESTING_YT_LINK") {
-          cloudUploadStarted = false; // YouTube job — cloud leg hasn't happened yet
-        }
         const stepDownloadLabel = document.querySelector("#step-download .step-label");
         if (stepDownloadLabel) {
           if (status === "REQUESTING_YT_LINK") {
@@ -944,22 +935,14 @@ function openLiveTerminalConsole(userId, jobId) {
           }
         }
       } else if (status === "UPLOADING_AUDIO_TO_CLOUD") {
-        cloudUploadStarted = true;
         setStepStatus("step-init", "success");
         setStepStatus("step-download", "success");
         setStepStatus("step-cloud-upload", "loading");
       } else if (status === "CACHING_AUDIO") {
         setStepStatus("step-init", "success");
         setStepStatus("step-download", "success");
-        if (cloudUploadStarted) {
-          // Second CACHING_AUDIO in the YouTube flow (after the Storage round trip),
-          // or the only CACHING_AUDIO in the plain file-upload flow.
-          setStepStatus("step-cloud-upload", "success");
-          setStepStatus("step-temp", "loading");
-        }
-        // else: first CACHING_AUDIO in the YouTube flow (MP3 just landed on the VM
-        // from RapidAPI). Cloud upload hasn't started yet, so leave step-cloud-upload
-        // untouched instead of marking it "done" too early.
+        setStepStatus("step-cloud-upload", "success");
+        setStepStatus("step-temp", "loading");
       } else if (status === "TRANSCRIBING_AUDIO") {
         setStepStatus("step-init", "success");
         setStepStatus("step-download", "success");
