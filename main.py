@@ -331,7 +331,7 @@ class CentralOrchestrator:
             stage6 = input_file_6.Stage5Pipeline(
                 input_path=stage5_arranged_mid,
                 output_path=stage6_final_mid,
-                log_path=temp_work_dir / "stage6_final.mid"
+                log_path=temp_work_dir / "stage6_log.txt"
             )
             stage6.run()
 
