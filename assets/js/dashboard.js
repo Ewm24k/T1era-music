@@ -1,12 +1,18 @@
-import { auth, db } from "./firebase-config.js";
+import { auth, db, storage } from "./firebase-config.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { 
     collection, 
     query, 
     where, 
     getDocs, 
-    onSnapshot 
+    onSnapshot,
+    doc,
+    deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { 
+    ref as sRef, 
+    getMetadata 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 // Local hardcoded mock tracks arrays mimicking the reference layout
 const popularTracksData = [
@@ -164,11 +170,11 @@ function loadUserTranscriptions() {
     const q = query(jobsRef, where("status", "==", "COMPLETED"));
 
     // Real-Time snapshot listener (Kini menggunakan .data() berbanding .to_dict() yang ralat)
-    onSnapshot(q, (snapshot) => {
-        const jobs = [];
+    onSnapshot(q, async (snapshot) => {
+        const rawJobs = [];
         snapshot.forEach((doc) => {
             const data = doc.data();
-            jobs.push({
+            rawJobs.push({
                 id: doc.id,
                 title: data.youtubeUrl ? extractYouTubeTitle(data.youtubeUrl) : "Local Uploaded Track",
                 source: data.youtubeUrl ? "YOUTUBE" : "UPLOAD",
@@ -179,18 +185,57 @@ function loadUserTranscriptions() {
             });
         });
 
-        if (jobs.length === 0) {
-            // Sediakan Demo Fallback jika pengguna belum mempunyai transkripsi selesai
-            renderTranscriptionsList(getMockTranscriptions());
-        } else {
-            // Urutkan secara tempatan mengikut masa siap (Newest / Last Generated first)
-            jobs.sort((a, b) => {
-                const timeA = a.completedAt ? a.completedAt.seconds : 0;
-                const timeB = b.completedAt ? b.completedAt.seconds : 0;
-                return timeB - timeA; // Tertib menurun (descending)
+        // Pengesahan fizikal kewujudan fail MIDI dalam Firebase Storage secara asynchronous (Self-Healing)
+        if (storage && rawJobs.length > 0) {
+            const validationPromises = rawJobs.map(async (job) => {
+                if (!job.midiUrl) return null;
+                
+                try {
+                    // Cuba dapatkan metadata fail MIDI dalam Storage
+                    const fileRef = sRef(storage, job.midiUrl);
+                    await getMetadata(fileRef);
+                    return job; // Fail wujud, lulus pengesahan
+                } catch (error) {
+                    // Jika ralat adalah fail tidak ditemui (Telah dipadam dari Storage secara manual)
+                    if (error.code === 'storage/object-not-found' || error.message.includes('not found')) {
+                        console.warn(`[DATA SELF-HEAL] Fail MIDI bagi Job ${job.id} telah dipadam di Storage. Memulakan pembersihan Firestore...`);
+                        try {
+                            // Padam dokumen metadata yatim piatu di Firestore secara automatik
+                            await deleteDoc(doc(db, "users", currentUser.uid, "midi_jobs", job.id));
+                            console.log(`[DATA SELF-HEAL SUCCESS] Metadata bagi Job ${job.id} berjaya dibersihkan.`);
+                        } catch (fs_err) {
+                            console.error("[DATA SELF-HEAL ERROR] Gagal membersihkan dokumen:", fs_err);
+                        }
+                    }
+                    return null; // Gagal pengesahan kewujudan fizikal
+                }
             });
 
-            renderTranscriptionsList(jobs);
+            const results = await Promise.all(validationPromises);
+            const validatedJobs = results.filter(job => job !== null);
+
+            if (validatedJobs.length === 0) {
+                renderTranscriptionsList(getMockTranscriptions());
+            } else {
+                // Urutkan secara tempatan mengikut masa siap (Newest / Last Generated first)
+                validatedJobs.sort((a, b) => {
+                    const timeA = a.completedAt ? a.completedAt.seconds : 0;
+                    const timeB = b.completedAt ? b.completedAt.seconds : 0;
+                    return timeB - timeA; // Tertib menurun (descending)
+                });
+                renderTranscriptionsList(validatedJobs);
+            }
+        } else {
+            if (rawJobs.length === 0) {
+                renderTranscriptionsList(getMockTranscriptions());
+            } else {
+                rawJobs.sort((a, b) => {
+                    const timeA = a.completedAt ? a.completedAt.seconds : 0;
+                    const timeB = b.completedAt ? b.completedAt.seconds : 0;
+                    return timeB - timeA;
+                });
+                renderTranscriptionsList(rawJobs);
+            }
         }
     }, (error) => {
         console.error("Firestore read failure:", error);
