@@ -221,6 +221,9 @@ if (auth) {
   onAuthStateChanged(auth, (user) => {
     currentUserObj = user;
     if (user) {
+      // Simpan status pengesahan di dalam storan tempatan
+      localStorage.setItem("t1era_logged_in", "true");
+
       userNameEl.textContent = user.displayName || "Studio Creator";
       userEmailEl.textContent = user.email || "";
 
@@ -238,7 +241,15 @@ if (auth) {
       }
       menuFooter.style.display = "flex";
     } else {
+      // Buang status pengesahan jika tidak log masuk
+      localStorage.removeItem("t1era_logged_in");
       menuFooter.style.display = "none";
+
+      // Jika sesyen telah tamat atau log keluar berlaku semasa berada di menu konsol
+      if (servicesOverlay.classList.contains("active")) {
+        servicesOverlay.classList.remove("active");
+        authOverlay.classList.add("active");
+      }
     }
   });
 }
@@ -534,6 +545,9 @@ logoutBtn.addEventListener("click", () => {
     setTimeout(() => {
       signOut(auth)
         .then(() => {
+          // Bersihkan storan tempatan apabila log keluar
+          localStorage.removeItem("t1era_logged_in");
+
           signoutStatusText.style.color = "#ff4a4a";
           signoutStatusText.style.textShadow = "0 0 15px #ff4a4a";
           signoutStatusText.textContent = "Sign out Successful.";
@@ -698,8 +712,7 @@ if (youtubeSubmitBtn) {
             }
           })
           .catch((err) => {
-            console.error("YouTube Transcribe request failed:", err);
-            showTerminalFailure(err.message || "Failed to start YouTube transcription job.");
+            printTerminalFailureLog(err);
           });
         };
 
@@ -726,6 +739,11 @@ if (youtubeSubmitBtn) {
       }, 1000);
     }, 1000);
   });
+}
+
+function printTerminalFailureLog(err) {
+  console.error("YouTube Transcribe request failed:", err);
+  showTerminalFailure(err.message || "Failed to start YouTube transcription job.");
 }
 
 fileDropzoneTrigger.addEventListener("click", () => { audioFileInput.click(); });
@@ -877,7 +895,7 @@ function openLiveTerminalConsole(userId, jobId) {
 
     const actionArea = document.getElementById("proc-action-area");
     if (actionArea) {
-      actionArea.innerHTML = `<div style="color:#00df89; font-weight:bold; letter-spacing:1px; font-size:0.9rem; margin-top:10px; animation: proc-pop 0.3s ease;">[ REDIRECTING TO PIANO STUDIO... ]</div>`;
+      actionArea.innerHTML = `<div style="color:#00df89; font-weight:bold; letter-spacing:1px; font-size:0.9rem; margin-top:10px; animation: ...;">[ REDIRECTING TO PIANO STUDIO... ]</div>`;
     }
     setTimeout(() => {
       window.location.href = "midiano.html?midi=" + encodeURIComponent(midiUrl);
@@ -1013,3 +1031,41 @@ function openLiveTerminalConsole(userId, jobId) {
     }
   });
 }
+
+// =========================================================
+// SISTEM PEMINTASAN INTRO BAGI PENGGUNA TERAKREDITASI
+// =========================================================
+function bypassIntroForAuthenticatedUser() {
+  if (localStorage.getItem("t1era_logged_in") === "true") {
+    // Sembunyikan serta-merta overlay permulaan & typewriter
+    overlay.style.display = "none";
+    loadingScreen.style.display = "none";
+    
+    // Aktifkan landing screen & sediakan loop video secara senyap di belakang
+    landingScreen.classList.add("active");
+    try {
+      v2.play()
+        .then(() => {
+          v2.style.opacity = "1";
+          v1.style.opacity = "0";
+        })
+        .catch(() => {
+          v2.muted = true;
+          v2.play()
+            .then(() => {
+              v2.style.opacity = "1";
+              v1.style.opacity = "0";
+            })
+            .catch((err) => console.warn("Loop background video playback blocked:", err));
+        });
+    } catch (e) {
+      console.warn("Exception setting up bypass video sequence:", e);
+    }
+
+    // Paparkan serta-merta 3 Option (Studio Console)
+    servicesOverlay.classList.add("active");
+  }
+}
+
+// Jalankan pemeriksaan pintasan serta-merta apabila skrip dimuatkan
+bypassIntroForAuthenticatedUser();
