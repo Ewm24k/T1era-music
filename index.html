@@ -1040,90 +1040,6 @@
             border-color: rgba(255, 74, 74, 0.4);
             box-shadow: 0 0 10px rgba(255, 74, 74, 0.15);
         }
-
-        /* Dynamic Sign Out Feedback Overlay */
-        #signout-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-            z-index: 160;
-            display: none;
-            justify-content: center;
-            align-items: center;
-            opacity: 0;
-            transition: opacity 0.6s cubic-bezier(0.25, 1, 0.5, 1);
-        }
-        #signout-overlay.active {
-            opacity: 1;
-        }
-        .signout-card {
-            text-align: center;
-            padding: 30px;
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 16px;
-            box-shadow: 0 10px 45px rgba(0, 0, 0, 0.8);
-            max-width: 320px;
-            width: 90%;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-        }
-        .signout-spinner {
-            width: 35px;
-            height: 35px;
-            border: 2px solid rgba(255, 255, 255, 0.1);
-            border-top-color: #ff4a4a;
-            border-radius: 50%;
-            margin: 0 auto 20px auto;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            100% { transform: rotate(360deg); }
-        }
-        .signout-text {
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 0.95rem;
-            letter-spacing: 2px;
-            color: #ffffff;
-            text-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
-            text-transform: uppercase;
-        }
-
-        /* Premium Top Right Corner Logout Button CSS styling */
-        .top-logout-btn {
-            position: absolute;
-            top: calc(20px + env(safe-area-inset-top));
-            right: calc(80px + env(safe-area-inset-right));
-            z-index: 100;
-            pointer-events: auto;
-            padding: 8px 16px;
-            font-size: 0.75rem;
-            font-weight: 500;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            color: #ff4a4a;
-            background: rgba(255, 74, 74, 0.05);
-            border: 1px solid rgba(255, 74, 74, 0.2);
-            border-radius: 50px;
-            cursor: pointer;
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .top-logout-btn:hover {
-            background: rgba(255, 74, 74, 0.15);
-            border-color: rgba(255, 74, 74, 0.6);
-            box-shadow: 0 0 15px rgba(255, 74, 74, 0.2);
-        }
     </style>
 </head>
 <body>
@@ -1164,16 +1080,8 @@
                 </div>
             </div>
 
-            <!-- Premium Top-Right Corner Logout Button -->
-            <button id="top-logout-btn" class="top-logout-btn" style="display: none;">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="margin-right: 6px; display: inline-block; vertical-align: middle;">
-                    <path d="M16 13v-2H10V9l-5 3 5 3v-2h6zM20 3H9c-1.1 0-2 .9-2 2v4h2V5h11v14H9v-4H7v4c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
-                </svg>
-                Sign Out
-            </button>
-
-            <!-- Hamburger Button and Slide menu -->
-            <div class="menu-btn" id="menu-toggle">
+            <!-- Hamburger Button and Slide menu (Hiddent by default on Intro video pages) -->
+            <div class="menu-btn" id="menu-toggle" style="display: none;">
                 <span></span>
                 <span></span>
                 <span></span>
