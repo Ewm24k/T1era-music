@@ -5,8 +5,9 @@ Meredamkan semua log amaran TensorFlow, menyokong pemprosesan fail sementara,
 mengaktifkan sekatan CORS, dan berjalan menggunakan pelayan produksi WSGI Gunicorn.
 
 NOTA PERUBAHAN:
-Sokongan YouTube ditala untuk memuat naik fail MP3 ke Firebase Storage terlebih dahulu
-sebelum transkripsi dimulakan bagi memastikan aliran kerja konsisten dengan mod muat naik biasa.
+Sokongan YouTube diaktifkan secara asli menggunakan API youtube-mp36 yang munasabah & pantas.
+Ditukar kepada set(merge=True) dalam Firestore dan fail audio dimuat naik ke Storage 
+terlebih dahulu bagi menyelaraskan proses dengan mod muat naik biasa.
 """
 
 import os
@@ -99,14 +100,15 @@ class CentralOrchestrator:
                 }
                 if error_msg:
                     payload["error"] = error_msg
-                job_ref.update(payload)
+                # Gunakan .set(payload, merge=True) bagi mengelakkan kegagalan jika dokumen belum wujud di Firestore
+                job_ref.set(payload, merge=True)
             except Exception as e:
                 print(f"[FIREBASE ERROR] Gagal kemaskini status Firestore: {e}")
 
         print(f"[PROGRESS] {progress}% | Status: {status}")
 
     def upload_to_storage(self, local_path: Path, remote_path: str, bucket_name: str = None) -> str:
-        """Memuat naik sebarang jenis fail (Audio / MIDI) ke Firebase Storage"""
+        """Memuat naik sebarang fail (Audio / MIDI) ke Firebase Storage"""
         self._ensure_firebase()
         if self.firebase_active:
             target_bucket = storage.bucket(bucket_name) if bucket_name else self.bucket
@@ -340,15 +342,30 @@ class CentralOrchestrator:
                     print(f"[{job_id}] Fail MP3 dari YouTube berjaya dimuat turun ke: {local_audio_path}")
 
                     # 4. SINKRONISASI: Muat naik fail MP3 yang dimuat turun ke Firebase Storage (Penyelarasan Aliran)
-                    print(f"[{job_id}] Memuat naik MP3 YouTube ke Firebase Storage untuk dipadankan dengan aliran biasa...")
+                    self.update_status(user_id, job_id, "UPLOADING_AUDIO_TO_CLOUD", 8)
+                    print(f"[{job_id}] Memuat naik MP3 YouTube ke Firebase Storage untuk penyelarasan aliran...")
                     remote_audio_path = f"users/{user_id}/transcriptions/{job_id}/youtube_audio.mp3"
+                    
                     firebase_audio_url = self.upload_to_storage(local_audio_path, remote_audio_path, bucket_name)
                     print(f"[{job_id}] Fail MP3 YouTube berjaya diletakkan di Storage: {firebase_audio_url}")
 
                     # Kemaskini dokumen Firestore dengan pautan fail audio di Storage
                     if self.firebase_active:
                         job_ref = self.db.collection("users").document(user_id).collection("midi_jobs").document(job_id)
-                        job_ref.update({"audioUrl": firebase_audio_url})
+                        job_ref.set({"audioUrl": firebase_audio_url}, merge=True)
+
+                    # 5. KINI: Muat turun balik fail dari Storage (Sama seperti aliran muat naik biasa!)
+                    self.update_status(user_id, job_id, "CACHING_AUDIO", 12)
+                    print(f"[{job_id}] Memuat turun semula MP3 dari Firebase Storage ke workspace pipeline...")
+                    
+                    # Padankan local_audio_path muktamad
+                    local_audio_path = local_audio_path.with_suffix(suffix)
+                    
+                    # Muat turun semula menggunakan blob Storage
+                    target_bucket = storage.bucket(bucket_name) if self.firebase_active else self.bucket
+                    blob = target_bucket.blob(remote_audio_path)
+                    blob.download_to_filename(str(local_audio_path))
+                    print(f"[{job_id}] Fail MP3 berjaya disegerakkan dan sedia untuk pipeline: {local_audio_path}")
 
                 # JIKA INPUT IALAH AUDIO URL DARI STORAGE (Muat turun terus)
                 else:
@@ -366,12 +383,12 @@ class CentralOrchestrator:
                         parsed_url = urlparse(audio_url)
                         path = parsed_url.path
                         
-                        # Ekstrak nama baldi secara dinamik jika ada di dalam URL
+                        # 1. Ekstrak nama baldi secara dinamik jika ada di dalam URL
                         if "/v0/b/" in path and "/o/" in path:
                             bucket_name = path[path.find("/v0/b/") + 6 : path.find("/o/")]
                             print(f"[{job_id}] Baldi dinamik dikesan secara automatik: {bucket_name}")
                         
-                        # Parsing URL ke nama laluan yang selamat dan utuh
+                        # 2. Parsing URL ke nama laluan yang selamat dan utuh
                         if "/o/" in path:
                             audio_url = unquote(path.split("/o/", 1)[1])
 
