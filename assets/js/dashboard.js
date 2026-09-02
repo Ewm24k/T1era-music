@@ -174,9 +174,15 @@ function loadUserTranscriptions() {
         const rawJobs = [];
         snapshot.forEach((doc) => {
             const data = doc.data();
+            
+            // Fallback default naming in case Firestore title is completely empty
+            const fallbackTitle = data.youtubeUrl ? extractYouTubeTitle(data.youtubeUrl) : "Local Uploaded Track";
+            
             rawJobs.push({
                 id: doc.id,
-                title: data.youtubeUrl ? extractYouTubeTitle(data.youtubeUrl) : "Local Uploaded Track",
+                // Prioritize Firestore real-time updated title field first
+                title: data.title || fallbackTitle, 
+                fallbackTitle: fallbackTitle,
                 source: data.youtubeUrl ? "YOUTUBE" : "UPLOAD",
                 midiUrl: data.midiUrl, // Pautan fail MIDI akhir (Stage 6) dari Firebase Storage
                 originalMidiUrl: data.originalMidiUrl || null, // Pautan fail MIDI asal (Stage 0) dari Firebase Storage
@@ -185,9 +191,38 @@ function loadUserTranscriptions() {
             });
         });
 
+        // ------------------------------------------------------------------
+        // RE-RESOLVE TITLE FROM Storage (details.json) IF TITLE STILL GENERIC
+        // ------------------------------------------------------------------
+        const resolveTitlesPromises = rawJobs.map(async (job) => {
+            const isGeneric = !job.title || 
+                              job.title === "Local Uploaded Track" || 
+                              job.title.startsWith("YouTube Stream Audio");
+            
+            // If the title is generic and we have a valid MIDI location URL
+            if (isGeneric && job.midiUrl) {
+                try {
+                    // Derive details.json location relative to the final_score.mid address
+                    const detailsUrl = job.midiUrl.replace("final_score.mid", "details.json");
+                    const response = await fetch(detailsUrl);
+                    if (response.ok) {
+                        const jsonDetails = await response.json();
+                        if (jsonDetails && jsonDetails.title) {
+                            job.title = jsonDetails.title;
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`[STORAGE TITLE RESOLVE WARNING] Failed to retrieve details.json for Job ${job.id}:`, e);
+                }
+            }
+            return job;
+        });
+
+        const resolvedJobs = await Promise.all(resolveTitlesPromises);
+
         // Pengesahan fizikal kewujudan fail MIDI dalam Firebase Storage secara asynchronous (Self-Healing)
-        if (storage && rawJobs.length > 0) {
-            const validationPromises = rawJobs.map(async (job) => {
+        if (storage && resolvedJobs.length > 0) {
+            const validationPromises = resolvedJobs.map(async (job) => {
                 if (!job.midiUrl) return null;
                 
                 try {
@@ -226,15 +261,15 @@ function loadUserTranscriptions() {
                 renderTranscriptionsList(validatedJobs);
             }
         } else {
-            if (rawJobs.length === 0) {
+            if (resolvedJobs.length === 0) {
                 renderTranscriptionsList(getMockTranscriptions());
             } else {
-                rawJobs.sort((a, b) => {
+                resolvedJobs.sort((a, b) => {
                     const timeA = a.completedAt ? a.completedAt.seconds : 0;
                     const timeB = b.completedAt ? b.completedAt.seconds : 0;
                     return timeB - timeA;
                 });
-                renderTranscriptionsList(rawJobs);
+                renderTranscriptionsList(resolvedJobs);
             }
         }
     }, (error) => {
