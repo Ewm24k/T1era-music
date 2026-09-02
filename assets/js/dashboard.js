@@ -172,7 +172,9 @@ function loadUserTranscriptions() {
                 id: doc.id,
                 title: data.youtubeUrl ? extractYouTubeTitle(data.youtubeUrl) : "Local Uploaded Track",
                 source: data.youtubeUrl ? "YOUTUBE" : "UPLOAD",
-                midiUrl: data.midiUrl,
+                midiUrl: data.midiUrl, // Pautan fail MIDI akhir (Stage 6) dari Firebase Storage
+                originalMidiUrl: data.originalMidiUrl || null, // Pautan fail MIDI asal (Stage 0) dari Firebase Storage
+                completedAt: data.completedAt || null,
                 date: data.completedAt ? new Date(data.completedAt.seconds * 1000).toLocaleDateString() : "Just Now"
             });
         });
@@ -181,6 +183,13 @@ function loadUserTranscriptions() {
             // Sediakan Demo Fallback jika pengguna belum mempunyai transkripsi selesai
             renderTranscriptionsList(getMockTranscriptions());
         } else {
+            // Urutkan secara tempatan mengikut masa siap (Newest / Last Generated first)
+            jobs.sort((a, b) => {
+                const timeA = a.completedAt ? a.completedAt.seconds : 0;
+                const timeB = b.completedAt ? b.completedAt.seconds : 0;
+                return timeB - timeA; // Tertib menurun (descending)
+            });
+
             renderTranscriptionsList(jobs);
         }
     }, (error) => {
