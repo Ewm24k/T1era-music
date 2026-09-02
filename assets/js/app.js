@@ -422,7 +422,7 @@ googleAuthBtn.addEventListener("click", async () => {
   }
 });
 
-maintenanceCloseBtn.addEventListener("click", () => {
+moduleCloseBtn.addEventListener("click", () => {
   maintenanceOverlay.classList.remove("active");
   setTimeout(() => { authOverlay.classList.add("active"); }, 400);
 });
@@ -664,6 +664,10 @@ function createProgressCardMarkup() {
         <div class="proc-step" id="step-init">
           <div class="step-status"><span class="step-circle"></span></div>
           <span class="step-label">Initializing Session Verification</span>
+        </div>
+        <div class="proc-step" id="step-details">
+          <div class="step-status"><span class="step-circle"></span></div>
+          <span class="step-label">Fetching Video Details</span>
         </div>
         <div class="proc-step" id="step-download">
           <div class="step-status"><span class="step-circle"></span></div>
@@ -1033,24 +1037,34 @@ function openLiveTerminalConsole(userId, jobId) {
 
       if (status === "QUEUED") {
         setStepStatus("step-init", "success");
-        setStepStatus("step-download", "loading");
-      } else if (status === "REQUESTING_YT_LINK" || status === "DOWNLOADING_AUDIO") {
+        setStepStatus("step-details", "loading");
+      } else if (status === "REQUESTING_YT_LINK") {
         setStepStatus("step-init", "success");
+        setStepStatus("step-details", "loading");
+        const stepDetailsLabel = document.querySelector("#step-details .step-label");
+        if (stepDetailsLabel) {
+          stepDetailsLabel.textContent = `Fetching Video Details: ${progress}%`;
+        }
+      } else if (status === "DOWNLOADING_AUDIO" || status === "UPLOADING_AUDIO_TO_CLOUD") {
+        setStepStatus("step-init", "success");
+        setStepStatus("step-details", "success");
         setStepStatus("step-download", "loading");
         const stepDownloadLabel = document.querySelector("#step-download .step-label");
         if (stepDownloadLabel) {
-          if (status === "REQUESTING_YT_LINK") {
-            stepDownloadLabel.textContent = `Requesting YouTube Link: ${progress}%`;
+          if (status === "UPLOADING_AUDIO_TO_CLOUD") {
+            stepDownloadLabel.textContent = `Uploading YouTube Audio: ${progress}%`;
           } else {
             stepDownloadLabel.textContent = "Downloading Storage Audio";
           }
         }
       } else if (status === "CACHING_AUDIO") {
         setStepStatus("step-init", "success");
+        setStepStatus("step-details", "success");
         setStepStatus("step-download", "success");
         setStepStatus("step-temp", "loading");
       } else if (status === "TRANSCRIBING_AUDIO") {
         setStepStatus("step-init", "success");
+        setStepStatus("step-details", "success");
         setStepStatus("step-download", "success");
         setStepStatus("step-temp", "success");
         setStepStatus("step-transcribe", "loading");
