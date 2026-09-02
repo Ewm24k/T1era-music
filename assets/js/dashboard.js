@@ -4,7 +4,6 @@ import {
     collection, 
     query, 
     where, 
-    getDocs, 
     onSnapshot,
     doc,
     deleteDoc
@@ -13,6 +12,10 @@ import {
     ref as sRef, 
     getMetadata 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+
+// Global, long-lived Client Cache registries to prevent layout blocking network storms
+const resolvedTitleCache = new Map();
+const validatedMidiCache = new Set();
 
 // Local hardcoded mock tracks arrays mimicking the reference layout
 const popularTracksData = [
@@ -84,7 +87,7 @@ const volumeTrack = document.getElementById("volume-track");
 const volumeFill = document.getElementById("volume-fill");
 const volumeThumb = document.getElementById("volume-thumb");
 
-// MENEGAKKAN NAVIGASI TAB BAHARU (Home View vs Transcriptions View)
+// Tab Navigation elements
 const navHome = document.getElementById("nav-home");
 const navTranscriptions = document.getElementById("nav-transcriptions");
 const homeView = document.getElementById("home-view");
@@ -96,7 +99,7 @@ let activeTrack = popularTracksData[5];
 let tickerInterval = null;
 let currentSeconds = 53; 
 
-// Mengurus Pertukaran Tab Menu Sisi (Sidebar Navigation)
+// Sidebar Navigation
 if (navHome && navTranscriptions) {
     navHome.addEventListener("click", (e) => {
         e.preventDefault();
@@ -106,17 +109,14 @@ if (navHome && navTranscriptions) {
     navTranscriptions.addEventListener("click", (e) => {
         e.preventDefault();
         setActiveTab(navTranscriptions, transcriptionsView);
-        // Muat turun senarai transkripsi masa nyata dari Firestore
         loadUserTranscriptions();
     });
 }
 
 function setActiveTab(activeNavItem, activeViewElement) {
-    // Kemaskini status butang navigasi bar sisi
     document.querySelectorAll(".nav-item").forEach(item => item.classList.remove("active"));
     activeNavItem.classList.add("active");
 
-    // Tukar paparan content utama
     homeView.style.display = "none";
     transcriptionsView.style.display = "none";
     activeViewElement.style.display = "block";
@@ -156,93 +156,110 @@ if (auth) {
 // ------------------------------------------------------------------
 // MUAT TURUN SENARAI TRANSKRIPSI NYATA DARI FIRESTORE (My Transcriptions)
 // ------------------------------------------------------------------
+let snapshotUnsubscribe = null;
+
 function loadUserTranscriptions() {
     if (!currentUser || !db) {
-        // Paparkan demo olok-olok berkualiti tinggi jika tiada kredensial sedia ada (Fallback)
         renderTranscriptionsList(getMockTranscriptions());
         return;
     }
 
-    transcriptionsList.innerHTML = `<div style="text-align:center; color:rgba(255,255,255,0.4); font-size:0.9rem; padding:40px 0;">Loading transcriptions database...</div>`;
+    // Retain list structure during fetches to prevent layout blinking
+    if (!transcriptionsList.children.length) {
+        transcriptionsList.innerHTML = `<div style="text-align:center; color:rgba(255,255,255,0.4); font-size:0.9rem; padding:40px 0;">Loading transcriptions database...</div>`;
+    }
 
-    // Ambil semua dokumen tugasan di bawah Firestore pengguna yang berstatus "COMPLETED"
+    // Clean up any stale listeners to avoid duplicates
+    if (snapshotUnsubscribe) {
+        snapshotUnsubscribe();
+    }
+
     const jobsRef = collection(db, "users", currentUser.uid, "midi_jobs");
     const q = query(jobsRef, where("status", "==", "COMPLETED"));
 
-    // Real-Time snapshot listener (Kini menggunakan .data() berbanding .to_dict() yang ralat)
-    onSnapshot(q, async (snapshot) => {
+    snapshotUnsubscribe = onSnapshot(q, async (snapshot) => {
         const rawJobs = [];
         snapshot.forEach((doc) => {
             const data = doc.data();
-            
-            // Fallback default naming in case Firestore title is completely empty
             const fallbackTitle = data.youtubeUrl ? extractYouTubeTitle(data.youtubeUrl) : "Local Uploaded Track";
             
             rawJobs.push({
                 id: doc.id,
-                // Prioritize Firestore real-time updated title field first
                 title: data.title || fallbackTitle, 
                 fallbackTitle: fallbackTitle,
                 source: data.youtubeUrl ? "YOUTUBE" : "UPLOAD",
-                midiUrl: data.midiUrl, // Pautan fail MIDI akhir (Stage 6) dari Firebase Storage
-                originalMidiUrl: data.originalMidiUrl || null, // Pautan fail MIDI asal (Stage 0) dari Firebase Storage
+                midiUrl: data.midiUrl, 
+                originalMidiUrl: data.originalMidiUrl || null, 
                 completedAt: data.completedAt || null,
                 date: data.completedAt ? new Date(data.completedAt.seconds * 1000).toLocaleDateString() : "Just Now"
             });
         });
 
         // ------------------------------------------------------------------
-        // RE-RESOLVE TITLE FROM Storage (details.json) IF TITLE STILL GENERIC
+        // RESOLVE REAL TITLES FROM Storage (details.json) WITH LOCAL CACHE
         // ------------------------------------------------------------------
         const resolveTitlesPromises = rawJobs.map(async (job) => {
+            // Check cache registry first to bypass redundant network requests
+            if (resolvedTitleCache.has(job.id)) {
+                job.title = resolvedTitleCache.get(job.id);
+                return job;
+            }
+
             const isGeneric = !job.title || 
                               job.title === "Local Uploaded Track" || 
                               job.title.startsWith("YouTube Stream Audio");
             
-            // If the title is generic and we have a valid MIDI location URL
             if (isGeneric && job.midiUrl) {
                 try {
-                    // Derive details.json location relative to the final_score.mid address
                     const detailsUrl = job.midiUrl.replace("final_score.mid", "details.json");
                     const response = await fetch(detailsUrl);
                     if (response.ok) {
                         const jsonDetails = await response.json();
                         if (jsonDetails && jsonDetails.title) {
                             job.title = jsonDetails.title;
+                            resolvedTitleCache.set(job.id, jsonDetails.title); // Store in cache
+                            return job;
                         }
                     }
                 } catch (e) {
                     console.warn(`[STORAGE TITLE RESOLVE WARNING] Failed to retrieve details.json for Job ${job.id}:`, e);
                 }
             }
+
+            // Fallback: cache standard resolved title to prevent repeating network queries
+            resolvedTitleCache.set(job.id, job.title);
             return job;
         });
 
         const resolvedJobs = await Promise.all(resolveTitlesPromises);
 
-        // Pengesahan fizikal kewujudan fail MIDI dalam Firebase Storage secara asynchronous (Self-Healing)
+        // ------------------------------------------------------------------
+        // METADATA SELF-HEALING SYSTEM WITH MEMORY RETENTION
+        // ------------------------------------------------------------------
         if (storage && resolvedJobs.length > 0) {
             const validationPromises = resolvedJobs.map(async (job) => {
                 if (!job.midiUrl) return null;
                 
+                // If this file has already been verified, proceed immediately (bypasses network checking)
+                if (validatedMidiCache.has(job.midiUrl)) {
+                    return job;
+                }
+                
                 try {
-                    // Cuba dapatkan metadata fail MIDI dalam Storage
                     const fileRef = sRef(storage, job.midiUrl);
                     await getMetadata(fileRef);
-                    return job; // Fail wujud, lulus pengesahan
+                    validatedMidiCache.add(job.midiUrl); // Save verification state
+                    return job; 
                 } catch (error) {
-                    // Jika ralat adalah fail tidak ditemui (Telah dipadam dari Storage secara manual)
                     if (error.code === 'storage/object-not-found' || error.message.includes('not found')) {
-                        console.warn(`[DATA SELF-HEAL] Fail MIDI bagi Job ${job.id} telah dipadam di Storage. Memulakan pembersihan Firestore...`);
+                        console.warn(`[DATA SELF-HEAL] File missing for Job ${job.id}. Purging metadata...`);
                         try {
-                            // Padam dokumen metadata yatim piatu di Firestore secara automatik
                             await deleteDoc(doc(db, "users", currentUser.uid, "midi_jobs", job.id));
-                            console.log(`[DATA SELF-HEAL SUCCESS] Metadata bagi Job ${job.id} berjaya dibersihkan.`);
                         } catch (fs_err) {
-                            console.error("[DATA SELF-HEAL ERROR] Gagal membersihkan dokumen:", fs_err);
+                            console.error("[DATA SELF-HEAL ERROR] Cleanup failed:", fs_err);
                         }
                     }
-                    return null; // Gagal pengesahan kewujudan fizikal
+                    return null; 
                 }
             });
 
@@ -252,11 +269,10 @@ function loadUserTranscriptions() {
             if (validatedJobs.length === 0) {
                 renderTranscriptionsList(getMockTranscriptions());
             } else {
-                // Urutkan secara tempatan mengikut masa siap (Newest / Last Generated first)
                 validatedJobs.sort((a, b) => {
                     const timeA = a.completedAt ? a.completedAt.seconds : 0;
                     const timeB = b.completedAt ? b.completedAt.seconds : 0;
-                    return timeB - timeA; // Tertib menurun (descending)
+                    return timeB - timeA; 
                 });
                 renderTranscriptionsList(validatedJobs);
             }
@@ -278,7 +294,6 @@ function loadUserTranscriptions() {
     });
 }
 
-// Penterjemah Nama fail dari Pautan YouTube
 function extractYouTubeTitle(url) {
     try {
         const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -290,10 +305,15 @@ function extractYouTubeTitle(url) {
     return "YouTube Track Asset";
 }
 
-// Rekabentuk visual senarai lagu MIDI ala e-dagang/media player
+// ------------------------------------------------------------------
+// HIGH PERFORMANCE DOCUMENT FRAGMENT RENDERING (Zero Jank painting)
+// ------------------------------------------------------------------
 function renderTranscriptionsList(list) {
     transcriptionsList.innerHTML = "";
     
+    // Create an in-memory document fragment to hold generated rows
+    const fragment = document.createDocumentFragment();
+
     list.forEach((track, index) => {
         const indexStr = (index + 1).toString().padStart(2, "0");
         const row = document.createElement("div");
@@ -322,22 +342,22 @@ function renderTranscriptionsList(list) {
             </div>
         `;
 
-        // Integrasi klik tindakan pautan ke midiano.html
         row.addEventListener("click", () => {
             openStudioWithMidi(track.midiUrl);
         });
 
-        transcriptionsList.appendChild(row);
+        fragment.appendChild(row);
     });
+
+    // Append all nodes inside a single paint cycle
+    transcriptionsList.appendChild(fragment);
 }
 
 function openStudioWithMidi(midiUrl) {
-    // Simpan fail ke storan tempatan dan lakukan pusingan navigasi automatik
     localStorage.setItem("t1era_current_midi", midiUrl);
     window.location.href = "midiano.html?midi=" + encodeURIComponent(midiUrl);
 }
 
-// Senarai Demo Fallback jika pangkalan data kosong
 function getMockTranscriptions() {
     return [
         {
@@ -358,10 +378,12 @@ function getMockTranscriptions() {
 }
 
 // ------------------------------------------------------------------
-// PEMAIN POPULAR SONGS (Sedia Ada - Tidak Disentuh)
+// PEMAIN POPULAR SONGS (Sedia Ada)
 // ------------------------------------------------------------------
 function renderPopularTracks() {
     popularGrid.innerHTML = "";
+    const fragment = document.createDocumentFragment();
+
     popularTracksData.forEach(track => {
         const card = document.createElement("div");
         card.className = "track-card";
@@ -376,8 +398,10 @@ function renderPopularTracks() {
         card.addEventListener("click", () => {
             selectAndPlayTrack(track);
         });
-        popularGrid.appendChild(card);
+        fragment.appendChild(card);
     });
+
+    popularGrid.appendChild(fragment);
 }
 
 function selectAndPlayTrack(track) {
@@ -456,10 +480,14 @@ categoriesRow.addEventListener("click", (e) => {
 // Logout Action
 document.getElementById("dashboard-logout-btn").addEventListener("click", () => {
     if (confirm("Disconnect session?")) {
+        // Clean up open database handles
+        if (snapshotUnsubscribe) {
+            snapshotUnsubscribe();
+        }
+
         if (auth) {
           signOut(auth)
             .then(() => {
-                // Padam status pengesahan di dalam storan tempatan bagi mengelakkan ralat kitaran lintasan intro di index.html
                 localStorage.removeItem("t1era_logged_in");
                 window.location.href = "index.html";
             })
