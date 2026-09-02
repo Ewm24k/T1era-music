@@ -18,7 +18,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 // Pautan URL Pelayan GCP VM API T1era Music (Menggunakan Terowong Selamat Ngrok)
-const RENDER_BACKEND_URL = "https://d040-35-247-154-247.ngrok-free.app/transcribe";
+const RENDER_BACKEND_URL = "https://crock-blast-purchase.ngrok-free.dev/transcribe";
 
 // =========================================================
 // INJEKSI STYLING NEON KONSOL PEMPROSESAN (AAA GRADE UI/UX)
