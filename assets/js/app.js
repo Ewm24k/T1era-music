@@ -669,6 +669,10 @@ function createProgressCardMarkup() {
           <div class="step-status"><span class="step-circle"></span></div>
           <span class="step-label">Receiving Uploaded Audio</span>
         </div>
+        <div class="proc-step" id="step-details">
+          <div class="step-status"><span class="step-circle"></span></div>
+          <span class="step-label">Syncing Track Details</span>
+        </div>
         <div class="proc-step" id="step-temp">
           <div class="step-status"><span class="step-circle"></span></div>
           <span class="step-label">Caching Raw Track to Workspace</span>
@@ -951,12 +955,17 @@ function openLiveTerminalConsole(userId, jobId) {
 
   setStepStatus("step-init", "success");
   setStepStatus("step-download", "success");
+  // [BARU] Mula memantau langkah "Syncing Track Details" (tajuk video/track)
+  // sebelum meneruskan ke peringkat caching / neural pitch transcription
+  setStepStatus("step-details", "loading");
   setStepStatus("step-temp", "success");
 
   const progressBar = document.getElementById("proc-bar");
   const progressPct = document.getElementById("proc-pct");
 
   let isFirestoreActive = true;
+  // [BARU] Penanda status penyegerakan tajuk (Get Details) daripada event listener Firestore
+  let detailsSynced = false;
 
   const handleMidiGenerationComplete = (midiUrl) => {
     setStepStatus("step-transcribe", "success");
@@ -985,6 +994,13 @@ function openLiveTerminalConsole(userId, jobId) {
     if (isFirestoreActive) {
       isFirestoreActive = false;
       console.warn("[FIRESTORE BYPASS] Active snapshot listening blocked. Switching to mathematical storage URL fallback...");
+
+      // [BARU] Firestore tidak dapat dipantau, jadi tandakan "Get Details" selesai secara optimistik
+      // supaya senarai semak tidak tersekat sebelum meneruskan simulasi kemajuan
+      if (!detailsSynced) {
+        detailsSynced = true;
+        setStepStatus("step-details", "success");
+      }
 
       const constructedMidiUrl = `https://firebasestorage.googleapis.com/v0/b/t1era-musicv1.firebasestorage.app/o/users%2F${userId}%2Ftranscriptions%2F${jobId}%2Ffinal_score.mid?alt=media`;
 
@@ -1028,6 +1044,14 @@ function openLiveTerminalConsole(userId, jobId) {
       const status = data.status;
       const progress = data.progress || 0;
 
+      // [BARU] "Get Details" (Syncing Track Details) hanya ditandakan selesai apabila
+      // event listening Firestore mengesahkan medan `title` telah disegerakkan.
+      // Langkah seterusnya (Neural Pitch Transcription) hanya diteruskan selepas ini berjaya.
+      if (!detailsSynced && data.title) {
+        detailsSynced = true;
+        setStepStatus("step-details", "success");
+      }
+
       if (progressBar) progressBar.style.width = `${progress}%`;
       if (progressPct) progressPct.textContent = `${progress}%`;
 
@@ -1053,6 +1077,12 @@ function openLiveTerminalConsole(userId, jobId) {
         setStepStatus("step-init", "success");
         setStepStatus("step-download", "success");
         setStepStatus("step-temp", "success");
+        // [BARU] Pastikan "Get Details" ditandakan berjaya sebelum meneruskan ke Neural Pitch,
+        // sebagai jaringan keselamatan sekiranya event Firestore untuk `title` terlepas pantau
+        if (!detailsSynced) {
+          detailsSynced = true;
+          setStepStatus("step-details", "success");
+        }
         setStepStatus("step-transcribe", "loading");
       } else if (status === "CLEANING_MIDI" || status === "REPAIRING_NOTES") {
         setStepStatus("step-transcribe", "success");
