@@ -118,7 +118,7 @@ class CentralOrchestrator:
             return blob.public_url
         return ""
 
-    def run_pipeline(self, input_audio_path: Path, temp_work_dir: Path, is_cloud: bool, user_id: str = None, job_id: str = None, bucket_name: str = None):
+    def run_pipeline(self, input_audio_path: Path, temp_work_dir: Path, is_cloud: bool, user_id: str = None, job_id: str = None, bucket_name: str = None, raw_audio_storage_path: str = None):
         """Menjalankan rantaian transkripsi Stage 0 ke 6 secara berturutan"""
         start_time = time.time()
         print("\n" + "=" * 70)
@@ -153,6 +153,20 @@ class CentralOrchestrator:
             else:
                 print(f"[STAGE 0 SUCCESS] Subprocess selesai dengan jayanya.")
                 print(f"STDOUT:\n{result.stdout}")
+
+            # [KEMASKINI DUA MIDI] Muat naik MIDI asal dari Stage 0 secara terus
+            original_midi_url = ""
+            if is_cloud and self.firebase_active and user_id and job_id:
+                try:
+                    remote_stage0_path = f"users/{user_id}/transcriptions/{job_id}/original_stage0.mid"
+                    original_midi_url = self.upload_to_storage(stage0_raw_mid, remote_stage0_path, bucket_name)
+                    print(f"[CLOUD] Fail MIDI asal (Stage 0) dimuat naik ke Firebase Storage: {original_midi_url}")
+                    
+                    # Kemaskini originalMidiUrl di Firestore serta-merta
+                    job_ref = self.db.collection("users").document(user_id).collection("midi_jobs").document(job_id)
+                    job_ref.set({"originalMidiUrl": original_midi_url}, merge=True)
+                except Exception as stage0_err:
+                    print(f"[CLOUD WARNING] Gagal memproses muat naik Stage 0 MIDI: {stage0_err}")
 
             # -------------------------------------------------------------
             # STAGE 1: MIDI Cleanup
@@ -244,15 +258,35 @@ class CentralOrchestrator:
                 remote_path = f"users/{user_id}/transcriptions/{job_id}/final_score.mid"
                 download_url = self.upload_to_storage(stage6_final_mid, remote_path, bucket_name)
 
-                # Kemaskini Firestore
+                # Kemaskini Firestore dengan kedua-dua URL MIDI
                 job_ref = self.db.collection("users").document(user_id).collection("midi_jobs").document(job_id)
-                job_ref.update({
+                job_update_payload = {
                     "status": "COMPLETED",
                     "progress": 100,
                     "midiUrl": download_url,
                     "completedAt": firestore.SERVER_TIMESTAMP
-                })
+                }
+                if original_midi_url:
+                    job_update_payload["originalMidiUrl"] = original_midi_url
+
+                job_ref.update(job_update_payload)
                 print(f"[CLOUD] Fail MIDI akhir dimuat naik ke Firebase Storage: {download_url}")
+
+                # [KEMASKINI BERSIH] Padam fail audio mentah (MP3/WAV) asal untuk mengelakkan bebanan storan
+                if raw_audio_storage_path:
+                    try:
+                        print(f"[CLOUD CLEANUP] Memulakan pembersihan fail audio mentah dari Firebase Storage: {raw_audio_storage_path}")
+                        target_bucket = storage.bucket(bucket_name) if self.firebase_active else self.bucket
+                        blob = target_bucket.blob(raw_audio_storage_path)
+                        if blob.exists():
+                            blob.delete()
+                            print(f"[CLOUD CLEANUP SUCCESS] Fail audio asal '{raw_audio_storage_path}' berjaya dipadamkan.")
+                            # Kemaskini audioUrl kepada null bagi menandakan fail telah dibersihkan
+                            job_ref.update({"audioUrl": None})
+                        else:
+                            print(f"[CLOUD CLEANUP WARNING] Blob fail asal '{raw_audio_storage_path}' tidak ditemui.")
+                    except Exception as cleanup_err:
+                        print(f"[CLOUD CLEANUP ERROR] Gagal memadam fail audio mentah: {cleanup_err}")
             else:
                 print(f"[LOCAL] Semua fail perantara (Stage 0 - 6) disimpan di: {temp_work_dir}")
 
@@ -270,6 +304,7 @@ class CentralOrchestrator:
         with tempfile.TemporaryDirectory(prefix=f"t1era_{job_id}_") as tmp_dir:
             temp_work_path = Path(tmp_dir)
             local_audio_path = temp_work_path / "input_audio"
+            raw_audio_storage_path = None
 
             try:
                 if not audio_url and not youtube_url:
@@ -349,6 +384,8 @@ class CentralOrchestrator:
                     firebase_audio_url = self.upload_to_storage(local_audio_path, remote_audio_path, bucket_name)
                     print(f"[{job_id}] Fail MP3 YouTube berjaya diletakkan di Storage: {firebase_audio_url}")
 
+                    raw_audio_storage_path = remote_audio_path
+
                     # Kemaskini dokumen Firestore dengan pautan fail audio di Storage
                     if self.firebase_active:
                         job_ref = self.db.collection("users").document(user_id).collection("midi_jobs").document(job_id)
@@ -392,6 +429,8 @@ class CentralOrchestrator:
                         if "/o/" in path:
                             audio_url = unquote(path.split("/o/", 1)[1])
 
+                    raw_audio_storage_path = audio_url
+
                     # Gunakan baldi yang telah disahkan secara dinamik untuk memuat turun
                     target_bucket = storage.bucket(bucket_name) if self.firebase_active else self.bucket
                     blob = target_bucket.blob(audio_url)
@@ -407,7 +446,8 @@ class CentralOrchestrator:
                     is_cloud=True,
                     user_id=user_id,
                     job_id=job_id,
-                    bucket_name=bucket_name
+                    bucket_name=bucket_name,
+                    raw_audio_storage_path=raw_audio_storage_path
                 )
 
             except Exception as e:
