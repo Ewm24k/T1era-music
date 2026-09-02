@@ -18,7 +18,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 // Pautan URL Pelayan GCP VM API T1era Music (Menggunakan Terowong Selamat Ngrok)
-const RENDER_BACKEND_URL = "https://91af-35-247-154-247.ngrok-free.app/transcribe";
+const RENDER_BACKEND_URL = "https://d040-35-247-154-247.ngrok-free.app/transcribe";
 
 // =========================================================
 // INJEKSI STYLING NEON KONSOL PEMPROSESAN (AAA GRADE UI/UX)
@@ -281,11 +281,11 @@ function launchFullscreenStudio() {
   setTimeout(typeEffect, 1200);
 }
 
-function typeEffect() {
+function typewriter() {
   if (charIndex < textToType.length) {
     typewriterElement.textContent += textToType.charAt(charIndex);
     charIndex++;
-    setTimeout(typeEffect, 150);
+    setTimeout(typewriter, 150);
   } else {
     setTimeout(() => {
       if (sound) {
@@ -582,6 +582,10 @@ function createProgressCardMarkup() {
           <div class="step-status"><span class="step-circle"></span></div>
           <span class="step-label">Receiving Uploaded Audio</span>
         </div>
+        <div class="proc-step" id="step-cloud-upload">
+          <div class="step-status"><span class="step-circle"></span></div>
+          <span class="step-label">Storing Audio in Cloud Storage</span>
+        </div>
         <div class="proc-step" id="step-temp">
           <div class="step-status"><span class="step-circle"></span></div>
           <span class="step-label">Caching Raw Track to Workspace</span>
@@ -663,68 +667,50 @@ if (youtubeSubmitBtn) {
 
     setStepStatus("step-init", "loading");
 
-    // Mulakan visual handshake proses
-    setTimeout(() => {
-      setStepStatus("step-init", "success");
-      setStepStatus("step-download", "loading");
-      
-      const stepDownloadLabel = document.querySelector("#step-download .step-label");
-      if (stepDownloadLabel) stepDownloadLabel.textContent = "Requesting YouTube Audio Link";
+    const triggerYoutubeSequence = () => {
+      openLiveTerminalConsole(userId, jobId);
 
-      setTimeout(() => {
-        setStepStatus("step-download", "success");
-        setStepStatus("step-temp", "loading");
-        
-        const stepTempLabel = document.querySelector("#step-temp .step-label");
-        if (stepTempLabel) stepTempLabel.textContent = "Downloading Audio on Server";
-
-        const triggerYoutubeSequence = () => {
-          openLiveTerminalConsole(userId, jobId);
-
-          // Hantar payload pautan YouTube ke pelayan API GCP VM
-          fetch(RENDER_BACKEND_URL, {
-            method: "POST",
-            headers: { 
-              "Content-Type": "application/json",
-              "ngrok-skip-browser-warning": "true"
-            },
-            body: JSON.stringify({ userId: userId, jobId: jobId, youtubeUrl: urlValue })
-          })
-          .then((res) => {
-            if (!res.ok) {
-              return res.json().then((body) => {
-                throw new Error(body.error || "Server rejected the YouTube transcription request.");
-              });
-            }
-          })
-          .catch((err) => {
-            console.error("YouTube Transcribe request failed:", err);
-            showTerminalFailure(err.message || "Failed to start YouTube transcription job.");
+      // Hantar payload pautan YouTube ke pelayan API GCP VM
+      fetch(RENDER_BACKEND_URL, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true"
+        },
+        body: JSON.stringify({ userId: userId, jobId: jobId, youtubeUrl: urlValue })
+      })
+      .then((res) => {
+        if (!res.ok) {
+          return res.json().then((body) => {
+            throw new Error(body.error || "Server rejected the YouTube transcription request.");
           });
-        };
-
-        // KREAT DOKUMEN FIRESTORE UNTUK YOUTUBE JOB UNTUK MENGELAKKAN SYNC GAGAL
-        if (db && userId !== "guest_studio_creator") {
-          const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
-          setDoc(jobRef, {
-            status: "QUEUED",
-            progress: 0,
-            youtubeUrl: urlValue,
-            createdAt: serverTimestamp()
-          })
-          .then(() => {
-            triggerYoutubeSequence();
-          })
-          .catch(err => {
-            console.warn("[FIRESTORE BYPASS] Write blocked by Rules. Bypassing straight to Render...", err);
-            triggerYoutubeSequence();
-          });
-        } else {
-          triggerYoutubeSequence();
         }
+      })
+      .catch((err) => {
+        console.error("YouTube Transcribe request failed:", err);
+        showTerminalFailure(err.message || "Failed to start YouTube transcription job.");
+      });
+    };
 
-      }, 1000);
-    }, 1000);
+    // KREAT DOKUMEN FIRESTORE UNTUK YOUTUBE JOB UNTUK MENGELAKKAN SYNC GAGAL
+    if (db && userId !== "guest_studio_creator") {
+      const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
+      setDoc(jobRef, {
+        status: "QUEUED",
+        progress: 0,
+        youtubeUrl: urlValue,
+        createdAt: serverTimestamp()
+      })
+      .then(() => {
+        triggerYoutubeSequence();
+      })
+      .catch(err => {
+        console.warn("[FIRESTORE BYPASS] Write blocked by Rules. Bypassing straight to Render...", err);
+        triggerYoutubeSequence();
+      });
+    } else {
+      triggerYoutubeSequence();
+    }
   });
 }
 
@@ -948,13 +934,19 @@ function openLiveTerminalConsole(userId, jobId) {
             stepDownloadLabel.textContent = "Downloading Storage Audio";
           }
         }
+      } else if (status === "UPLOADING_AUDIO_TO_CLOUD") {
+        setStepStatus("step-init", "success");
+        setStepStatus("step-download", "success");
+        setStepStatus("step-cloud-upload", "loading");
       } else if (status === "CACHING_AUDIO") {
         setStepStatus("step-init", "success");
         setStepStatus("step-download", "success");
+        setStepStatus("step-cloud-upload", "success");
         setStepStatus("step-temp", "loading");
       } else if (status === "TRANSCRIBING_AUDIO") {
         setStepStatus("step-init", "success");
         setStepStatus("step-download", "success");
+        setStepStatus("step-cloud-upload", "success");
         setStepStatus("step-temp", "success");
         setStepStatus("step-transcribe", "loading");
       } else if (status === "CLEANING_MIDI" || status === "REPAIRING_NOTES") {
