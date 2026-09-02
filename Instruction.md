@@ -34,6 +34,15 @@ sudo systemctl restart t1era-music
 curl -s http://localhost:4040/api/tunnels | grep -o 'https://[^"]*'
 ```
 
+```
+nohup ~/ngrok http 5000 > /dev/null 2>&1 &
+```
+
+#Get Link Url
+```
+curl -s http://localhost:4040/api/tunnels | grep -o 'https://[^"]*'
+```
+
 
 
 This guide contains the exact commands and workflows to start, check, and maintain your T1ERA Music server.
