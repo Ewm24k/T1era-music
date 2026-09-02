@@ -6,7 +6,7 @@ mengaktifkan sekatan CORS, dan berjalan menggunakan pelayan produksi WSGI Gunico
 
 NOTA PERUBAHAN:
 Sokongan YouTube diaktifkan menggunakan enjin hibrid: yt-dlp tempatan pantas 
-(cookies.txt) dengan fallback automatik ke pelayan Cobalt berpusing demi mengelakkan ralat DNS.
+(cookies.txt) dengan fallback automatik ke pelayan Cobalt /api/json berpusing demi mengelakkan ralat.
 """
 
 import os
@@ -222,7 +222,7 @@ class CentralOrchestrator:
             stage6 = input_file_6.Stage5Pipeline(
                 input_path=stage5_arranged_mid,
                 output_path=stage6_final_mid,
-                log_path=temp_work_dir / "stage6_log.txt",
+                log_path=temp_work_dir / "stage6_final.mid",
                 csv_path=temp_work_dir / "stage6_report.csv",
                 json_path=temp_work_dir / "stage6_diagnostics.json"
             )
@@ -335,11 +335,11 @@ class CentralOrchestrator:
                             "Content-Type": "application/json"
                         }
                         
-                        # Senarai pelayan Cobalt berpusing untuk pemulihan mandiri jika berlaku ralat DNS / Routing
+                        # Pelayan API Cobalt berpusing yang ditala khusus ke endpoint /api/json rasmi
                         cobalt_instances = [
-                            "https://api.cobalt.tools/",
-                            "https://cobalt.api.timelessnesses.me/",
-                            "https://co.wuk.sh/"
+                            "https://api.cobalt.tools/api/json",
+                            "https://cobalt.api.timelessnesses.me/api/json",
+                            "https://co.wuk.sh/api/json"
                         ]
                         
                         download_link = None
