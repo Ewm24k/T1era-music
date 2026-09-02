@@ -91,3 +91,24 @@ JavaScript
 const RENDER_BACKEND_URL = "https://YOUR-NEW-SUBDOMAIN.ngrok-free.app/transcribe";
 Keep Ngrok running:
 Keep this terminal window open. If you close it, the tunnel will break. To run other commands on the VM, simply open a second SSH window
+
+===================================================
+Restore VM Factory
+
+```# 1. Move out of the corrupted folder to your home directory
+cd ~
+
+# 2. Copy your important keys and cookies safely to your home folder
+cp ~/T1era-music/firebase-key.json ~/
+cp ~/T1era-music/cookies.txt ~/
+
+# 3. Delete the corrupted T1era-music folder completely
+rm -rf ~/T1era-music
+
+# 4. Clone a fresh, clean copy of your repository from GitHub
+git clone https://github.com/Ewm24k/T1era-music.git
+
+# 5. Move your credentials and cookies back into the new project folder
+mv ~/firebase-key.json ~/T1era-music/
+mv ~/cookies.txt ~/T1era-music/
+```
