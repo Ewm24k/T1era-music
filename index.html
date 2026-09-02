@@ -1079,44 +1079,6 @@
                     <button class="btn-enter-studio" id="enter-studio-btn">Enter Studio</button>
                 </div>
             </div>
-
-            <!-- Hamburger Button and Slide menu (Hiddent by default on Intro video pages) -->
-            <div class="menu-btn" id="menu-toggle" style="display: none;">
-                <span></span>
-                <span></span>
-                <span></span>
-            </div>
-            <div class="menu-overlay" id="menu-overlay"></div>
-            
-            <nav class="side-menu" id="side-menu">
-                <ul class="nav-links">
-                    <li><a href="#">Home</a></li>
-                    <li><a href="#">Studio</a></li>
-                    <li><a href="#">Tracks</a></li>
-                    <li><a href="#">About</a></li>
-                    <li><a href="#">Contact</a></li>
-                </ul>
-
-                <!-- Side Menu Footer Section -->
-                <div class="menu-footer" id="menu-footer" style="display: none;">
-                    <div class="profile-row">
-                        <img id="user-avatar" class="user-avatar" src="" alt="Avatar" style="display: none;">
-                        <div id="avatar-fallback" class="avatar-fallback">👤</div>
-                        <div class="profile-meta">
-                            <div class="profile-name" id="user-name">Guest User</div>
-                            <div class="profile-email" id="user-email">guest@t1era.com</div>
-                        </div>
-                    </div>
-                    <div class="logout-row">
-                        <button id="logout-btn" class="logout-btn">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
-                                <path d="M16 13v-2H10V9l-5 3 5 3v-2h6zM20 3H9c-1.1 0-2 .9-2 2v4h2V5h11v14H9v-4H7v4c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
-                            </svg>
-                            Sign Out
-                        </button>
-                    </div>
-                </div>
-            </nav>
         </div>
 
         <!-- Phase 4: Transparent Glassmorphic Auth Modal -->
@@ -1254,6 +1216,44 @@
                 <div class="signout-text" id="signout-status-text">Disconnecting session...</div>
             </div>
         </div>
+
+        <!-- Sibling Stacking Root: Hamburger Button and Slide menu (Moved out of landing-screen to bypass lower z-index limits) -->
+        <div class="menu-btn" id="menu-toggle" style="display: none;">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+        <div class="menu-overlay" id="menu-overlay"></div>
+        
+        <nav class="side-menu" id="side-menu">
+            <ul class="nav-links">
+                <li><a href="#">Home</a></li>
+                <li><a href="#">Studio</a></li>
+                <li><a href="#">Tracks</a></li>
+                <li><a href="#">About</a></li>
+                <li><a href="#">Contact</a></li>
+            </ul>
+
+            <!-- Side Menu Footer Section -->
+            <div class="menu-footer" id="menu-footer" style="display: none;">
+                <div class="profile-row">
+                    <img id="user-avatar" class="user-avatar" src="" alt="Avatar" style="display: none;">
+                    <div id="avatar-fallback" class="avatar-fallback">👤</div>
+                    <div class="profile-meta">
+                        <div class="profile-name" id="user-name">Guest User</div>
+                        <div class="profile-email" id="user-email">guest@t1era.com</div>
+                    </div>
+                </div>
+                <div class="logout-row">
+                    <button id="logout-btn" class="logout-btn">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                            <path d="M16 13v-2H10V9l-5 3 5 3v-2h6zM20 3H9c-1.1 0-2 .9-2 2v4h2V5h11v14H9v-4H7v4c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
+                        </svg>
+                        Sign Out
+                    </button>
+                </div>
+            </div>
+        </nav>
 
     </div>
 
