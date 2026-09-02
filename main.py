@@ -97,7 +97,7 @@ class CentralOrchestrator:
         return cleaned if cleaned else "Track"
 
     def get_youtube_title_rapid(self, video_id: str) -> str:
-        """Mendapatkan tajuk rasmi video YouTube menggunakan API youtube-media-downloader di RapidAPI"""
+        """Mendapatkan tajuk rasmi video YouTube menggunakan API youtube-media-downloader di RapidAPI dengan fallback oEmbed"""
         import requests
         api_url = "https://youtube-media-downloader.p.rapidapi.com/v2/video/details"
         headers = {
@@ -106,11 +106,11 @@ class CentralOrchestrator:
             'Content-Type': "application/json"
         }
         try:
-            response = requests.get(api_url, headers=headers, params={"videoId": video_id}, timeout=15)
+            # Percubaan 1: Guna RapidAPI youtube-media-downloader video details
+            response = requests.get(api_url, headers=headers, params={"videoId": video_id}, timeout=10)
             if response.status_code == 200:
                 data = response.json()
                 
-                # Cuba dapatkan tajuk dari beberapa struktur objek respons yang mungkin
                 title = data.get("title")
                 if title:
                     return title
@@ -127,7 +127,20 @@ class CentralOrchestrator:
                     if title:
                         return title
         except Exception as e:
-            print(f"[RAPID DETAILS ERROR] Gagal mendapatkan tajuk video menerusi RapidAPI: {e}")
+            print(f"[RAPID DETAILS ERROR] Gagal mendapatkan tajuk video menerusi RapidAPI, cuba oEmbed fallback: {e}")
+
+        # Percubaan 2 (FALLBACK): Guna oEmbed rasmi YouTube yang keyless, percuma, dan sangat stabil
+        try:
+            oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+            oembed_res = requests.get(oembed_url, timeout=10)
+            if oembed_res.status_code == 200:
+                o_title = oembed_res.json().get("title")
+                if o_title:
+                    print(f"[FALLBACK SUCCESS] Tajuk oEmbed diperoleh: {o_title}")
+                    return o_title
+        except Exception as oembed_err:
+            print(f"[oEMBED FALLBACK ERROR] Gagal mendapatkan tajuk oEmbed: {oembed_err}")
+
         return "YouTube Track"
 
     def update_status(self, user_id: str, job_id: str, status: str, progress: int, error_msg: str = None):
@@ -286,9 +299,7 @@ class CentralOrchestrator:
             stage6 = input_file_6.Stage5Pipeline(
                 input_path=stage5_arranged_mid,
                 output_path=stage6_final_mid,
-                log_path=temp_work_dir / "stage6_log.txt",
-                csv_path=temp_work_dir / "stage6_report.csv",
-                json_path=temp_work_dir / "stage6_diagnostics.json"
+                log_path=temp_work_dir / "stage6_final.mid"
             )
             stage6.run()
 
