@@ -177,6 +177,9 @@ const authErrorMsg = document.getElementById("auth-error-msg");
 const authSwitchView = document.getElementById("auth-switch-view");
 const googleAuthBtn = document.getElementById("google-auth-btn");
 
+// Premium Top Right Corner Logout Control
+const topLogoutBtn = document.getElementById("top-logout-btn");
+
 // Menu Footer Profile UI elements
 const menuFooter = document.getElementById("menu-footer");
 const userNameEl = document.getElementById("user-name");
@@ -240,10 +243,16 @@ if (auth) {
         avatarFallbackEl.textContent = initials;
       }
       menuFooter.style.display = "flex";
+      
+      // Paparkan butang log keluar penjuru kanan atas jika berjaya log masuk
+      if (topLogoutBtn) topLogoutBtn.style.display = "flex";
     } else {
       // Buang status pengesahan jika tidak log masuk
       localStorage.removeItem("t1era_logged_in");
       menuFooter.style.display = "none";
+      
+      // Sembunyikan butang log keluar penjuru kanan atas jika log keluar
+      if (topLogoutBtn) topLogoutBtn.style.display = "none";
 
       // Jika sesyen telah tamat atau log keluar berlaku semasa berada di menu konsol
       if (servicesOverlay.classList.contains("active")) {
@@ -532,8 +541,50 @@ function runSessionVerification() {
   }, 1200);
 }
 
-logoutBtn.addEventListener("click", () => {
-  toggleMenu();
+// Kembalikan visual skrin kembali ke keadaan permulaan video pengenalan secara mutlak
+function resetToWelcomeState() {
+  // Padam status pengesahan storan tempatan
+  localStorage.removeItem("t1era_logged_in");
+
+  // Pulihkan overlay pengenalan tap & typewriter loading
+  overlay.style.display = "flex";
+  overlay.style.opacity = "1";
+  
+  loadingScreen.style.display = "flex";
+  loadingScreen.style.opacity = "0";
+  
+  // Reset penunjuk typewriter
+  charIndex = 0;
+  typewriterElement.textContent = "";
+
+  // Reset garis masa video
+  try {
+    v1.style.opacity = "1";
+    v1.muted = true;
+    v1.currentTime = 0;
+    v2.style.opacity = "0";
+    v2.pause();
+    v2.currentTime = 0;
+  } catch (e) {
+    console.warn("Ralat menetapkan semula garis masa video semasa log keluar:", e);
+  }
+
+  // Sembunyikan semua panel UI aktif
+  landingScreen.classList.remove("active");
+  servicesOverlay.classList.remove("active");
+  authOverlay.classList.remove("active");
+  enterBtn.classList.remove("show");
+  
+  // Padam data profil semasanya
+  currentUserObj = null;
+}
+
+// Aliran Proses Log Keluar Bersama Penyegerakan yang Tegar
+function executeSignoutSequence(isFromSidebar = false) {
+  if (isFromSidebar) {
+    toggleMenu();
+  }
+  
   signoutOverlay.style.display = "flex";
   setTimeout(() => { signoutOverlay.classList.add("active"); }, 10);
   signoutStatusText.style.color = "#ffffff";
@@ -545,19 +596,18 @@ logoutBtn.addEventListener("click", () => {
     setTimeout(() => {
       signOut(auth)
         .then(() => {
-          // Bersihkan storan tempatan apabila log keluar
-          localStorage.removeItem("t1era_logged_in");
-
           signoutStatusText.style.color = "#ff4a4a";
           signoutStatusText.style.textShadow = "0 0 15px #ff4a4a";
           signoutStatusText.textContent = "Sign out Successful.";
+          
+          // Tetapkan semula sistem kembali kepada keadaan video pengenalan normal
+          resetToWelcomeState();
           resetConsoleState();
-          servicesOverlay.classList.remove("active");
+
           setTimeout(() => {
             signoutOverlay.classList.remove("active");
             setTimeout(() => {
               signoutOverlay.style.display = "none";
-              enterBtn.classList.add("show");
             }, 600);
           }, 1500);
         })
@@ -571,7 +621,18 @@ logoutBtn.addEventListener("click", () => {
         });
     }, 1000);
   }, 1000);
+}
+
+// Pemantul klik log keluar (Menu Sisi & Penjuru Kanan Atas)
+logoutBtn.addEventListener("click", () => {
+  executeSignoutSequence(true);
 });
+
+if (topLogoutBtn) {
+  topLogoutBtn.addEventListener("click", () => {
+    executeSignoutSequence(false);
+  });
+}
 
 // =========================================================
 // --- T1ERA MUSIC WEB3 UPLOAD & PIPELINE INTEGRATION ---
