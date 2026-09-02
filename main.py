@@ -6,7 +6,7 @@ mengaktifkan sekatan CORS, dan berjalan menggunakan pelayan produksi WSGI Gunico
 
 NOTA PERUBAHAN:
 Sokongan YouTube diaktifkan menggunakan enjin hibrid: yt-dlp tempatan pantas 
-(cookies.txt) dengan fallback automatik ke API Cobalt untuk memintas sekatan PO Token.
+(cookies.txt) dengan fallback automatik ke pelayan Cobalt berpusing demi mengelakkan ralat DNS.
 """
 
 import os
@@ -314,15 +314,15 @@ class CentralOrchestrator:
                             print(f"[{job_id}] Muat turun tempatan berjaya!")
                             download_success = True
                         else:
-                            print(f"[YT-DLP WARNING] Percubaan tempatan disekat: {yt_result.stderr}. Beralih ke Cobalt API...")
+                            print(f"[YT-DLP WARNING] Percubaan tempatan disekat: {yt_result.stderr}. Beralih ke API Cobalt...")
                     except Exception as e:
-                        print(f"[YT-DLP WARNING] Ralat semasa mencuba yt-dlp: {e}. Beralih ke Cobalt API...")
+                        print(f"[YT-DLP WARNING] Ralat semasa mencuba yt-dlp: {e}. Beralih ke API Cobalt...")
 
                     # -------------------------------------------------------------
-                    # STRATEGI 2: Fallback ke Cobalt API (Bypass Sekatan PO Token / Bot)
+                    # STRATEGI 2: Fallback ke API Cobalt berpusing (Bypass Sekatan PO Token / Bot)
                     # -------------------------------------------------------------
                     if not download_success:
-                        print(f"[{job_id}] Memulakan muat turun fallback melalui Cobalt API...")
+                        print(f"[{job_id}] Memulakan muat turun fallback melalui API Cobalt...")
                         import requests
                         
                         payload = {
@@ -335,21 +335,33 @@ class CentralOrchestrator:
                             "Content-Type": "application/json"
                         }
                         
-                        # Menggunakan pelayan API Cobalt (Wuk.sh / Cobalt.tools) yang bebas dari sekatan bot
-                        cobalt_url = "https://co.wuk.sh/"
-                        print(f"[{job_id}] Memanggil API Cobalt di: {cobalt_url}")
+                        # Senarai pelayan Cobalt berpusing untuk pemulihan mandiri jika berlaku ralat DNS / Routing
+                        cobalt_instances = [
+                            "https://api.cobalt.tools/",
+                            "https://cobalt.api.timelessnesses.me/",
+                            "https://co.wuk.sh/"
+                        ]
                         
-                        cob_response = requests.post(cobalt_url, json=payload, headers=headers)
-                        if cob_response.status_code != 200:
-                            raise RuntimeError(f"API Cobalt gagal mengembalikan pautan dengan kod status {cob_response.status_code}")
-                            
-                        cob_data = cob_response.json()
-                        download_link = cob_data.get("url")
+                        download_link = None
+                        for cobalt_url in cobalt_instances:
+                            try:
+                                print(f"[{job_id}] Mencuba API Cobalt di: {cobalt_url}")
+                                cob_response = requests.post(cobalt_url, json=payload, headers=headers, timeout=10)
+                                if cob_response.status_code == 200:
+                                    cob_data = cob_response.json()
+                                    download_link = cob_data.get("url")
+                                    if download_link:
+                                        print(f"[{job_id}] Pautan muat turun Cobalt ditemui melalui: {cobalt_url}")
+                                        break
+                                else:
+                                    print(f"[COBALT WARNING] Pelayan {cobalt_url} mengembalikan status {cob_response.status_code}")
+                            except Exception as e:
+                                print(f"[COBALT WARNING] Gagal menghubungi pelayan {cobalt_url}: {e}")
                         
                         if not download_link:
-                            raise ValueError(f"Tidak dapat mencari pautan muat turun dalam respon Cobalt. Respon: {cob_data}")
+                            raise ValueError("Tidak dapat mencari pautan muat turun dalam mana-mana pelayan Cobalt.")
 
-                        print(f"[{job_id}] Pautan muat turun ditemui: {download_link}. Memulakan muat turun ke VM...")
+                        print(f"[{job_id}] Pautan muat turun sedia: {download_link}. Memulakan muat turun ke VM...")
                         local_audio_path = local_audio_path.with_suffix(suffix)
                         
                         # Muat turun fail audio dari pautan Cobalt
