@@ -22,7 +22,7 @@ cd ~/T1era-music
 git reset --hard HEAD
 ```
 ```
-git pull
+git pull origin main
 ```
 ```
 sudo systemctl restart t1era-music
