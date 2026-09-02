@@ -1064,7 +1064,6 @@ function openLiveTerminalConsole(userId, jobId) {
         setStepStatus("step-temp", "loading");
       } else if (status === "TRANSCRIBING_AUDIO") {
         setStepStatus("step-init", "success");
-        setStepStatus("step-details", "success");
         setStepStatus("step-download", "success");
         setStepStatus("step-temp", "success");
         setStepStatus("step-transcribe", "loading");
@@ -1128,9 +1127,6 @@ function openLiveTerminalConsole(userId, jobId) {
 // =========================================================
 // SISTEM PEMINTASAN INTRO BAGI PENGGUNA TERAKREDITASI
 // =========================================================
-// =========================================================
-// SISTEM PEMINTASAN INTRO BAGI PENGGUNA TERAKREDITASI
-// =========================================================
 function bypassIntroForAuthenticatedUser() {
   if (localStorage.getItem("t1era_logged_in") === "true") {
     // Sembunyikan serta-merta overlay permulaan & typewriter
@@ -1168,5 +1164,4 @@ function bypassIntroForAuthenticatedUser() {
 
 // Jalankan pemeriksaan pintasan serta-merta apabila skrip dimuatkan
 bypassIntroForAuthenticatedUser();
-app.js : 
-_
+app.js :
