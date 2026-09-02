@@ -159,14 +159,16 @@ class CentralOrchestrator:
             if is_cloud and self.firebase_active and user_id and job_id:
                 try:
                     remote_stage0_path = f"users/{user_id}/transcriptions/{job_id}/original_stage0.mid"
+                    print(f"[CLOUD] Memulakan muat naik Stage 0 MIDI ke: {remote_stage0_path}")
                     original_midi_url = self.upload_to_storage(stage0_raw_mid, remote_stage0_path, bucket_name)
-                    print(f"[CLOUD] Fail MIDI asal (Stage 0) dimuat naik ke Firebase Storage: {original_midi_url}")
+                    print(f"[CLOUD SUCCESS] Fail MIDI asal (Stage 0) dimuat naik ke Firebase Storage: {original_midi_url}")
                     
                     # Kemaskini originalMidiUrl di Firestore serta-merta
                     job_ref = self.db.collection("users").document(user_id).collection("midi_jobs").document(job_id)
                     job_ref.set({"originalMidiUrl": original_midi_url}, merge=True)
                 except Exception as stage0_err:
-                    print(f"[CLOUD WARNING] Gagal memproses muat naik Stage 0 MIDI: {stage0_err}")
+                    print(f"[CLOUD ERROR] Gagal memproses muat naik Stage 0 MIDI: {stage0_err}")
+                    traceback.print_exc()
 
             # -------------------------------------------------------------
             # STAGE 1: MIDI Cleanup
@@ -272,21 +274,37 @@ class CentralOrchestrator:
                 job_ref.update(job_update_payload)
                 print(f"[CLOUD] Fail MIDI akhir dimuat naik ke Firebase Storage: {download_url}")
 
-                # [KEMASKINI BERSIH] Padam fail audio mentah (MP3/WAV) asal untuk mengelakkan bebanan storan
+                # [KEMASKINI BERSIH TEGAR] Padam fail audio mentah (MP3/WAV) asal dengan pengendalian ralat terperinci
                 if raw_audio_storage_path:
                     try:
                         print(f"[CLOUD CLEANUP] Memulakan pembersihan fail audio mentah dari Firebase Storage: {raw_audio_storage_path}")
-                        target_bucket = storage.bucket(bucket_name) if self.firebase_active else self.bucket
+                        
+                        # Pastikan baldi sasaran disahkan secara selamat
+                        target_bucket = self.bucket
+                        if bucket_name:
+                            try:
+                                target_bucket = storage.bucket(bucket_name)
+                            except Exception as b_err:
+                                print(f"[CLOUD CLEANUP WARNING] Gagal mendapatkan baldi '{bucket_name}', menggunakan baldi utama: {b_err}")
+                                target_bucket = self.bucket
+                        
                         blob = target_bucket.blob(raw_audio_storage_path)
-                        if blob.exists():
+                        
+                        # Padam blob secara langsung; kendalikan ralat tidak ditemui secara berasingan bagi mengelakkan kegagalan permission check
+                        try:
                             blob.delete()
                             print(f"[CLOUD CLEANUP SUCCESS] Fail audio asal '{raw_audio_storage_path}' berjaya dipadamkan.")
-                            # Kemaskini audioUrl kepada null bagi menandakan fail telah dibersihkan
                             job_ref.update({"audioUrl": None})
-                        else:
-                            print(f"[CLOUD CLEANUP WARNING] Blob fail asal '{raw_audio_storage_path}' tidak ditemui.")
+                        except Exception as del_err:
+                            if "404" in str(del_err) or "not found" in str(del_err).lower():
+                                print(f"[CLOUD CLEANUP] Fail '{raw_audio_storage_path}' sudah tiada dalam Storage (Telah dipadam sebelumnya).")
+                                job_ref.update({"audioUrl": None})
+                            else:
+                                raise del_err
+                                
                     except Exception as cleanup_err:
                         print(f"[CLOUD CLEANUP ERROR] Gagal memadam fail audio mentah: {cleanup_err}")
+                        traceback.print_exc()
             else:
                 print(f"[LOCAL] Semua fail perantara (Stage 0 - 6) disimpan di: {temp_work_dir}")
 
