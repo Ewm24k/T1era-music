@@ -39,7 +39,10 @@
             border-radius: 12px;
             padding: 14px 20px;
             cursor: pointer;
-            transition: all 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+            will-change: transform, background-color; /* Hardware Acceleration Hint */
+            transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1), 
+                        background-color 0.2s cubic-bezier(0.25, 1, 0.5, 1),
+                        border-color 0.2s cubic-bezier(0.25, 1, 0.5, 1);
         }
         .trans-row:hover {
             background: rgba(255, 255, 255, 0.06);
@@ -138,6 +141,11 @@
             box-shadow: 0 0 15px rgba(243, 95, 34, 0.4);
             transform: scale(1.02);
         }
+
+        /* Prevent Layout Shifts (CLS Optimization) */
+        #home-view, #transcriptions-view {
+            contain: content;
+        }
     </style>
 </head>
 <body>
@@ -155,14 +163,12 @@
 
             <nav class="sidebar-nav">
                 <ul class="nav-list">
-                    <!-- Ditambah ID: "nav-home" untuk pertukaran tab -->
                     <li class="nav-item active" id="nav-home">
                         <a href="#">
                             <span class="nav-icon">🏠</span>
                             Home
                         </a>
                     </li>
-                    <!-- BARU: Tab Menu My Transcriptions -->
                     <li class="nav-item" id="nav-transcriptions">
                         <a href="#">
                             <span class="nav-icon">🎹</span>
@@ -224,7 +230,6 @@
                 </div>
 
                 <div class="header-right">
-                    <!-- Piano Studio redirect button link -->
                     <button class="btn-piano-studio" onclick="window.location.href='midiano.html'">
                         🎹 Piano Studio
                     </button>
@@ -246,11 +251,7 @@
                 </div>
             </header>
 
-            <!-- =========================================================
-                 MENGASINGKAN PAPARAN: HOME VIEW & TRANSCRIPTIONS VIEW
-                 ========================================================= -->
-            
-            <!-- A. Paparan Utama (Home View) sedia ada -->
+            <!-- A. Paparan Utama (Home View) -->
             <div id="home-view">
                 <!-- 3D Album Cover Flow Carousel Section -->
                 <section class="carousel-section">
@@ -271,7 +272,6 @@
                     </div>
                 </section>
 
-                <!-- select categories tags filter panel -->
                 <section class="filter-section">
                     <div class="section-title-wrapper">
                         <h3 class="section-title">Select Categories</h3>
@@ -293,7 +293,6 @@
                     </div>
                 </section>
 
-                <!-- popular songs list grid section -->
                 <section class="popular-section">
                     <div class="section-title-wrapper">
                         <h3 class="section-title">Popular songs</h3>
@@ -306,15 +305,14 @@
                 </section>
             </div>
 
-            <!-- B. BARU: Paparan Transkripsi (Transcriptions View) -->
+            <!-- B. Paparan Transkripsi (Transcriptions View) -->
             <div id="transcriptions-view" style="display: none;">
                 <section class="transcriptions-section">
                     <div class="section-title-wrapper">
                         <h3 class="section-title">My Transcriptions</h3>
                     </div>
-                    <!-- Senarai bertema pemain media -->
                     <div class="transcriptions-player-list" id="transcriptions-list">
-                        <!-- Dijana secara dinamik oleh dashboard.js -->
+                        <!-- Instantly and smoothly compiled dynamically by dashboard.js -->
                     </div>
                 </section>
             </div>
