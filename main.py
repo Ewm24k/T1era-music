@@ -8,6 +8,10 @@ NOTA PERUBAHAN:
 Sokongan YouTube diaktifkan secara asli menggunakan API youtube-mp36 yang munasabah & pantas.
 Ditukar kepada set(merge=True) dalam Firestore dan fail audio dimuat naik ke Storage 
 terlebih dahulu bagi menyelaraskan proses dengan mod muat naik biasa.
+
+[KEMASKINI BARU]
+Ditambah kaedah save_title_details() untuk menyimpan tajuk (title) video sahaja
+sebagai fail details.json kecil ke dalam folder Storage yang sama dengan audio/MIDI.
 """
 
 import os
@@ -142,6 +146,29 @@ class CentralOrchestrator:
             print(f"[oEMBED FALLBACK ERROR] Gagal mendapatkan tajuk oEmbed: {oembed_err}")
 
         return "YouTube Track"
+
+    def save_title_details(self, user_id: str, job_id: str, track_title: str, bucket_name: str = None):
+        """[BARU] Simpan tajuk (title) sahaja sebagai fail JSON kecil ke folder Storage
+        yang sama dengan audio/MIDI (users/{user_id}/transcriptions/{job_id}/details.json)"""
+        self._ensure_firebase()
+        if not (self.firebase_active and user_id and job_id):
+            return None
+        import json
+        local_details_path = Path(tempfile.gettempdir()) / f"{job_id}_details.json"
+        try:
+            with open(local_details_path, "w", encoding="utf-8") as f:
+                json.dump({"title": track_title}, f, ensure_ascii=False)
+
+            remote_details_path = f"users/{user_id}/transcriptions/{job_id}/details.json"
+            details_url = self.upload_to_storage(local_details_path, remote_details_path, bucket_name)
+            print(f"[{job_id}] Fail details (title) dimuat naik ke: {details_url}")
+            return details_url
+        except Exception as e:
+            print(f"[DETAILS ERROR] Gagal menyimpan fail title/details: {e}")
+            return None
+        finally:
+            if local_details_path.exists():
+                local_details_path.unlink()
 
     def update_status(self, user_id: str, job_id: str, status: str, progress: int, error_msg: str = None):
         self._ensure_firebase()
@@ -411,6 +438,8 @@ class CentralOrchestrator:
                     # 1.1 Dapatkan tajuk rasmi video YouTube menggunakan API youtube-media-downloader (RapidAPI)
                     track_title = self.get_youtube_title_rapid(video_id)
                     print(f"[{job_id}] Tajuk video dikesan: {track_title}")
+                    # [BARU] Simpan tajuk (title) sahaja sebagai fail details.json ke folder Storage yang sama
+                    self.save_title_details(user_id, job_id, track_title, bucket_name)
                         
                     print(f"[{job_id}] Video ID dikesan: {video_id}. Memanggil API youtube-mp36...")
 
