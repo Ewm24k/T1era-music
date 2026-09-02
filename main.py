@@ -5,8 +5,8 @@ Meredamkan semua log amaran TensorFlow, menyokong pemprosesan fail sementara,
 mengaktifkan sekatan CORS, dan berjalan menggunakan pelayan produksi WSGI Gunicorn.
 
 NOTA PERUBAHAN:
-Sokongan YouTube diaktifkan menggunakan enjin hibrid: yt-dlp tempatan pantas 
-(cookies.txt) dengan fallback automatik ke pelayan Cobalt /api/json berpusing demi mengelakkan ralat.
+Sokongan YouTube diaktifkan secara asli menggunakan API youtube-mp36 yang stabil dan segera.
+Sistem mengekstrak ID video secara automatik dan memuat turun MP3 terus ke VM tanpa pengundian.
 """
 
 import os
@@ -275,105 +275,65 @@ class CentralOrchestrator:
 
                 suffix = ".mp3"
                 bucket_name = OrchestratorConfig.BUCKET_NAME
-                download_success = False
 
-                # JIKA INPUT IALAH PAUTAN YOUTUBE (Enjin Hibrid)
+                # JIKA INPUT IALAH PAUTAN YOUTUBE (Gunakan API youtube-mp36 yang Stabil & Segera)
                 if youtube_url:
-                    # Set status kepada REQUESTING_YT_LINK serta-merta pada permulaan
-                    self.update_status(user_id, job_id, "REQUESTING_YT_LINK", 5)
-                    print(f"[{job_id}] Mengesan pautan YouTube: {youtube_url}.")
+                    # 1. Ekstrak Video ID daripada pautan YouTube secara selamat
+                    import re
+                    video_id = None
+                    patterns = [
+                        r'(?:v=|\/embed\/|\/shorts\/|\/youtu\.be\/|\/v\/|\/e\/|watch\?v=|&v=)([a-zA-Z0-9_-]{11})',
+                        r'^([a-zA-Z0-9_-]{11})$'
+                    ]
+                    for pattern in patterns:
+                        match = re.search(pattern, youtube_url)
+                        if match:
+                            video_id = match.group(1)
+                            break
                     
-                    # -------------------------------------------------------------
-                    # STRATEGI 1: Muat Turun Tempatan Pantas (yt-dlp + Cookies)
-                    # -------------------------------------------------------------
-                    try:
-                        print(f"[{job_id}] Mencuba muat turun tempatan pantas menggunakan yt-dlp + Cookies...")
-                        import subprocess
-                        local_audio_path = local_audio_path.with_suffix(suffix)
+                    if not video_id:
+                        raise ValueError(f"Tidak dapat mengekstrak Video ID dari pautan YouTube: {youtube_url}")
                         
-                        cmd = [
-                            "yt-dlp",
-                            "-x",
-                            "--audio-format", "mp3",
-                            "--audio-quality", "0",
-                            "--no-playlist",
-                            "-o", str(local_audio_path.with_suffix(""))
-                        ]
-                        
-                        # Tambah cookies jika ada
-                        cookies_path = "/home/tengkufiboking/T1era-music/cookies.txt"
-                        if os.path.exists(cookies_path):
-                            print(f"[{job_id}] Fail cookies.txt dikesan. Menggunakan cookies...")
-                            cmd.insert(1, "--cookies")
-                            cmd.insert(2, cookies_path)
-                            
-                        cmd.append(youtube_url)
-                        yt_result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
-                        
-                        if yt_result.returncode == 0:
-                            print(f"[{job_id}] Muat turun tempatan berjaya!")
-                            download_success = True
-                        else:
-                            print(f"[YT-DLP WARNING] Percubaan tempatan disekat: {yt_result.stderr}. Beralih ke API Cobalt...")
-                    except Exception as e:
-                        print(f"[YT-DLP WARNING] Ralat semasa mencuba yt-dlp: {e}. Beralih ke API Cobalt...")
+                    print(f"[{job_id}] Video ID dikesan: {video_id}. Memanggil API youtube-mp36...")
 
-                    # -------------------------------------------------------------
-                    # STRATEGI 2: Fallback ke API Cobalt berpusing (Bypass Sekatan PO Token / Bot)
-                    # -------------------------------------------------------------
-                    if not download_success:
-                        print(f"[{job_id}] Memulakan muat turun fallback melalui API Cobalt...")
-                        import requests
-                        
-                        payload = {
-                            "url": youtube_url,
-                            "isAudioOnly": True,
-                            "aFormat": "mp3"
-                        }
-                        headers = {
-                            "Accept": "application/json",
-                            "Content-Type": "application/json"
-                        }
-                        
-                        # Pelayan API Cobalt berpusing yang ditala khusus ke endpoint /api/json rasmi
-                        cobalt_instances = [
-                            "https://api.cobalt.tools/api/json",
-                            "https://cobalt.api.timelessnesses.me/api/json",
-                            "https://co.wuk.sh/api/json"
-                        ]
-                        
-                        download_link = None
-                        for cobalt_url in cobalt_instances:
-                            try:
-                                print(f"[{job_id}] Mencuba API Cobalt di: {cobalt_url}")
-                                cob_response = requests.post(cobalt_url, json=payload, headers=headers, timeout=10)
-                                if cob_response.status_code == 200:
-                                    cob_data = cob_response.json()
-                                    download_link = cob_data.get("url")
-                                    if download_link:
-                                        print(f"[{job_id}] Pautan muat turun Cobalt ditemui melalui: {cobalt_url}")
-                                        break
-                                else:
-                                    print(f"[COBALT WARNING] Pelayan {cobalt_url} mengembalikan status {cob_response.status_code}")
-                            except Exception as e:
-                                print(f"[COBALT WARNING] Gagal menghubungi pelayan {cobalt_url}: {e}")
-                        
-                        if not download_link:
-                            raise ValueError("Tidak dapat mencari pautan muat turun dalam mana-mana pelayan Cobalt.")
+                    # 2. Hubungi API youtube-mp36 di RapidAPI
+                    self.update_status(user_id, job_id, "REQUESTING_YT_LINK", 5)
+                    import requests
+                    headers = {
+                        "X-RapidAPI-Key": "4bad7baac7msha8abfe0fc35b3a2p1baa6ajsn281427eb1961",
+                        "X-RapidAPI-Host": "youtube-mp36.p.rapidapi.com",
+                        "Content-Type": "application/json"
+                    }
+                    api_url = "https://youtube-mp36.p.rapidapi.com/dl"
+                    response = requests.get(api_url, headers=headers, params={"id": video_id})
+                    
+                    if response.status_code != 200:
+                        raise RuntimeError(f"API youtube-mp36 gagal dengan kod status {response.status_code}. Detail: {response.text}")
+                    
+                    response_data = response.json()
+                    print(f"[{job_id}] Respon API Diterima: {response_data}")
 
-                        print(f"[{job_id}] Pautan muat turun sedia: {download_link}. Memulakan muat turun ke VM...")
-                        local_audio_path = local_audio_path.with_suffix(suffix)
-                        
-                        # Muat turun fail audio dari pautan Cobalt
-                        audio_response = requests.get(download_link, stream=True)
-                        if audio_response.status_code != 200:
-                            raise RuntimeError(f"Gagal memuat turun MP3 dari pautan Cobalt. Status: {audio_response.status_code}")
-                        
-                        with open(local_audio_path, "wb") as f:
-                            for chunk in audio_response.iter_content(chunk_size=8192):
-                                if chunk:
-                                    f.write(chunk)
-                        print(f"[{job_id}] Fail MP3 dari YouTube berjaya dimuat turun ke: {local_audio_path}")
+                    if response_data.get("status") != "ok" or not response_data.get("link"):
+                        raise ValueError(f"API youtube-mp36 melaporkan kegagalan atau tiada pautan. Respon: {response_data}")
+
+                    download_link = response_data["link"]
+                    video_title = response_data.get("title") or "YouTube Track"
+                    print(f"[{job_id}] Pautan muat turun MP3 sedia dikesan: {download_link}")
+
+                    # 3. Muat turun fail audio terus secara tempatan ke VM (Step-Temp -> Loading)
+                    self.update_status(user_id, job_id, "CACHING_AUDIO", 10)
+                    print(f"[{job_id}] Memulakan muat turun MP3 ke VM...")
+                    local_audio_path = local_audio_path.with_suffix(suffix)
+                    
+                    audio_response = requests.get(download_link, stream=True, timeout=60)
+                    if audio_response.status_code != 200:
+                        raise RuntimeError(f"Gagal memuat turun MP3 dari pautan akhir. Status: {audio_response.status_code}")
+                    
+                    with open(local_audio_path, "wb") as f:
+                        for chunk in audio_response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                    print(f"[{job_id}] Fail MP3 dari YouTube berjaya dimuat turun ke: {local_audio_path}")
 
                 # JIKA INPUT IALAH AUDIO URL DARI STORAGE
                 else:
