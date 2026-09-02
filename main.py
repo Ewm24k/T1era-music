@@ -380,7 +380,7 @@ class CentralOrchestrator:
                 suffix = ".mp3"
                 bucket_name = OrchestratorConfig.BUCKET_NAME
 
-                # JIKA INPUT IALAH PAUTAN YOUTUBE (Menggunakan muat turun RapidAPI untuk mendapatkan nama tajuk)
+                # JIKA INPUT IALAH PAUTAN YOUTUBE (Gunakan API youtube-mp36 yang munasabah & pantas)
                 if youtube_url:
                     # 1. Ekstrak Video ID daripada pautan YouTube secara selamat
                     video_id = None
