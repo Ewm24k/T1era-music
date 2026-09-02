@@ -665,6 +665,10 @@ function createProgressCardMarkup() {
           <div class="step-status"><span class="step-circle"></span></div>
           <span class="step-label">Initializing Session Verification</span>
         </div>
+        <div class="proc-step" id="step-details">
+          <div class="step-status"><span class="step-circle"></span></div>
+          <span class="step-label">Fetching Video Details</span>
+        </div>
         <div class="proc-step" id="step-download">
           <div class="step-status"><span class="step-circle"></span></div>
           <span class="step-label">Receiving Uploaded Audio</span>
@@ -1033,24 +1037,34 @@ function openLiveTerminalConsole(userId, jobId) {
 
       if (status === "QUEUED") {
         setStepStatus("step-init", "success");
-        setStepStatus("step-download", "loading");
-      } else if (status === "REQUESTING_YT_LINK" || status === "DOWNLOADING_AUDIO") {
+        setStepStatus("step-details", "loading");
+      } else if (status === "REQUESTING_YT_LINK") {
         setStepStatus("step-init", "success");
+        setStepStatus("step-details", "loading");
+        const stepDetailsLabel = document.querySelector("#step-details .step-label");
+        if (stepDetailsLabel) {
+          stepDetailsLabel.textContent = `Fetching Video Details: ${progress}%`;
+        }
+      } else if (status === "DOWNLOADING_AUDIO" || status === "UPLOADING_AUDIO_TO_CLOUD") {
+        setStepStatus("step-init", "success");
+        setStepStatus("step-details", "success");
         setStepStatus("step-download", "loading");
         const stepDownloadLabel = document.querySelector("#step-download .step-label");
         if (stepDownloadLabel) {
-          if (status === "REQUESTING_YT_LINK") {
-            stepDownloadLabel.textContent = `Requesting YouTube Link: ${progress}%`;
+          if (status === "UPLOADING_AUDIO_TO_CLOUD") {
+            stepDownloadLabel.textContent = `Uploading YouTube Audio: ${progress}%`;
           } else {
             stepDownloadLabel.textContent = "Downloading Storage Audio";
           }
         }
       } else if (status === "CACHING_AUDIO") {
         setStepStatus("step-init", "success");
+        setStepStatus("step-details", "success");
         setStepStatus("step-download", "success");
         setStepStatus("step-temp", "loading");
       } else if (status === "TRANSCRIBING_AUDIO") {
         setStepStatus("step-init", "success");
+        setStepStatus("step-details", "success");
         setStepStatus("step-download", "success");
         setStepStatus("step-temp", "success");
         setStepStatus("step-transcribe", "loading");
@@ -1114,6 +1128,9 @@ function openLiveTerminalConsole(userId, jobId) {
 // =========================================================
 // SISTEM PEMINTASAN INTRO BAGI PENGGUNA TERAKREDITASI
 // =========================================================
+// =========================================================
+// SISTEM PEMINTASAN INTRO BAGI PENGGUNA TERAKREDITASI
+// =========================================================
 function bypassIntroForAuthenticatedUser() {
   if (localStorage.getItem("t1era_logged_in") === "true") {
     // Sembunyikan serta-merta overlay permulaan & typewriter
@@ -1151,3 +1168,5 @@ function bypassIntroForAuthenticatedUser() {
 
 // Jalankan pemeriksaan pintasan serta-merta apabila skrip dimuatkan
 bypassIntroForAuthenticatedUser();
+app.js : 
+_
