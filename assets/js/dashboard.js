@@ -163,11 +163,11 @@ function loadUserTranscriptions() {
     const jobsRef = collection(db, "users", currentUser.uid, "midi_jobs");
     const q = query(jobsRef, where("status", "==", "COMPLETED"));
 
-    // Real-Time snapshot listener
+    // Real-Time snapshot listener (Kini menggunakan .data() berbanding .to_dict() yang ralat)
     onSnapshot(q, (snapshot) => {
         const jobs = [];
         snapshot.forEach((doc) => {
-            const data = doc.to_dict();
+            const data = doc.data();
             jobs.push({
                 id: doc.id,
                 title: data.youtubeUrl ? extractYouTubeTitle(data.youtubeUrl) : "Local Uploaded Track",
@@ -370,6 +370,8 @@ document.getElementById("dashboard-logout-btn").addEventListener("click", () => 
         if (auth) {
           signOut(auth)
             .then(() => {
+                // Padam status pengesahan di dalam storan tempatan bagi mengelakkan ralat kitaran lintasan intro di index.html
+                localStorage.removeItem("t1era_logged_in");
                 window.location.href = "index.html";
             })
             .catch((err) => {
@@ -377,6 +379,7 @@ document.getElementById("dashboard-logout-btn").addEventListener("click", () => 
                 alert("Session disconnect failed. Try again.");
             });
         } else {
+          localStorage.removeItem("t1era_logged_in");
           window.location.href = "index.html";
         }
     }
