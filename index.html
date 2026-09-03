@@ -1040,6 +1040,174 @@
             border-color: rgba(255, 74, 74, 0.4);
             box-shadow: 0 0 10px rgba(255, 74, 74, 0.15);
         }
+
+        /* =========================================================
+           ADVANCED AI MODEL SELECTOR COMPONENT STYLES
+           ========================================================= */
+        .model-picker-section {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 5px;
+            text-align: left;
+        }
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: monospace;
+            margin-bottom: 4px;
+        }
+        .step-num {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.72rem;
+            font-weight: bold;
+            color: #f35f22;
+            text-shadow: 0 0 8px rgba(243, 95, 34, 0.3);
+        }
+        .step-desc {
+            font-size: 0.82rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.85);
+            font-weight: 500;
+        }
+        .model-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            width: 100%;
+        }
+        .model-card {
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 18px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            position: relative;
+            transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+            will-change: transform, box-shadow, border-color;
+        }
+        .model-card:hover {
+            background: rgba(255, 255, 255, 0.03);
+            border-color: rgba(255, 255, 255, 0.15);
+            transform: translateY(-2px);
+        }
+        .model-badge {
+            align-self: flex-start;
+            font-size: 0.65rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            padding: 2px 8px;
+            border-radius: 4px;
+            letter-spacing: 1px;
+            font-family: monospace;
+        }
+        .model-badge.nexus {
+            background: rgba(243, 95, 34, 0.12);
+            color: #f35f22;
+            border: 1px solid rgba(243, 95, 34, 0.25);
+        }
+        .model-badge.vortex {
+            background: rgba(139, 92, 246, 0.12);
+            color: #a78bfa;
+            border: 1px solid rgba(139, 92, 246, 0.25);
+        }
+        .model-badge.ivory {
+            background: rgba(6, 182, 212, 0.12);
+            color: #22d3ee;
+            border: 1px solid rgba(6, 182, 212, 0.25);
+        }
+        .model-name {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: 1px;
+        }
+        .model-desc {
+            font-size: 0.72rem;
+            line-height: 1.5;
+            color: rgba(255, 255, 255, 0.45);
+            flex-grow: 1;
+        }
+        .model-stages {
+            font-size: 0.7rem;
+            font-family: monospace;
+            color: rgba(255, 255, 255, 0.25);
+            letter-spacing: 1px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 8px;
+            margin-top: 4px;
+        }
+        
+        /* Active Glowing Configurations */
+        .model-card.active[data-model="T1ERA-Nexus-6"] {
+            background: rgba(243, 95, 34, 0.03);
+            border-color: #f35f22;
+            box-shadow: 0 0 25px rgba(243, 95, 34, 0.35);
+        }
+        .model-card.active[data-model="T1ERA-Vortex-Ultra"] {
+            background: rgba(139, 92, 246, 0.03);
+            border-color: #8b5cf6;
+            box-shadow: 0 0 25px rgba(139, 92, 246, 0.35);
+        }
+        .model-card.active[data-model="T1ERA-Ivory-4"] {
+            background: rgba(6, 182, 212, 0.03);
+            border-color: #06b6d4;
+            box-shadow: 0 0 25px rgba(6, 182, 212, 0.35);
+        }
+        
+        /* Step 2 Selection Locking and Dimming */
+        .input-method-section {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1), 
+                        filter 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            will-change: opacity, filter;
+        }
+        .input-method-section.selection-locked {
+            opacity: 0.25;
+            filter: grayscale(80%) blur(0.5px);
+            pointer-events: none !important;
+        }
+        .input-method-section.selection-locked * {
+            pointer-events: none !important;
+        }
+
+        /* Selector Shake Animation for Validation Warning */
+        @keyframes picker-shake {
+            0%, 100% { transform: translateX(0); }
+            15%, 45%, 75% { transform: translateX(-6px); }
+            30%, 60%, 90% { transform: translateX(6px); }
+        }
+        .model-picker-section.warning-shake {
+            animation: picker-shake 0.5s ease-in-out;
+        }
+
+        /* Mobile Responsive Overrides for Selector Grid */
+        @media (max-width: 768px) {
+            .model-grid {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+            .step-desc {
+                font-size: 0.72rem;
+                letter-spacing: 1.5px;
+            }
+            .model-card {
+                padding: 14px;
+                gap: 8px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1136,7 +1304,6 @@
                             <div class="card-name">Generate Raw Sheet Music</div>
                         </div>
 
-                        <!-- Option 3 Card: REDIRECTS DIRECTLY TO MIDIANO.HTML -->
                         <!-- Option 3 Card: REDIRECTS TO DASHBOARD.HTML -->
                         <div class="service-card glowing-active" onclick="window.location.href='dashboard.html'">
                             <div class="card-icon">⚡</div>
@@ -1144,48 +1311,92 @@
                         </div>
                     </div>
 
-                    <!-- Swap Destination Menu: Upload Screen Grid (Appears on same popup when Option 2 is clicked) -->
-                    <div class="services-grid grid-transition grid-hidden" id="upload-services-grid" style="display: none;">
+                    <!-- Swap Destination Menu: Upload Screen Flex Container (Appears on same popup when Option 2 is clicked) -->
+                    <div class="grid-transition grid-hidden" id="upload-services-grid" style="display: none; display: flex; flex-direction: column; gap: 24px; width: 100%;">
                         
-                        <!-- Upload Option 1: YouTube Import (Web3 Card) -->
-                        <div class="service-card-expanded blue-glow">
-                            <div class="card-icon-header">
-                                <!-- Inline YouTube SVG Icon -->
-                                <svg class="yt-logo" viewBox="0 0 24 24" fill="#FF0000">
-                                    <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.518 3.545 12 3.545 12 3.545s-7.518 0-9.388.507a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.87.507 9.388.507 9.388.507s7.518 0 9.388-.507a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                                </svg>
-                                <div class="card-subtitle">YouTube Streaming Link</div>
+                        <!-- STEP 1: CHOOSE NEURAL TRANSCRIBER ENGINE -->
+                        <div class="model-picker-section" id="model-picker-container">
+                            <div class="step-header">
+                                <span class="step-num">STEP 1</span>
+                                <span class="step-desc">Select AI Neural Transcriber Engine</span>
                             </div>
-                            <div class="web3-input-wrapper">
-                                <input type="url" id="youtube-link-input" placeholder="https://www.youtube.com/watch?v=..." class="web3-input">
-                                <button type="button" id="youtube-submit-btn" class="web3-action-btn pulse-glow-blue">Import Stream</button>
-                            </div>
-                        </div>
+                            <div class="model-grid">
+                                <!-- Model Card 1: Nexus-6 -->
+                                <div class="model-card" data-model="T1ERA-Nexus-6">
+                                    <div class="model-badge nexus">Nexus-6</div>
+                                    <div class="model-name">TiERA Nexus-6</div>
+                                    <p class="model-desc">Advanced Multi-Instrument Array. Best for complex band arrangements, pop ballads, and multi-instrument tracking with full quantization.</p>
+                                    <div class="model-stages">STAGES 0 - 6</div>
+                                </div>
 
-                        <!-- Upload Option 2: File Explorer Audio Upload (Web3 Dropzone) -->
-                        <div class="service-card-expanded emerald-glow">
-                            <div class="card-icon-header">
-                                <div class="card-subtitle">Local Audio File</div>
-                            </div>
-                            
-                            <!-- Dropzone Container -->
-                            <div class="upload-dropzone" id="file-dropzone-trigger">
-                                <div class="dropzone-inner">
-                                    <span class="upload-icon">📤</span>
-                                    <span class="dropzone-text" id="dropzone-label-text">Select Music File</span>
-                                    <span class="dropzone-subtext">WAV, MP3 Supported</span>
+                                <!-- Model Card 2: Vortex-Ultra -->
+                                <div class="model-card" data-model="T1ERA-Vortex-Ultra">
+                                    <div class="model-badge vortex">Vortex-Ultra</div>
+                                    <div class="model-name">TiERA Vortex-Ultra</div>
+                                    <p class="model-desc">Expressive Acoustic Ensemble. Skips Stage 6 grid quantization to preserve natural micro-timing and expressive human dynamics.</p>
+                                    <div class="model-stages">STAGES 0 - 5</div>
+                                </div>
+
+                                <!-- Model Card 3: Ivory-4 -->
+                                <div class="model-card" data-model="T1ERA-Ivory-4">
+                                    <div class="model-badge ivory">Ivory-4</div>
+                                    <div class="model-name">TiERA Ivory-4</div>
+                                    <p class="model-desc">Solo Piano Master. Streamlined 4-Stage processing. Bypasses styling/quantization to capture authentic, single-instrument performances.</p>
+                                    <div class="model-stages">STAGES 0 - 4</div>
                                 </div>
                             </div>
-
-                            <!-- Hidden Native File Input -->
-                            <input type="file" id="audio-file-input" accept=".mp3,.wav,audio/*" style="display: none;">
                         </div>
 
-                        <!-- Upload Option 3: MIDI Player (Standard Visual Link Card) -->
-                        <div class="service-card glowing-active" onclick="window.location.href='midiano.html'">
-                            <div class="card-icon">🎹</div>
-                            <div class="card-name">Upload MIDI file</div>
+                        <!-- STEP 2: SELECT AUDIO INPUT METHOD (Dimmed until Step 1 is completed) -->
+                        <div class="input-method-section selection-locked" id="input-methods-wrapper">
+                            <div class="step-header">
+                                <span class="step-num">STEP 2</span>
+                                <span class="step-desc">Select Media Source Input Method</span>
+                            </div>
+                            
+                            <div class="services-grid">
+                                <!-- Upload Option 1: YouTube Import (Web3 Card) -->
+                                <div class="service-card-expanded blue-glow">
+                                    <div class="card-icon-header">
+                                        <!-- Inline YouTube SVG Icon -->
+                                        <svg class="yt-logo" viewBox="0 0 24 24" fill="#FF0000">
+                                            <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.518 3.545 12 3.545 12 3.545s-7.518 0-9.388.507a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.87.507 9.388.507 9.388.507s7.518 0 9.388-.507a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                                        </svg>
+                                        <div class="card-subtitle">YouTube Streaming Link</div>
+                                    </div>
+                                    <div class="web3-input-wrapper">
+                                        <input type="url" id="youtube-link-input" placeholder="https://www.youtube.com/watch?v=..." class="web3-input">
+                                        <button type="button" id="youtube-submit-btn" class="web3-action-btn pulse-glow-blue">Import Stream</button>
+                                    </div>
+                                </div>
+
+                                <!-- Upload Option 2: File Explorer Audio Upload (Web3 Dropzone) -->
+                                <div class="service-card-expanded emerald-glow">
+                                    <div class="card-icon-header">
+                                        <div class="card-subtitle">Local Audio File</div>
+                                    </div>
+                                    
+                                    <!-- Dropzone Container -->
+                                    <div class="upload-dropzone" id="file-dropzone-trigger">
+                                        <div class="dropzone-inner">
+                                            <span class="upload-icon">📤</span>
+                                            <span class="dropzone-text" id="dropzone-label-text">Select Music File</span>
+                                            <span class="dropzone-subtext">WAV, MP3 Supported</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Hidden Native File Input -->
+                                    <input type="file" id="audio-file-input" accept=".mp3,.wav,audio/*" style="display: none;">
+                                </div>
+
+                                <!-- Upload Option 3: MIDI Player (Standard Visual Link Card) -->
+                                <div class="service-card glowing-active" onclick="window.location.href='midiano.html'">
+                                    <div class="card-icon">🎹</div>
+                                    <div class="card-name">Upload MIDI file</div>
+                                </div>
+                            </div>
                         </div>
+
                     </div>
                 </div>
 
