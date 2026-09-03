@@ -14,16 +14,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 // ==========================================
-// CONFIGURATION & SEAMLESS FAILOVER KEYS
+// CONFIGURATION & GLOBAL CONSTANTS
 // ==========================================
-// A rotating array of public keys to prevent suspension lockouts
-const JAMENDO_CLIENT_IDS = [
-    "3dce8b55", // Official high-limit VLC Player Key (Fully active)
-    "56d30c95", // PyJamendo Client Key (Fully active)
-    "709fa152"  // Public developer document key (suspended but kept as fallback)
-];
-let currentClientIdIndex = 0;
-
 // SVG Icon definitions
 const playIconSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>`;
 const pauseIconSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>`;
@@ -36,7 +28,7 @@ const studioIconSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="non
 const resolvedTitleCache = new Map();
 const validatedMidiCache = new Set();
 
-// Fallback high-quality static default songs list
+// Reliable fallback default tracks array
 const popularTracksDataMockFallback = [
     { id: 1, title: "Golden Days", artist: "Felix Carter", duration: "3:12", art: "https://picsum.photos/id/65/300/300" },
     { id: 2, title: "Fading Horizon", artist: "Ella Hunt", duration: "4:05", art: "https://picsum.photos/id/1025/300/300" },
@@ -347,32 +339,30 @@ function getMockTranscriptions() {
     ];
 }
 
-// ==========================================
-// CORE JAMENDO DATA REQUEST WITH JSONP
-// ==========================================
-function makeJamendoJSONPRequest(params, clientId) {
+// =======================================================
+// DEEZER MUSIC API VIA JSONP (COMPLETELY KEYLESS + CORS BYPASS)
+// =======================================================
+function makeDeezerJSONPRequest(endpoint, params) {
     return new Promise((resolve, reject) => {
-        const callbackName = "jamendoCallback_" + Math.floor(Math.random() * 1000000);
+        const callbackName = "deezerCallback_" + Math.floor(Math.random() * 1000000);
         const queryParams = new URLSearchParams({
-            client_id: clientId,
-            format: "json",
-            limit: "12",
+            output: "jsonp",
             callback: callbackName,
             ...params
         });
 
         const script = document.createElement("script");
-        script.src = `https://api.jamendo.com/v3.0/tracks/?${queryParams.toString()}`;
+        script.src = `https://api.deezer.com/${endpoint}?${queryParams.toString()}`;
         
         const timeoutId = setTimeout(() => {
             cleanup();
             reject(new Error("Request timed out."));
-        }, 4000);
+        }, 5000);
 
         window[callbackName] = function(data) {
             cleanup();
-            if (data.headers && data.headers.status === "failed") {
-                reject(new Error(data.headers.error_message || "API Failure"));
+            if (data.error) {
+                reject(new Error(data.error.message || "API Failure"));
             } else {
                 resolve(data);
             }
@@ -380,7 +370,7 @@ function makeJamendoJSONPRequest(params, clientId) {
 
         script.onerror = function() {
             cleanup();
-            reject(new Error("Network connection or CORS blocked script load."));
+            reject(new Error("Network connection blocked script load."));
         };
 
         function cleanup() {
@@ -394,48 +384,26 @@ function makeJamendoJSONPRequest(params, clientId) {
 }
 
 // ==========================================
-// SEAMLESS KEY ROTATION FAILOVER HANDLING
+// CORE DATA FETCH CONTROL (ONLINE & OFFLINE SEARCH)
 // ==========================================
-async function fetchJamendoTracksWithFailover(params, attempt = 0) {
-    if (attempt >= JAMENDO_CLIENT_IDS.length) {
-        throw new Error("All loaded Jamendo API client keys are currently suspended or rate-limited.");
-    }
-
-    const currentClientId = JAMENDO_CLIENT_IDS[currentClientIdIndex];
-    
-    try {
-        const data = await makeJamendoJSONPRequest(params, currentClientId);
-        return data; // Request succeeded with this key
-    } catch (error) {
-        console.warn(`[API KEY ROTATION] Key ${currentClientId} returned error: "${error.message}". Swapping keys...`);
-        // Move index to next available key in the list
-        currentClientIdIndex = (currentClientIdIndex + 1) % JAMENDO_CLIENT_IDS.length;
-        // Retry fetch recursively with the updated key index
-        return fetchJamendoTracksWithFailover(params, attempt + 1);
-    }
-}
-
-// ==========================================
-// ONLINE & OFFLINE SEARCH AND POPULAR TRACKS
-// ==========================================
-async function fetchJamendoTracks(params = {}) {
+async function fetchDeezerTracks(params = {}) {
     popularGrid.innerHTML = `
         <div style="grid-column: 1 / -1; text-align: center; color: rgba(255,255,255,0.4); padding: 40px 0; font-size: 11.5px; font-weight: 500;">
-            Retrieving songs...
+            Retrieving songs from Deezer...
         </div>
     `;
 
     try {
-        const data = await fetchJamendoTracksWithFailover(params);
-        if (data.results && data.results.length > 0) {
-            currentTrackList = data.results.map(track => ({
+        const data = await makeDeezerJSONPRequest("search", params);
+        if (data.data && data.data.length > 0) {
+            currentTrackList = data.data.map(track => ({
                 id: track.id,
-                title: track.name,
-                artist: track.artist_name,
+                title: track.title,
+                artist: track.artist.name,
                 duration: formatDuration(track.duration),
                 duration_seconds: track.duration,
-                art: track.image || "https://picsum.photos/id/1025/300/300",
-                audio: track.audio
+                art: track.album.cover_medium || track.album.cover || "https://picsum.photos/id/1025/300/300",
+                audio: track.preview // Deezer provides actual 30-second stream audio preview!
             }));
             renderPopularTracks(currentTrackList);
         } else {
@@ -446,10 +414,11 @@ async function fetchJamendoTracks(params = {}) {
             `;
         }
     } catch (error) {
-        console.warn("[HYBRID DATA RESOLVER] Jamendo API offline. Routing locally. Reason:", error.message);
+        console.warn("[HYBRID DATA RESOLVER] Deezer API failed. Routing locally. Reason:", error.message);
         
-        if (params.search) {
-            const searchFiltered = searchLocalMockTracks(params.search);
+        // Fallback search locally
+        if (params.q) {
+            const searchFiltered = searchLocalMockTracks(params.q);
             currentTrackList = searchFiltered;
             renderPopularTracks(searchFiltered);
         } else {
@@ -459,15 +428,15 @@ async function fetchJamendoTracks(params = {}) {
     }
 }
 
-function fetchJamendoTracksByGenre(genre) {
+function fetchDeezerTracksByGenre(genre) {
     if (genre === "all") {
-        fetchJamendoTracks({ order: "popularity_total" });
+        fetchDeezerTracks({ q: "top hits" }); // Default load top trending commercial hits
     } else {
-        fetchJamendoTracks({ fuzzytags: genre, order: "popularity_total" });
+        fetchDeezerTracks({ q: genre });
     }
 }
 
-// Local mock filtering system for complete offline failover
+// Local mock filtering system for complete offline fallback
 function searchLocalMockTracks(queryText) {
     const lowerQuery = queryText.toLowerCase();
     const matches = popularTracksDataMockFallback.filter(track => 
@@ -537,7 +506,7 @@ function selectAndPlayTrack(track) {
     }
 
     if (track.audio) {
-        // Play real music stream directly from Jamendo 
+        // Play real music stream directly from Deezer 
         isRealPlayback = true;
         audioPlayer.src = track.audio;
         audioPlayer.volume = currentVolume;
@@ -721,7 +690,7 @@ categoriesRow.addEventListener("click", (e) => {
         if (searchInput) searchInput.value = "";
         
         const genre = e.target.dataset.genre;
-        fetchJamendoTracksByGenre(genre);
+        fetchDeezerTracksByGenre(genre);
     }
 });
 
@@ -734,13 +703,13 @@ if (searchInput) {
         
         searchTimeout = setTimeout(() => {
             if (query.length > 0) {
-                // Fetch tracks matching search parameters
-                fetchJamendoTracks({ search: query });
+                // Fetch tracks matching search parameters from Deezer Catalog
+                fetchDeezerTracks({ q: query });
             } else {
                 // Restore search defaults based on selected capsule
                 const activeCapsule = document.querySelector(".capsule.active");
                 const genre = activeCapsule ? activeCapsule.dataset.genre : "all";
-                fetchJamendoTracksByGenre(genre);
+                fetchDeezerTracksByGenre(genre);
             }
         }, 400); 
     });
@@ -774,4 +743,4 @@ document.getElementById("dashboard-logout-btn").addEventListener("click", () => 
 });
 
 // Initial boot logic
-fetchJamendoTracksByGenre("all");
+fetchDeezerTracksByGenre("all");
