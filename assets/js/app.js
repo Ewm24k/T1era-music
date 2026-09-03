@@ -22,11 +22,19 @@ import {
   showVortexTerminalFailure,
   openVortexLiveTerminalConsole
 } from "./vortex-progress.js";
+import {
+  createIvoryProgressCardMarkup,
+  setIvoryStepStatus,
+  showIvoryTerminalFailure,
+  openIvoryLiveTerminalConsole
+} from "./ivory-progress.js";
 
 // Pautan URL Pelayan GCP VM API T1era Music (Menggunakan Terowong Selamat Ngrok)
 const RENDER_BACKEND_URL = "https://crock-blast-purchase.ngrok-free.dev/transcribe";
 // Endpoint Vortex-Ultra (Stage 0 - 5) - dikendalikan oleh vortex_orchestrator.py, sama pelayan
 const RENDER_BACKEND_URL_VORTEX = RENDER_BACKEND_URL.replace("/transcribe", "/transcribe-vortex");
+// Endpoint Ivory-4 (Stage 0 - 4) - dikendalikan oleh ivory_orchestrator.py, sama pelayan
+const RENDER_BACKEND_URL_IVORY = RENDER_BACKEND_URL.replace("/transcribe", "/transcribe-ivory");
 
 // =========================================================
 // INJEKSI STYLING NEON KONSOL PEMPROSESAN (AAA GRADE UI/UX)
@@ -1130,6 +1138,179 @@ function runVortexFileUpload(selectedFile) {
 }
 
 // =========================================================
+// IVORY-4 JOB RUNNERS (Stage 0 - 4, no styling, no quantization)
+// =========================================================
+
+function runIvoryYoutubeJob(urlValue) {
+  const userId = currentUserObj ? currentUserObj.uid : "guest_studio_creator";
+  const jobId = "yt_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
+
+  if (menuToggle) menuToggle.style.display = "none";
+
+  servicesOverlay.classList.remove("active");
+  verificationScreen.classList.add("active");
+  verificationTerminal.innerHTML = createIvoryProgressCardMarkup();
+
+  setIvoryStepStatus("step-init", "loading");
+
+  setTimeout(() => {
+    setIvoryStepStatus("step-init", "success");
+    setIvoryStepStatus("step-download", "loading");
+
+    const stepDownloadLabel = document.querySelector("#step-download .step-label");
+    if (stepDownloadLabel) stepDownloadLabel.textContent = "Requesting YouTube Audio Link";
+
+    setTimeout(() => {
+      setIvoryStepStatus("step-download", "success");
+      setIvoryStepStatus("step-temp", "loading");
+
+      const stepTempLabel = document.querySelector("#step-temp .step-label");
+      if (stepTempLabel) stepTempLabel.textContent = "Downloading Audio on Server";
+
+      const triggerYoutubeSequence = () => {
+        openIvoryLiveTerminalConsole(userId, jobId);
+
+        fetch(RENDER_BACKEND_URL_IVORY, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true"
+          },
+          body: JSON.stringify({ userId: userId, jobId: jobId, youtubeUrl: urlValue })
+        })
+        .then((res) => {
+          if (!res.ok) {
+            return res.json().then((body) => {
+              throw new Error(body.error || "Server rejected the YouTube transcription request.");
+            });
+          }
+        })
+        .catch((err) => {
+          console.error("Ivory YouTube Transcribe request failed:", err);
+          showIvoryTerminalFailure(err.message || "Failed to start YouTube transcription job.");
+        });
+      };
+
+      if (db && userId !== "guest_studio_creator") {
+        const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
+        setDoc(jobRef, {
+          status: "QUEUED",
+          progress: 0,
+          youtubeUrl: urlValue,
+          createdAt: serverTimestamp()
+        })
+        .then(() => {
+          triggerYoutubeSequence();
+        })
+        .catch(err => {
+          console.warn("[FIRESTORE BYPASS] Write blocked by Rules. Bypassing straight to Render...", err);
+          triggerYoutubeSequence();
+        });
+      } else {
+        triggerYoutubeSequence();
+      }
+
+    }, 1000);
+  }, 1000);
+}
+
+function runIvoryFileUpload(selectedFile) {
+  const userId = currentUserObj ? currentUserObj.uid : "guest_studio_creator";
+  const jobId = "file_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
+
+  if (menuToggle) menuToggle.style.display = "none";
+
+  servicesOverlay.classList.remove("active");
+  dropzoneLabelText.textContent = "UPLOADING...";
+  dropzoneLabelText.style.color = "#10b981";
+  dropzoneLabelText.style.textShadow = "0 0 10px rgba(16, 185, 129, 0.4)";
+
+  verificationScreen.classList.add("active");
+  verificationTerminal.innerHTML = createIvoryProgressCardMarkup();
+  setIvoryStepStatus("step-init", "loading");
+
+  if (!storage) {
+    alert("Firebase Storage is uninitialized. Local upload is offline.");
+    verificationScreen.classList.remove("active");
+    dropzoneLabelText.textContent = "Select Music File";
+    return;
+  }
+
+  const storageRef = ref(storage, `users/${userId}/transcriptions/${jobId}/${selectedFile.name}`);
+  const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+
+  uploadTask.on("state_changed",
+    (snapshot) => {
+      const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+      const progressBar = document.getElementById("proc-bar");
+      const progressPct = document.getElementById("proc-pct");
+      if (progressBar) progressBar.style.width = `${percent / 4}%`;
+      if (progressPct) progressPct.textContent = `${Math.round(percent / 4)}%`;
+      const stepInitLabel = document.querySelector("#step-init .step-label");
+      if (stepInitLabel) stepInitLabel.textContent = `Uploading File: ${percent}%`;
+    },
+    (error) => {
+      alert("Failed to upload: " + error.message);
+      verificationScreen.classList.remove("active");
+      dropzoneLabelText.textContent = "Select Music File";
+    },
+    () => {
+      setIvoryStepStatus("step-init", "success");
+      setIvoryStepStatus("step-download", "loading");
+      getDownloadURL(uploadTask.snapshot.ref).then((downloadUrl) => {
+        setIvoryStepStatus("step-download", "success");
+        setIvoryStepStatus("step-temp", "loading");
+
+        const triggerUploadSequence = () => {
+          openIvoryLiveTerminalConsole(userId, jobId);
+          fetch(RENDER_BACKEND_URL_IVORY, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "ngrok-skip-browser-warning": "true"
+            },
+            body: JSON.stringify({ userId: userId, jobId: jobId, audioUrl: downloadUrl })
+          })
+          .then((res) => {
+            if (!res.ok) {
+              return res.json().then((body) => {
+                throw new Error(body.error || "Server rejected the transcription request.");
+              });
+            }
+          })
+          .catch((err) => {
+            console.error("Ivory Transcribe request failed:", err);
+            showIvoryTerminalFailure(err.message || "Failed to start transcription job.");
+          });
+        };
+
+        if (db && userId !== "guest_studio_creator") {
+          const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
+          setDoc(jobRef, {
+            status: "QUEUED",
+            progress: 0,
+            audioUrl: downloadUrl,
+            createdAt: serverTimestamp()
+          })
+          .then(() => {
+            setIvoryStepStatus("step-temp", "success");
+            triggerUploadSequence();
+          })
+          .catch(err => {
+            console.warn("[FIRESTORE BYPASS] Write blocked by Rules. Bypassing straight to Render...", err);
+            setIvoryStepStatus("step-temp", "success");
+            triggerUploadSequence();
+          });
+        } else {
+          setIvoryStepStatus("step-temp", "success");
+          triggerUploadSequence();
+        }
+      });
+    }
+  );
+}
+
+// =========================================================
 // MODEL DISPATCH: YouTube submit & File dropzone entry points
 // =========================================================
 
@@ -1154,8 +1335,10 @@ if (youtubeSubmitBtn) {
       runNexusYoutubeJob(urlValue);
     } else if (selectedModel === "T1ERA-Vortex-Ultra") {
       runVortexYoutubeJob(urlValue);
+    } else if (selectedModel === "T1ERA-Ivory-4") {
+      runIvoryYoutubeJob(urlValue);
     } else {
-      alert("This model is not available yet. Please select TiERA Nexus-6 or Vortex-Ultra for now.");
+      alert("This model is not available yet. Please select TiERA Nexus-6, Vortex-Ultra, or Ivory-4.");
     }
   });
 }
@@ -1165,8 +1348,12 @@ fileDropzoneTrigger.addEventListener("click", () => {
     alert("Please select an AI Neural Transcriber Engine first (Step 1).");
     return;
   }
-  if (selectedModel !== "T1ERA-Nexus-6" && selectedModel !== "T1ERA-Vortex-Ultra") {
-    alert("This model is not available yet. Please select TiERA Nexus-6 or Vortex-Ultra for now.");
+  if (
+    selectedModel !== "T1ERA-Nexus-6" &&
+    selectedModel !== "T1ERA-Vortex-Ultra" &&
+    selectedModel !== "T1ERA-Ivory-4"
+  ) {
+    alert("This model is not available yet. Please select TiERA Nexus-6, Vortex-Ultra, or Ivory-4.");
     return;
   }
   audioFileInput.click();
@@ -1186,8 +1373,10 @@ audioFileInput.addEventListener("change", (event) => {
     runNexusFileUpload(selectedFile);
   } else if (selectedModel === "T1ERA-Vortex-Ultra") {
     runVortexFileUpload(selectedFile);
+  } else if (selectedModel === "T1ERA-Ivory-4") {
+    runIvoryFileUpload(selectedFile);
   } else {
-    alert("This model is not available yet. Please select TiERA Nexus-6 or Vortex-Ultra for now.");
+    alert("This model is not available yet. Please select TiERA Nexus-6, Vortex-Ultra, or Ivory-4.");
     dropzoneLabelText.textContent = "Select Music File";
   }
 });
