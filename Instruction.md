@@ -128,3 +128,41 @@ sudo systemctl status t1era-music --no-pager
 ps aux | grep '[n]grok'
 curl https://crock-blast-purchase.ngrok-free.dev/
 ```
+
+#After update new file run this 
+
+```
+# 1. Pull the new files
+cd ~/T1era-music
+git pull origin main
+
+# 2. Point the service at ivory_orchestrator.py — this chain-imports
+#    vortex_orchestrator.py -> main.py, so ALL THREE routes register:
+#    /transcribe, /transcribe-vortex, /transcribe-ivory
+sudo sed -i 's/ vortex_orchestrator:app$/ ivory_orchestrator:app/' /etc/systemd/system/t1era-music.service
+
+# 3. Confirm the edit landed
+grep ExecStart /etc/systemd/system/t1era-music.service
+# should end in ivory_orchestrator:app
+
+# 4. Reload and restart
+sudo systemctl daemon-reload
+sudo systemctl restart t1era-music
+
+# 5. Check it came up clean (watch for import errors)
+sudo systemctl status t1era-music
+tail -n 40 /home/tengkufiboking/T1era-music/error.log
+
+# 6. Test the new route
+curl -i -X POST https://crock-blast-purchase.ngrok-free.dev/transcribe-ivory \
+  -H 'Content-Type: application/json' \
+  -H 'ngrok-skip-browser-warning: true' \
+  -d '{"userId":"test_user","jobId":"test_job_ivory","youtubeUrl":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
+# expect 202 QUEUED
+
+# 7. Sanity-check the other two still work
+curl https://crock-blast-purchase.ngrok-free.dev/
+curl -i -X POST https://crock-blast-purchase.ngrok-free.dev/transcribe-vortex \
+  -H 'Content-Type: application/json' -H 'ngrok-skip-browser-warning: true' \
+  -d '{"userId":"test_user","jobId":"test_job_vortex2","youtubeUrl":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
+```
