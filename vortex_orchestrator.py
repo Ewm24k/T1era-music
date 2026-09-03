@@ -56,42 +56,70 @@ import input_file_4
 import input_file_5
 
 
+def _patched_init_firebase(self):
+    """
+    MONKEY-PATCH applied onto CentralOrchestrator itself (see bottom of this
+    file), not just this subclass. This fixes a real ordering bug in
+    main.py's original _init_firebase(): it only sets self.db / self.bucket /
+    self.firebase_active INSIDE the `if not firebase_admin._apps:` block, so
+    whichever orchestrator instance happens to initialize Firebase FIRST
+    "wins" - every other instance (including main.py's own global
+    `orchestrator`, used by /transcribe) silently never becomes
+    firebase_active if Firebase was already initialized by someone else.
+
+    This patched version correctly ATTACHES to an already-initialized
+    Firebase app instead of skipping db/bucket assignment, no matter which
+    orchestrator instance runs first. Because it's patched onto the shared
+    CentralOrchestrator class (not just VortexOrchestrator), it fixes
+    main.py's own orchestrator too, without ever touching main.py's file.
+    """
+    try:
+        if firebase_admin._apps:
+            # Firebase already initialized elsewhere in this process
+            self.db = firestore.client()
+            self.bucket = storage.bucket()
+            self.firebase_active = True
+            print(f"[FIREBASE] {type(self).__name__} attached to existing Cloud Mode.")
+        elif os.path.exists(OrchestratorConfig.FIREBASE_KEY_PATH):
+            cred = credentials.Certificate(OrchestratorConfig.FIREBASE_KEY_PATH)
+            firebase_admin.initialize_app(cred, {
+                'storageBucket': OrchestratorConfig.BUCKET_NAME
+            })
+            self.db = firestore.client()
+            self.bucket = storage.bucket()
+            self.firebase_active = True
+            print(f"[FIREBASE] Cloud Mode T1era Music Active ({type(self).__name__}).")
+        else:
+            print(f"[FIREBASE] Fail kredensial tidak ditemui. {type(self).__name__} berjalan dalam Mod Tempatan.")
+    except Exception as e:
+        print(f"[FIREBASE] Gagal mengaktifkan Firebase ({type(self).__name__}): {e}. Mod Tempatan digunakan.")
+        self.firebase_active = False
+
+
+# Patch the SHARED base class (not just VortexOrchestrator) so every
+# orchestrator instance in this process - including main.py's own global
+# `orchestrator` used by /transcribe - gets the corrected behaviour.
+CentralOrchestrator._init_firebase = _patched_init_firebase
+
+# If main.py's own orchestrator already tried (and failed to fully attach)
+# before this patch was applied, nudge it to retry now with the fix in
+# place, so /transcribe stops silently running with firebase_active=False.
+try:
+    from main import orchestrator as _main_orchestrator
+    if not _main_orchestrator.firebase_active:
+        _main_orchestrator._ensure_firebase()
+except Exception as _reattach_err:
+    print(f"[FIREBASE] Vortex-Ultra reattach check skipped: {_reattach_err}")
+
+
 class VortexOrchestrator(CentralOrchestrator):
     """
     Identical to CentralOrchestrator (main.py), except run_pipeline()
     stops right after Stage 5 (Piano Arrangement & Styling) and never
     calls Stage 6 (Adaptive Musical Quantization). Save/upload/Firestore
-    behaviour is otherwise the same.
+    behaviour is otherwise the same (including the Firebase attach fix
+    patched above).
     """
-
-    def _init_firebase(self):
-        """
-        Same as CentralOrchestrator._init_firebase(), but correctly
-        attaches to an already-initialized Firebase app (which main.py's
-        own `orchestrator` instance will have created first) instead of
-        silently skipping db/bucket assignment.
-        """
-        try:
-            if firebase_admin._apps:
-                # Firebase already initialized elsewhere in this process (main.py)
-                self.db = firestore.client()
-                self.bucket = storage.bucket()
-                self.firebase_active = True
-                print("[FIREBASE] Vortex-Ultra orchestrator attached to existing Cloud Mode.")
-            elif os.path.exists(OrchestratorConfig.FIREBASE_KEY_PATH):
-                cred = credentials.Certificate(OrchestratorConfig.FIREBASE_KEY_PATH)
-                firebase_admin.initialize_app(cred, {
-                    'storageBucket': OrchestratorConfig.BUCKET_NAME
-                })
-                self.db = firestore.client()
-                self.bucket = storage.bucket()
-                self.firebase_active = True
-                print("[FIREBASE] Cloud Mode T1era Music Active (Vortex-Ultra).")
-            else:
-                print("[FIREBASE] Fail kredensial tidak ditemui. Vortex-Ultra berjalan dalam Mod Tempatan.")
-        except Exception as e:
-            print(f"[FIREBASE] Gagal mengaktifkan Firebase (Vortex-Ultra): {e}. Mod Tempatan digunakan.")
-            self.firebase_active = False
 
     def run_pipeline(self, input_audio_path: Path, temp_work_dir: Path, is_cloud: bool,
                       user_id: str = None, job_id: str = None, bucket_name: str = None,
