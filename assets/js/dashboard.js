@@ -34,18 +34,25 @@ tag.src = "https://www.youtube.com/iframe_api";
 const firstScriptTag = document.getElementsByTagName("script")[0];
 firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
-// High-uptime CORS proxies to bypass origin restrictions
+// Active Piped API instances (These have Open CORS enabled natively by design)
+const PIPED_INSTANCES = [
+    "https://pipedapi.kavin.rocks",
+    "https://pipedapi.tokhmi.xyz",
+    "https://pipedapi.moomoo.me",
+    "https://pipedapi.rivo.lol",
+    "https://api.piped.yt"
+];
+
+// Fallback CORS Proxies if Piped fails and we need to fetch Invidious
 const CORS_PROXIES = [
-    "https://corsproxy.io/?",
     "https://api.allorigins.win/raw?url="
 ];
 
-// High-uptime public Invidious API mirrors
+// Fallback Invidious API instances
 const INVIDIOUS_INSTANCES = [
     "https://yewtu.be",
     "https://inv.nadeko.net",
-    "https://inv.tux.pizza",
-    "https://yt.artemislena.eu"
+    "https://inv.tux.pizza"
 ];
 
 // SVG Icon definitions
@@ -196,10 +203,9 @@ function stopYtProgressTracker() {
 }
 
 // ==========================================
-// DYNAMIC KEYLESS FULL TRACK RESOLVER
+// DYNAMIC KEYLESS FULL TRACK RESOLVER (PIPED FIRST)
 // ==========================================
 async function fetchWithProxyFallback(url) {
-    // Attempt proxied routes to bypass browser CORS headers constraints
     for (const proxy of CORS_PROXIES) {
         try {
             const proxiedUrl = `${proxy}${encodeURIComponent(url)}`;
@@ -209,7 +215,7 @@ async function fetchWithProxyFallback(url) {
                 try {
                     return JSON.parse(text);
                 } catch (jsonErr) {
-                    console.warn("[PROXY PARSER] Non-JSON data returned from proxy. Trying next mirror...");
+                    console.warn("[PROXY PARSER] Non-JSON fallback data. Retrying proxy loop...");
                 }
             }
         } catch (e) {
@@ -217,25 +223,21 @@ async function fetchWithProxyFallback(url) {
         }
     }
     
-    // Last resort: attempt raw direct connection
     try {
         const response = await fetch(url);
         if (response.ok) return await response.json();
     } catch (e) {
         console.warn("[PROXY WARNING] Direct routing failed.");
     }
-    throw new Error("All proxy routing mirrors failed.");
+    throw new Error("All proxy routing fallback nodes failed.");
 }
 
-async function findYouTubeId(artist, title) {
-    const cleanQuery = `${artist} - ${title} audio`;
+async function findYouTubeIdInvidiousFallback(cleanQuery) {
     const searchParams = new URLSearchParams({ q: cleanQuery });
 
     for (const instance of INVIDIOUS_INSTANCES) {
         try {
             const targetUrl = `${instance}/api/v1/search?${searchParams.toString()}`;
-            console.log(`[YOUTUBE FINDER] Trying instance mirror: ${instance}`);
-            
             const results = await fetchWithProxyFallback(targetUrl);
             const targetList = Array.isArray(results) ? results : (results.data || []);
             
@@ -244,10 +246,43 @@ async function findYouTubeId(artist, title) {
                 return target.videoId;
             }
         } catch (e) {
-            console.warn(`[YOUTUBE FINDER] Mirror ${instance} failed: ${e.message}`);
+            console.warn(`[INVIDIOUS FALLBACK] Mirror ${instance} failed: ${e.message}`);
         }
     }
-    throw new Error("No YouTube stream match found across active mirrors.");
+    throw new Error("No YouTube stream match found across fallback nodes.");
+}
+
+async function findYouTubeId(artist, title) {
+    const cleanQuery = `${artist} - ${title} audio`;
+    const searchParams = new URLSearchParams({ q: cleanQuery });
+
+    // Step A: Attempt CORS-free Piped instances first
+    for (const instance of PIPED_INSTANCES) {
+        try {
+            const targetUrl = `${instance}/search?${searchParams.toString()}`;
+            console.log(`[YOUTUBE FINDER] Trying Piped Instance: ${instance}`);
+            
+            const response = await fetch(targetUrl);
+            if (response.ok) {
+                const results = await response.json();
+                if (results && results.items && results.items.length > 0) {
+                    const target = results.items.find(item => item.type === "stream");
+                    if (target && target.url) {
+                        const parts = target.url.split("v=");
+                        if (parts.length > 1) {
+                            return parts[1];
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn(`[YOUTUBE FINDER] Piped Mirror ${instance} failed: ${e.message}`);
+        }
+    }
+
+    // Step B: Secondary Fallback to Invidious if Piped APIs are completely offline
+    console.warn("[YOUTUBE FINDER] Piped mirrors failed. Activating secondary Invidious backup...");
+    return await findYouTubeIdInvidiousFallback(cleanQuery);
 }
 
 // ==========================================
