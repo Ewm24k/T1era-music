@@ -16,8 +16,7 @@ import {
 // ==========================================
 // CONFIGURATION & GLOBAL CONSTANTS
 // ==========================================
-// Official documented public test client ID for catalog read methods
-const JAMENDO_CLIENT_ID = "709fa152"; 
+const JAMENDO_CLIENT_ID = "709fa152"; // Official public test client ID
 
 // SVG Icon definitions
 const playIconSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>`;
@@ -31,7 +30,7 @@ const studioIconSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="non
 const resolvedTitleCache = new Map();
 const validatedMidiCache = new Set();
 
-// Reliable fallback static tracks array (used seamlessly if API limits or errors occur)
+// Fallback high-quality static default songs list
 const popularTracksDataMockFallback = [
     { id: 1, title: "Golden Days", artist: "Felix Carter", duration: "3:12", art: "https://picsum.photos/id/65/300/300" },
     { id: 2, title: "Fading Horizon", artist: "Ella Hunt", duration: "4:05", art: "https://picsum.photos/id/1025/300/300" },
@@ -78,15 +77,14 @@ const transcriptionsList = document.getElementById("transcriptions-list");
 // Real Audio & Playback States
 const audioPlayer = new Audio();
 let isPlaying = false;
-let isRealPlayback = false; // flag indicating real Jamendo MP3 stream vs mockup ticker
-let currentTrackList = [];  // keeps track of the currently loaded lists (for prev/next navigation)
+let isRealPlayback = false; 
+let currentTrackList = [];  
 let currentTrackIndex = -1;
-let tickerInterval = null;  // ticker fallback for static items
+let tickerInterval = null;  
 let currentSeconds = 0;
-let currentVolume = 0.7;    // volume state (0.0 to 1.0)
+let currentVolume = 0.7;    
 let activeTrack = { title: "Echoes of Midnight", artist: "Jon Hickman", duration: "3:58", art: "https://picsum.photos/id/322/100/100" };
 
-// Set initial volume visually
 if (volumeFill && volumeThumb) {
     volumeFill.style.width = "70%";
     volumeThumb.style.left = "70%";
@@ -343,35 +341,65 @@ function getMockTranscriptions() {
     ];
 }
 
+// =======================================================
+// JAMENDO MUSIC API VIA JSONP (COMPLETELY BYPASSES CORS)
+// =======================================================
+function makeJamendoJSONPRequest(params) {
+    return new Promise((resolve, reject) => {
+        const callbackName = "jamendoCallback_" + Math.floor(Math.random() * 1000000);
+        const queryParams = new URLSearchParams({
+            client_id: JAMENDO_CLIENT_ID,
+            format: "json",
+            limit: "12",
+            callback: callbackName,
+            ...params
+        });
+
+        const script = document.createElement("script");
+        script.src = `https://api.jamendo.com/v3.0/tracks/?${queryParams.toString()}`;
+        
+        // Timeout handling (5 seconds limit)
+        const timeoutId = setTimeout(() => {
+            cleanup();
+            reject(new Error("Request timed out. Falling back to local default songs."));
+        }, 5000);
+
+        window[callbackName] = function(data) {
+            cleanup();
+            if (data.headers && data.headers.status === "failed") {
+                reject(new Error(data.headers.error_message || "API Failure"));
+            } else {
+                resolve(data);
+            }
+        };
+
+        script.onerror = function() {
+            cleanup();
+            reject(new Error("CORS or Connection failure"));
+        };
+
+        function cleanup() {
+            clearTimeout(timeoutId);
+            delete window[callbackName];
+            script.remove();
+        }
+
+        document.head.appendChild(script);
+    });
+}
+
 // ==========================================
-// JAMENDO MUSIC API INTEGRATION (POPULAR SONGS)
+// CORE DATA FETCH CONTROL (ONLINE & OFFLINE SEARCH)
 // ==========================================
 async function fetchJamendoTracks(params = {}) {
-    const queryParams = new URLSearchParams({
-        client_id: JAMENDO_CLIENT_ID,
-        format: "json",
-        limit: "12",
-        ...params
-    });
-
-    // Elegant loading state inside layout grid
     popularGrid.innerHTML = `
         <div style="grid-column: 1 / -1; text-align: center; color: rgba(255,255,255,0.4); padding: 40px 0; font-size: 11.5px; font-weight: 500;">
-            Retrieving songs from Jamendo API...
+            Retrieving songs...
         </div>
     `;
 
     try {
-        const response = await fetch(`https://api.jamendo.com/v3.0/tracks/?${queryParams}`);
-        if (!response.ok) throw new Error("API Network connection failed");
-        
-        const data = await response.json();
-        
-        // Handle API failures wrapped in successful HTTP statuses (e.g. invalid client_id)
-        if (data.headers && data.headers.status === "failed") {
-            throw new Error(data.headers.error_message || "API call returned a failed status");
-        }
-        
+        const data = await makeJamendoJSONPRequest(params);
         if (data.results && data.results.length > 0) {
             currentTrackList = data.results.map(track => ({
                 id: track.id,
@@ -384,7 +412,6 @@ async function fetchJamendoTracks(params = {}) {
             }));
             renderPopularTracks(currentTrackList);
         } else {
-            // Displays cleanly only if search parameter returns no results
             popularGrid.innerHTML = `
                 <div style="grid-column: 1 / -1; text-align: center; color: rgba(255,255,255,0.4); padding: 40px 0; font-size: 11.5px;">
                     No tracks match your query. Try searching another term!
@@ -392,9 +419,18 @@ async function fetchJamendoTracks(params = {}) {
             `;
         }
     } catch (error) {
-        console.warn("[JAMENDO API FALLBACK] Loading local premium database layout. Reason:", error.message);
-        currentTrackList = popularTracksDataMockFallback;
-        renderPopularTracks(currentTrackList);
+        console.warn("[HYBRID DATA RESOLVER] API failed, routing locally. Reason:", error.message);
+        
+        // Fallback: If searching keyword offline, execute local search immediately
+        if (params.search) {
+            const searchFiltered = searchLocalMockTracks(params.search);
+            currentTrackList = searchFiltered;
+            renderPopularTracks(searchFiltered);
+        } else {
+            // Load standard default songs
+            currentTrackList = popularTracksDataMockFallback;
+            renderPopularTracks(currentTrackList);
+        }
     }
 }
 
@@ -402,9 +438,18 @@ function fetchJamendoTracksByGenre(genre) {
     if (genre === "all") {
         fetchJamendoTracks({ order: "popularity_total" });
     } else {
-        // Tag search matches the precise capsule filter
         fetchJamendoTracks({ fuzzytags: genre, order: "popularity_total" });
     }
+}
+
+// Local search filtering when running completely offline / local sandbox
+function searchLocalMockTracks(queryText) {
+    const lowerQuery = queryText.toLowerCase();
+    const matches = popularTracksDataMockFallback.filter(track => 
+        track.title.toLowerCase().includes(lowerQuery) || 
+        track.artist.toLowerCase().includes(lowerQuery)
+    );
+    return matches.length > 0 ? matches : [];
 }
 
 // Helper to translate seconds into M:SS standard notation
@@ -420,6 +465,15 @@ function formatDuration(seconds) {
 function renderPopularTracks(tracks) {
     popularGrid.innerHTML = "";
     const fragment = document.createDocumentFragment();
+
+    if (tracks.length === 0) {
+        popularGrid.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; color: rgba(255,255,255,0.4); padding: 40px 0; font-size: 11.5px;">
+                No matches found.
+            </div>
+        `;
+        return;
+    }
 
     tracks.forEach((track, index) => {
         const card = document.createElement("div");
@@ -590,7 +644,6 @@ audioPlayer.addEventListener("loadedmetadata", () => {
 
 audioPlayer.addEventListener("ended", () => {
     if (!isRealPlayback) return;
-    // Auto-advance to the next track if available
     if (currentTrackList.length > 0 && currentTrackIndex < currentTrackList.length - 1) {
         currentTrackIndex++;
         selectAndPlayTrack(currentTrackList[currentTrackIndex]);
@@ -640,7 +693,6 @@ categoriesRow.addEventListener("click", (e) => {
         document.querySelectorAll(".capsule").forEach(c => c.classList.remove("active"));
         e.target.classList.add("active");
         
-        // Reset Search Input to avoid UI state mismatch
         if (searchInput) searchInput.value = "";
         
         const genre = e.target.dataset.genre;
@@ -657,7 +709,7 @@ if (searchInput) {
         
         searchTimeout = setTimeout(() => {
             if (query.length > 0) {
-                // Fetch tracks matching fuzzy text parameters (titles, artists, genres)
+                // Fetch tracks matching search parameters
                 fetchJamendoTracks({ search: query });
             } else {
                 // Restore search defaults based on selected capsule
@@ -665,7 +717,7 @@ if (searchInput) {
                 const genre = activeCapsule ? activeCapsule.dataset.genre : "all";
                 fetchJamendoTracksByGenre(genre);
             }
-        }, 400); // 400ms delay to balance latency and rate limits
+        }, 400); 
     });
 }
 
