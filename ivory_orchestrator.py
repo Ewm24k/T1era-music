@@ -25,22 +25,21 @@ Point Gunicorn at THIS file so all three routes register together:
     gunicorn ivory_orchestrator:app
 """
 
-import os
 import time
 import traceback
 import threading
 from pathlib import Path
 
 from flask import request, jsonify
-from firebase_admin import credentials
 
 # Reuse everything already built and working - nothing here re-implements
-# Firebase init, CORS, the Flask app, or the base pipeline.
+# Firebase init, CORS, the Flask app, or the base pipeline. Importing this
+# also runs vortex_orchestrator.py, which patches CentralOrchestrator's
+# Firebase-attach logic (see vortex_orchestrator.py) - Ivory-4 inherits
+# that fix automatically.
 from vortex_orchestrator import (
     app,
     CentralOrchestrator,
-    OrchestratorConfig,
-    firebase_admin,
     firestore,
     storage,
 )
@@ -59,31 +58,13 @@ class IvoryOrchestrator(CentralOrchestrator):
     solo-piano performance's original expressive dynamics and voicing
     are captured as-is. Save/upload/Firestore behaviour is otherwise
     the same.
-    """
 
-    def _init_firebase(self):
-        """Same fix as VortexOrchestrator - correctly attach to an
-        already-initialized Firebase app instead of skipping db/bucket."""
-        try:
-            if firebase_admin._apps:
-                self.db = firestore.client()
-                self.bucket = storage.bucket()
-                self.firebase_active = True
-                print("[FIREBASE] Ivory-4 orchestrator attached to existing Cloud Mode.")
-            elif os.path.exists(OrchestratorConfig.FIREBASE_KEY_PATH):
-                cred = credentials.Certificate(OrchestratorConfig.FIREBASE_KEY_PATH)
-                firebase_admin.initialize_app(cred, {
-                    'storageBucket': OrchestratorConfig.BUCKET_NAME
-                })
-                self.db = firestore.client()
-                self.bucket = storage.bucket()
-                self.firebase_active = True
-                print("[FIREBASE] Cloud Mode T1era Music Active (Ivory-4).")
-            else:
-                print("[FIREBASE] Fail kredensial tidak ditemui. Ivory-4 berjalan dalam Mod Tempatan.")
-        except Exception as e:
-            print(f"[FIREBASE] Gagal mengaktifkan Firebase (Ivory-4): {e}. Mod Tempatan digunakan.")
-            self.firebase_active = False
+    Note: the Firebase-attach fix (correctly attaching to an already-
+    initialized Firebase app regardless of which orchestrator instance
+    initializes it first) is inherited automatically - it's patched onto
+    the shared CentralOrchestrator class in vortex_orchestrator.py, which
+    this file imports transitively. No need to redefine it here.
+    """
 
     def run_pipeline(self, input_audio_path: Path, temp_work_dir: Path, is_cloud: bool,
                       user_id: str = None, job_id: str = None, bucket_name: str = None,
