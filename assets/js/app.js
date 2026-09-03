@@ -16,9 +16,17 @@ import {
   uploadBytesResumable,
   getDownloadURL
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+import {
+  createVortexProgressCardMarkup,
+  setVortexStepStatus,
+  showVortexTerminalFailure,
+  openVortexLiveTerminalConsole
+} from "./vortex-progress.js";
 
 // Pautan URL Pelayan GCP VM API T1era Music (Menggunakan Terowong Selamat Ngrok)
 const RENDER_BACKEND_URL = "https://crock-blast-purchase.ngrok-free.dev/transcribe";
+// Endpoint Vortex-Ultra (Stage 0 - 5) - dikendalikan oleh vortex_orchestrator.py, sama pelayan
+const RENDER_BACKEND_URL_VORTEX = RENDER_BACKEND_URL.replace("/transcribe", "/transcribe-vortex");
 
 // =========================================================
 // INJEKSI STYLING NEON KONSOL PEMPROSESAN (AAA GRADE UI/UX)
@@ -765,102 +773,85 @@ function isValidYouTubeUrl(url) {
   return pattern.test(url);
 }
 
-if (youtubeSubmitBtn) {
-  youtubeSubmitBtn.addEventListener("click", () => {
-    if (!selectedModel) {
-      alert("Please select an AI Neural Transcriber Engine first (Step 1).");
-      return;
-    }
-    if (selectedModel !== "T1ERA-Nexus-6") {
-      alert("This model is not available yet. Please select TiERA Nexus-6 for now.");
-      return;
-    }
+// =========================================================
+// NEXUS-6 JOB RUNNERS (Stage 0 - 6, unchanged behaviour)
+// =========================================================
 
-    const urlValue = youtubeLinkInput ? youtubeLinkInput.value.trim() : "";
-    if (!urlValue) {
-      alert("Please enter a YouTube video URL first.");
-      return;
-    }
-    if (!isValidYouTubeUrl(urlValue)) {
-      alert("Invalid address. Please enter a structured YouTube link.");
-      return;
-    }
+function runNexusYoutubeJob(urlValue) {
+  const userId = currentUserObj ? currentUserObj.uid : "guest_studio_creator";
+  const jobId = "yt_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
 
-    const userId = currentUserObj ? currentUserObj.uid : "guest_studio_creator";
-    const jobId = "yt_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
+  // Sembunyikan butang menu sisi supaya tidak mengganggu paparan terminal progress
+  if (menuToggle) menuToggle.style.display = "none";
 
-    // Sembunyikan butang menu sisi supaya tidak mengganggu paparan terminal progress
-    if (menuToggle) menuToggle.style.display = "none";
+  // Tutup menu overlay services, buka konsol progress terminal
+  servicesOverlay.classList.remove("active");
+  verificationScreen.classList.add("active");
+  verificationTerminal.innerHTML = createProgressCardMarkup();
 
-    // Tutup menu overlay services, buka konsol progress terminal
-    servicesOverlay.classList.remove("active");
-    verificationScreen.classList.add("active");
-    verificationTerminal.innerHTML = createProgressCardMarkup();
+  setStepStatus("step-init", "loading");
 
-    setStepStatus("step-init", "loading");
+  // Mulakan visual handshake proses
+  setTimeout(() => {
+    setStepStatus("step-init", "success");
+    setStepStatus("step-download", "loading");
 
-    // Mulakan visual handshake proses
+    const stepDownloadLabel = document.querySelector("#step-download .step-label");
+    if (stepDownloadLabel) stepDownloadLabel.textContent = "Requesting YouTube Audio Link";
+
     setTimeout(() => {
-      setStepStatus("step-init", "success");
-      setStepStatus("step-download", "loading");
-      
-      const stepDownloadLabel = document.querySelector("#step-download .step-label");
-      if (stepDownloadLabel) stepDownloadLabel.textContent = "Requesting YouTube Audio Link";
+      setStepStatus("step-download", "success");
+      setStepStatus("step-temp", "loading");
 
-      setTimeout(() => {
-        setStepStatus("step-download", "success");
-        setStepStatus("step-temp", "loading");
-        
-        const stepTempLabel = document.querySelector("#step-temp .step-label");
-        if (stepTempLabel) stepTempLabel.textContent = "Downloading Audio on Server";
+      const stepTempLabel = document.querySelector("#step-temp .step-label");
+      if (stepTempLabel) stepTempLabel.textContent = "Downloading Audio on Server";
 
-        const triggerYoutubeSequence = () => {
-          openLiveTerminalConsole(userId, jobId);
+      const triggerYoutubeSequence = () => {
+        openLiveTerminalConsole(userId, jobId);
 
-          // Hantar payload pautan YouTube ke pelayan API GCP VM
-          fetch(RENDER_BACKEND_URL, {
-            method: "POST",
-            headers: { 
-              "Content-Type": "application/json",
-              "ngrok-skip-browser-warning": "true"
-            },
-            body: JSON.stringify({ userId: userId, jobId: jobId, youtubeUrl: urlValue })
-          })
-          .then((res) => {
-            if (!res.ok) {
-              return res.json().then((body) => {
-                throw new Error(body.error || "Server rejected the YouTube transcription request.");
-              });
-            }
-          })
-          .catch((err) => {
-            printTerminalFailureLog(err);
-          });
-        };
+        // Hantar payload pautan YouTube ke pelayan API GCP VM
+        fetch(RENDER_BACKEND_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true"
+          },
+          body: JSON.stringify({ userId: userId, jobId: jobId, youtubeUrl: urlValue })
+        })
+        .then((res) => {
+          if (!res.ok) {
+            return res.json().then((body) => {
+              throw new Error(body.error || "Server rejected the YouTube transcription request.");
+            });
+          }
+        })
+        .catch((err) => {
+          printTerminalFailureLog(err);
+        });
+      };
 
-        // KREAT DOKUMEN FIRESTORE UNTUK YOUTUBE JOB UNTUK MENGELAKKAN SYNC GAGAL
-        if (db && userId !== "guest_studio_creator") {
-          const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
-          setDoc(jobRef, {
-            status: "QUEUED",
-            progress: 0,
-            youtubeUrl: urlValue,
-            createdAt: serverTimestamp()
-          })
-          .then(() => {
-            triggerYoutubeSequence();
-          })
-          .catch(err => {
-            console.warn("[FIRESTORE BYPASS] Write blocked by Rules. Bypassing straight to Render...", err);
-            triggerYoutubeSequence();
-          });
-        } else {
+      // KREAT DOKUMEN FIRESTORE UNTUK YOUTUBE JOB UNTUK MENGELAKKAN SYNC GAGAL
+      if (db && userId !== "guest_studio_creator") {
+        const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
+        setDoc(jobRef, {
+          status: "QUEUED",
+          progress: 0,
+          youtubeUrl: urlValue,
+          createdAt: serverTimestamp()
+        })
+        .then(() => {
           triggerYoutubeSequence();
-        }
+        })
+        .catch(err => {
+          console.warn("[FIRESTORE BYPASS] Write blocked by Rules. Bypassing straight to Render...", err);
+          triggerYoutubeSequence();
+        });
+      } else {
+        triggerYoutubeSequence();
+      }
 
-      }, 1000);
     }, 1000);
-  });
+  }, 1000);
 }
 
 function printTerminalFailureLog(err) {
@@ -868,27 +859,7 @@ function printTerminalFailureLog(err) {
   showTerminalFailure(err.message || "Failed to start YouTube transcription job.");
 }
 
-fileDropzoneTrigger.addEventListener("click", () => {
-  if (!selectedModel) {
-    alert("Please select an AI Neural Transcriber Engine first (Step 1).");
-    return;
-  }
-  if (selectedModel !== "T1ERA-Nexus-6") {
-    alert("This model is not available yet. Please select TiERA Nexus-6 for now.");
-    return;
-  }
-  audioFileInput.click();
-});
-
-audioFileInput.addEventListener("change", (event) => {
-  const files = event.target.files;
-  if (!files || files.length === 0) {
-    dropzoneLabelText.textContent = "Select Music File";
-    dropzoneLabelText.style.color = "";
-    dropzoneLabelText.style.textShadow = "";
-    return;
-  }
-  const selectedFile = files[0];
+function runNexusFileUpload(selectedFile) {
   const userId = currentUserObj ? currentUserObj.uid : "guest_studio_creator";
   const jobId = "file_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
 
@@ -940,7 +911,7 @@ audioFileInput.addEventListener("change", (event) => {
           openLiveTerminalConsole(userId, jobId);
           fetch(RENDER_BACKEND_URL, {
             method: "POST",
-            headers: { 
+            headers: {
               "Content-Type": "application/json",
               "ngrok-skip-browser-warning": "true"
             },
@@ -983,6 +954,242 @@ audioFileInput.addEventListener("change", (event) => {
       });
     }
   );
+}
+
+// =========================================================
+// VORTEX-ULTRA JOB RUNNERS (Stage 0 - 5, no quantization)
+// =========================================================
+
+function runVortexYoutubeJob(urlValue) {
+  const userId = currentUserObj ? currentUserObj.uid : "guest_studio_creator";
+  const jobId = "yt_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
+
+  if (menuToggle) menuToggle.style.display = "none";
+
+  servicesOverlay.classList.remove("active");
+  verificationScreen.classList.add("active");
+  verificationTerminal.innerHTML = createVortexProgressCardMarkup();
+
+  setVortexStepStatus("step-init", "loading");
+
+  setTimeout(() => {
+    setVortexStepStatus("step-init", "success");
+    setVortexStepStatus("step-download", "loading");
+
+    const stepDownloadLabel = document.querySelector("#step-download .step-label");
+    if (stepDownloadLabel) stepDownloadLabel.textContent = "Requesting YouTube Audio Link";
+
+    setTimeout(() => {
+      setVortexStepStatus("step-download", "success");
+      setVortexStepStatus("step-temp", "loading");
+
+      const stepTempLabel = document.querySelector("#step-temp .step-label");
+      if (stepTempLabel) stepTempLabel.textContent = "Downloading Audio on Server";
+
+      const triggerYoutubeSequence = () => {
+        openVortexLiveTerminalConsole(userId, jobId);
+
+        fetch(RENDER_BACKEND_URL_VORTEX, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true"
+          },
+          body: JSON.stringify({ userId: userId, jobId: jobId, youtubeUrl: urlValue })
+        })
+        .then((res) => {
+          if (!res.ok) {
+            return res.json().then((body) => {
+              throw new Error(body.error || "Server rejected the YouTube transcription request.");
+            });
+          }
+        })
+        .catch((err) => {
+          console.error("Vortex YouTube Transcribe request failed:", err);
+          showVortexTerminalFailure(err.message || "Failed to start YouTube transcription job.");
+        });
+      };
+
+      if (db && userId !== "guest_studio_creator") {
+        const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
+        setDoc(jobRef, {
+          status: "QUEUED",
+          progress: 0,
+          youtubeUrl: urlValue,
+          createdAt: serverTimestamp()
+        })
+        .then(() => {
+          triggerYoutubeSequence();
+        })
+        .catch(err => {
+          console.warn("[FIRESTORE BYPASS] Write blocked by Rules. Bypassing straight to Render...", err);
+          triggerYoutubeSequence();
+        });
+      } else {
+        triggerYoutubeSequence();
+      }
+
+    }, 1000);
+  }, 1000);
+}
+
+function runVortexFileUpload(selectedFile) {
+  const userId = currentUserObj ? currentUserObj.uid : "guest_studio_creator";
+  const jobId = "file_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
+
+  if (menuToggle) menuToggle.style.display = "none";
+
+  servicesOverlay.classList.remove("active");
+  dropzoneLabelText.textContent = "UPLOADING...";
+  dropzoneLabelText.style.color = "#10b981";
+  dropzoneLabelText.style.textShadow = "0 0 10px rgba(16, 185, 129, 0.4)";
+
+  verificationScreen.classList.add("active");
+  verificationTerminal.innerHTML = createVortexProgressCardMarkup();
+  setVortexStepStatus("step-init", "loading");
+
+  if (!storage) {
+    alert("Firebase Storage is uninitialized. Local upload is offline.");
+    verificationScreen.classList.remove("active");
+    dropzoneLabelText.textContent = "Select Music File";
+    return;
+  }
+
+  const storageRef = ref(storage, `users/${userId}/transcriptions/${jobId}/${selectedFile.name}`);
+  const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+
+  uploadTask.on("state_changed",
+    (snapshot) => {
+      const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+      const progressBar = document.getElementById("proc-bar");
+      const progressPct = document.getElementById("proc-pct");
+      if (progressBar) progressBar.style.width = `${percent / 4}%`;
+      if (progressPct) progressPct.textContent = `${Math.round(percent / 4)}%`;
+      const stepInitLabel = document.querySelector("#step-init .step-label");
+      if (stepInitLabel) stepInitLabel.textContent = `Uploading File: ${percent}%`;
+    },
+    (error) => {
+      alert("Failed to upload: " + error.message);
+      verificationScreen.classList.remove("active");
+      dropzoneLabelText.textContent = "Select Music File";
+    },
+    () => {
+      setVortexStepStatus("step-init", "success");
+      setVortexStepStatus("step-download", "loading");
+      getDownloadURL(uploadTask.snapshot.ref).then((downloadUrl) => {
+        setVortexStepStatus("step-download", "success");
+        setVortexStepStatus("step-temp", "loading");
+
+        const triggerUploadSequence = () => {
+          openVortexLiveTerminalConsole(userId, jobId);
+          fetch(RENDER_BACKEND_URL_VORTEX, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "ngrok-skip-browser-warning": "true"
+            },
+            body: JSON.stringify({ userId: userId, jobId: jobId, audioUrl: downloadUrl })
+          })
+          .then((res) => {
+            if (!res.ok) {
+              return res.json().then((body) => {
+                throw new Error(body.error || "Server rejected the transcription request.");
+              });
+            }
+          })
+          .catch((err) => {
+            console.error("Vortex Transcribe request failed:", err);
+            showVortexTerminalFailure(err.message || "Failed to start transcription job.");
+          });
+        };
+
+        if (db && userId !== "guest_studio_creator") {
+          const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
+          setDoc(jobRef, {
+            status: "QUEUED",
+            progress: 0,
+            audioUrl: downloadUrl,
+            createdAt: serverTimestamp()
+          })
+          .then(() => {
+            setVortexStepStatus("step-temp", "success");
+            triggerUploadSequence();
+          })
+          .catch(err => {
+            console.warn("[FIRESTORE BYPASS] Write blocked by Rules. Bypassing straight to Render...", err);
+            setVortexStepStatus("step-temp", "success");
+            triggerUploadSequence();
+          });
+        } else {
+          setVortexStepStatus("step-temp", "success");
+          triggerUploadSequence();
+        }
+      });
+    }
+  );
+}
+
+// =========================================================
+// MODEL DISPATCH: YouTube submit & File dropzone entry points
+// =========================================================
+
+if (youtubeSubmitBtn) {
+  youtubeSubmitBtn.addEventListener("click", () => {
+    if (!selectedModel) {
+      alert("Please select an AI Neural Transcriber Engine first (Step 1).");
+      return;
+    }
+
+    const urlValue = youtubeLinkInput ? youtubeLinkInput.value.trim() : "";
+    if (!urlValue) {
+      alert("Please enter a YouTube video URL first.");
+      return;
+    }
+    if (!isValidYouTubeUrl(urlValue)) {
+      alert("Invalid address. Please enter a structured YouTube link.");
+      return;
+    }
+
+    if (selectedModel === "T1ERA-Nexus-6") {
+      runNexusYoutubeJob(urlValue);
+    } else if (selectedModel === "T1ERA-Vortex-Ultra") {
+      runVortexYoutubeJob(urlValue);
+    } else {
+      alert("This model is not available yet. Please select TiERA Nexus-6 or Vortex-Ultra for now.");
+    }
+  });
+}
+
+fileDropzoneTrigger.addEventListener("click", () => {
+  if (!selectedModel) {
+    alert("Please select an AI Neural Transcriber Engine first (Step 1).");
+    return;
+  }
+  if (selectedModel !== "T1ERA-Nexus-6" && selectedModel !== "T1ERA-Vortex-Ultra") {
+    alert("This model is not available yet. Please select TiERA Nexus-6 or Vortex-Ultra for now.");
+    return;
+  }
+  audioFileInput.click();
+});
+
+audioFileInput.addEventListener("change", (event) => {
+  const files = event.target.files;
+  if (!files || files.length === 0) {
+    dropzoneLabelText.textContent = "Select Music File";
+    dropzoneLabelText.style.color = "";
+    dropzoneLabelText.style.textShadow = "";
+    return;
+  }
+  const selectedFile = files[0];
+
+  if (selectedModel === "T1ERA-Nexus-6") {
+    runNexusFileUpload(selectedFile);
+  } else if (selectedModel === "T1ERA-Vortex-Ultra") {
+    runVortexFileUpload(selectedFile);
+  } else {
+    alert("This model is not available yet. Please select TiERA Nexus-6 or Vortex-Ultra for now.");
+    dropzoneLabelText.textContent = "Select Music File";
+  }
 });
 
 function showTerminalFailure(message) {
