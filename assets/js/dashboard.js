@@ -14,47 +14,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 // ==========================================
-// BACKGROUND YOUTUBE STREAM INJECTION
+// CONFIGURATION & GLOBAL CONSTANTS
 // ==========================================
-// Create invisible background stream container
-const ytDiv = document.createElement("div");
-ytDiv.id = "yt-helper-player";
-ytDiv.style.position = "absolute";
-ytDiv.style.width = "1px";
-ytDiv.style.height = "1px";
-ytDiv.style.opacity = "0.01";
-ytDiv.style.pointerEvents = "none";
-ytDiv.style.bottom = "0";
-ytDiv.style.left = "0";
-document.body.appendChild(ytDiv);
-
-// Asynchronously load official YouTube IFrame Player API
-const tag = document.createElement("script");
-tag.src = "https://www.youtube.com/iframe_api";
-const firstScriptTag = document.getElementsByTagName("script")[0];
-firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-// Active Piped API instances (These have Open CORS enabled natively by design)
-const PIPED_INSTANCES = [
-    "https://pipedapi.kavin.rocks",
-    "https://pipedapi.tokhmi.xyz",
-    "https://pipedapi.moomoo.me",
-    "https://pipedapi.rivo.lol",
-    "https://api.piped.yt"
-];
-
-// Fallback CORS Proxies if Piped fails and we need to fetch Invidious
-const CORS_PROXIES = [
-    "https://api.allorigins.win/raw?url="
-];
-
-// Fallback Invidious API instances
-const INVIDIOUS_INSTANCES = [
-    "https://yewtu.be",
-    "https://inv.nadeko.net",
-    "https://inv.tux.pizza"
-];
-
 // SVG Icon definitions
 const playIconSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>`;
 const pauseIconSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>`;
@@ -67,12 +28,14 @@ const studioIconSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="non
 const resolvedTitleCache = new Map();
 const validatedMidiCache = new Set();
 
-// Fallback default tracks array
+// Reliable fallback default tracks array
 const popularTracksDataMockFallback = [
     { id: 1, title: "Golden Days", artist: "Felix Carter", duration: "3:12", art: "https://picsum.photos/id/65/300/300" },
     { id: 2, title: "Fading Horizon", artist: "Ella Hunt", duration: "4:05", art: "https://picsum.photos/id/1025/300/300" },
     { id: 3, title: "Waves of Time", artist: "Lana Rivers", duration: "2:54", art: "https://picsum.photos/id/322/300/300" },
-    { id: 4, title: "Electric Dreams", artist: "Mia Lowell", duration: "3:40", art: "https://picsum.photos/id/338/300/300" }
+    { id: 4, title: "Electric Dreams", artist: "Mia Lowell", duration: "3:40", art: "https://picsum.photos/id/338/300/300" },
+    { id: 5, title: "Shadows & Light", artist: "Ryan Miles", duration: "3:22", art: "https://picsum.photos/id/352/300/300" },
+    { id: 6, title: "Echoes of Midnight", artist: "Jon Hickman", duration: "3:58", art: "https://picsum.photos/id/322/300/300" }
 ];
 
 // Document Selectors
@@ -113,7 +76,6 @@ const transcriptionsList = document.getElementById("transcriptions-list");
 const audioPlayer = new Audio();
 let isPlaying = false;
 let isRealPlayback = false; 
-let isYtPlayback = false; 
 let currentTrackList = [];  
 let currentTrackIndex = -1;
 let tickerInterval = null;  
@@ -125,164 +87,6 @@ if (volumeFill && volumeThumb) {
     volumeFill.style.width = "70%";
     volumeThumb.style.left = "70%";
     audioPlayer.volume = currentVolume;
-}
-
-// ==========================================
-// YOUTUBE CONTROL BACKPLANE
-// ==========================================
-let ytPlayer = null;
-let ytProgressInterval = null;
-
-window.onYouTubeIframeAPIReady = function() {
-    ytPlayer = new YT.Player('yt-helper-player', {
-        height: '1',
-        width: '1',
-        videoId: '',
-        playerVars: {
-            'playsinline': 1,
-            'controls': 0,
-            'disablekb': 1,
-            'fs': 0,
-            'modestbranding': 1,
-            'rel': 0,
-            'origin': window.location.origin
-        },
-        events: {
-            'onStateChange': onPlayerStateChange
-        }
-    });
-}
-
-function onPlayerStateChange(event) {
-    if (!isYtPlayback) return;
-    
-    if (event.data === YT.PlayerState.PLAYING) {
-        isPlaying = true;
-        playPauseIcon.innerHTML = pauseIconSvg;
-        playPauseBtn.style.transform = "scale(1.05)";
-        startYtProgressTracker();
-    } else if (event.data === YT.PlayerState.PAUSED) {
-        isPlaying = false;
-        playPauseIcon.innerHTML = playIconSvg;
-        playPauseBtn.style.transform = "";
-        stopYtProgressTracker();
-    } else if (event.data === YT.PlayerState.ENDED) {
-        stopYtProgressTracker();
-        if (currentTrackList.length > 0 && currentTrackIndex < currentTrackList.length - 1) {
-            currentTrackIndex++;
-            selectAndPlayTrack(currentTrackList[currentTrackIndex]);
-        } else {
-            isPlaying = false;
-            playPauseIcon.innerHTML = playIconSvg;
-            playPauseBtn.style.transform = "";
-        }
-    }
-}
-
-function startYtProgressTracker() {
-    if (ytProgressInterval) clearInterval(ytProgressInterval);
-    ytProgressInterval = setInterval(() => {
-        if (!ytPlayer || typeof ytPlayer.getCurrentTime !== "function") return;
-        const current = ytPlayer.getCurrentTime();
-        const duration = ytPlayer.getDuration() || 1;
-        
-        currentTime.textContent = formatDuration(current);
-        trackLength.textContent = formatDuration(duration);
-        
-        const percentage = (current / duration) * 100;
-        timelineFill.style.width = `${percentage}%`;
-        timelineThumb.style.left = `${percentage}%`;
-    }, 500);
-}
-
-function stopYtProgressTracker() {
-    if (ytProgressInterval) {
-        clearInterval(ytProgressInterval);
-        ytProgressInterval = null;
-    }
-}
-
-// ==========================================
-// DYNAMIC KEYLESS FULL TRACK RESOLVER (PIPED FIRST)
-// ==========================================
-async function fetchWithProxyFallback(url) {
-    for (const proxy of CORS_PROXIES) {
-        try {
-            const proxiedUrl = `${proxy}${encodeURIComponent(url)}`;
-            const response = await fetch(proxiedUrl);
-            if (response.ok) {
-                const text = await response.text();
-                try {
-                    return JSON.parse(text);
-                } catch (jsonErr) {
-                    console.warn("[PROXY PARSER] Non-JSON fallback data. Retrying proxy loop...");
-                }
-            }
-        } catch (e) {
-            console.warn(`[PROXY WARNING] Failover route ${proxy} rejected:`, e.message);
-        }
-    }
-    
-    try {
-        const response = await fetch(url);
-        if (response.ok) return await response.json();
-    } catch (e) {
-        console.warn("[PROXY WARNING] Direct routing failed.");
-    }
-    throw new Error("All proxy routing fallback nodes failed.");
-}
-
-async function findYouTubeIdInvidiousFallback(cleanQuery) {
-    const searchParams = new URLSearchParams({ q: cleanQuery });
-
-    for (const instance of INVIDIOUS_INSTANCES) {
-        try {
-            const targetUrl = `${instance}/api/v1/search?${searchParams.toString()}`;
-            const results = await fetchWithProxyFallback(targetUrl);
-            const targetList = Array.isArray(results) ? results : (results.data || []);
-            
-            const target = targetList.find(item => item.type === "video");
-            if (target && target.videoId) {
-                return target.videoId;
-            }
-        } catch (e) {
-            console.warn(`[INVIDIOUS FALLBACK] Mirror ${instance} failed: ${e.message}`);
-        }
-    }
-    throw new Error("No YouTube stream match found across fallback nodes.");
-}
-
-async function findYouTubeId(artist, title) {
-    const cleanQuery = `${artist} - ${title} audio`;
-    const searchParams = new URLSearchParams({ q: cleanQuery });
-
-    // Step A: Attempt CORS-free Piped instances first
-    for (const instance of PIPED_INSTANCES) {
-        try {
-            const targetUrl = `${instance}/search?${searchParams.toString()}`;
-            console.log(`[YOUTUBE FINDER] Trying Piped Instance: ${instance}`);
-            
-            const response = await fetch(targetUrl);
-            if (response.ok) {
-                const results = await response.json();
-                if (results && results.items && results.items.length > 0) {
-                    const target = results.items.find(item => item.type === "stream");
-                    if (target && target.url) {
-                        const parts = target.url.split("v=");
-                        if (parts.length > 1) {
-                            return parts[1];
-                        }
-                    }
-                }
-            }
-        } catch (e) {
-            console.warn(`[YOUTUBE FINDER] Piped Mirror ${instance} failed: ${e.message}`);
-        }
-    }
-
-    // Step B: Secondary Fallback to Invidious if Piped APIs are completely offline
-    console.warn("[YOUTUBE FINDER] Piped mirrors failed. Activating secondary Invidious backup...");
-    return await findYouTubeIdInvidiousFallback(cleanQuery);
 }
 
 // ==========================================
@@ -686,77 +490,48 @@ function renderPopularTracks(tracks) {
 // ==========================================
 // UNIFIED REAL-TIME STREAMS PLAYER
 // ==========================================
-async function selectAndPlayTrack(track) {
+function selectAndPlayTrack(track) {
     activeTrack = track;
     playerAlbumArt.src = track.art;
     playerTrackTitle.textContent = track.title;
     playerTrackArtist.textContent = track.artist;
     
-    // Stop any currently playing audio layers
+    // Stop any existing players/tickers
     audioPlayer.pause();
-    stopYtProgressTracker();
-    if (ytPlayer && typeof ytPlayer.stopVideo === "function") {
-        ytPlayer.stopVideo();
-    }
     if (tickerInterval) {
         clearInterval(tickerInterval);
         tickerInterval = null;
     }
 
-    // Try playing full-length YouTube backplane stream
-    try {
-        console.log(`[HYBRID STREAMING] Resolving full track for: ${track.artist} - ${track.title}`);
-        const ytId = await findYouTubeId(track.artist, track.title);
-        console.log(`[HYBRID STREAMING] Success! Playing full length YouTube track: ${ytId}`);
-        
+    if (track.audio) {
+        // Play standard Deezer 30s preview directly via HTML5 Audio elements
         isRealPlayback = true;
-        isYtPlayback = true;
-        
-        if (ytPlayer && typeof ytPlayer.loadVideoById === "function") {
-            ytPlayer.loadVideoById(ytId);
-            ytPlayer.setVolume(currentVolume * 100);
-        } else {
-            throw new Error("YouTube IFrame API player is not fully loaded yet.");
-        }
-    } catch (err) {
-        console.warn("[HYBRID STREAMING] Full track resolver unavailable, falling back to Deezer preview:", err.message);
-        isYtPlayback = false;
-
-        if (track.audio) {
-            // Play Deezer 30s preview
-            isRealPlayback = true;
-            audioPlayer.src = track.audio;
-            audioPlayer.volume = currentVolume;
-            audioPlayer.play()
-                .then(() => {
-                    isPlaying = true;
-                    playPauseIcon.innerHTML = pauseIconSvg;
-                    playPauseBtn.style.transform = "scale(1.05)";
-                })
-                .catch(e => console.warn("Deezer preview play interrupted:", e));
-        } else {
-            // Fallback mock playback
-            isRealPlayback = false;
-            trackLength.textContent = track.duration;
-            currentSeconds = 0;
-            currentTime.textContent = "0:00";
-            timelineFill.style.width = "0%";
-            timelineThumb.style.left = "0%";
-            startPlaybackState();
-        }
+        audioPlayer.src = track.audio;
+        audioPlayer.volume = currentVolume;
+        audioPlayer.play()
+            .then(() => {
+                isPlaying = true;
+                playPauseIcon.innerHTML = pauseIconSvg;
+                playPauseBtn.style.transform = "scale(1.05)";
+            })
+            .catch(err => {
+                console.warn("[PLAYBACK INTERRUPTED] Stream is loaded or playing elsewhere:", err);
+            });
+    } else {
+        // Fallback mock playback
+        isRealPlayback = false;
+        trackLength.textContent = track.duration;
+        currentSeconds = 0;
+        currentTime.textContent = "0:00";
+        timelineFill.style.width = "0%";
+        timelineThumb.style.left = "0%";
+        startPlaybackState();
     }
 }
 
 // Unified play/pause toggle triggers
 playPauseBtn.addEventListener("click", () => {
-    if (isYtPlayback && ytPlayer) {
-        const state = ytPlayer.getPlayerState();
-        if (state === YT.PlayerState.PLAYING) {
-            ytPlayer.pauseVideo();
-        } else {
-            ytPlayer.playVideo();
-        }
-    } else if (isRealPlayback) {
+    if (isRealPlayback) {
         if (isPlaying) {
             audioPlayer.pause();
             isPlaying = false;
@@ -840,7 +615,7 @@ function updatePlayerTick() {
 // AUDIO SYSTEM EVENT LISTENERS (REAL PROGRESSION)
 // ==========================================
 audioPlayer.addEventListener("timeupdate", () => {
-    if (!isRealPlayback || isYtPlayback) return;
+    if (!isRealPlayback) return;
     const current = audioPlayer.currentTime;
     const duration = audioPlayer.duration || activeTrack.duration_seconds || 1;
     
@@ -851,12 +626,12 @@ audioPlayer.addEventListener("timeupdate", () => {
 });
 
 audioPlayer.addEventListener("loadedmetadata", () => {
-    if (!isRealPlayback || isYtPlayback) return;
+    if (!isRealPlayback) return;
     trackLength.textContent = formatDuration(audioPlayer.duration);
 });
 
 audioPlayer.addEventListener("ended", () => {
-    if (!isRealPlayback || isYtPlayback) return;
+    if (!isRealPlayback) return;
     if (currentTrackList.length > 0 && currentTrackIndex < currentTrackList.length - 1) {
         currentTrackIndex++;
         selectAndPlayTrack(currentTrackList[currentTrackIndex]);
@@ -872,10 +647,7 @@ timelineTrack.addEventListener("click", (e) => {
     const rect = timelineTrack.getBoundingClientRect();
     const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
     
-    if (isYtPlayback && ytPlayer && typeof ytPlayer.getDuration === "function") {
-        const targetSeconds = percent * ytPlayer.getDuration();
-        ytPlayer.seekTo(targetSeconds, true);
-    } else if (isRealPlayback && audioPlayer.duration) {
+    if (isRealPlayback && audioPlayer.duration) {
         audioPlayer.currentTime = percent * audioPlayer.duration;
     } else if (!isRealPlayback) {
         const lengthParts = activeTrack.duration.split(":");
@@ -899,9 +671,6 @@ volumeTrack.addEventListener("click", (e) => {
     volumeThumb.style.left = `${percent * 100}%`;
     
     audioPlayer.volume = percent;
-    if (isYtPlayback && ytPlayer && typeof ytPlayer.setVolume === "function") {
-        ytPlayer.setVolume(percent * 100);
-    }
 });
 
 // ==========================================
@@ -946,10 +715,6 @@ if (searchInput) {
 document.getElementById("dashboard-logout-btn").addEventListener("click", () => {
     if (confirm("Disconnect session?")) {
         audioPlayer.pause();
-        stopYtProgressTracker();
-        if (ytPlayer && typeof ytPlayer.stopVideo === "function") {
-            ytPlayer.stopVideo();
-        }
         if (snapshotUnsubscribe) {
             snapshotUnsubscribe();
         }
