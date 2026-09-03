@@ -13,6 +13,11 @@ import {
     getMetadata 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
+// ==========================================
+// CONFIGURATION & GLOBAL CONSTANTS
+// ==========================================
+const JAMENDO_CLIENT_ID = "55d04056"; // Standard open/test credentials for Jamendo API
+
 // SVG Icon definitions
 const playIconSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>`;
 const pauseIconSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>`;
@@ -21,61 +26,24 @@ const youtubeIconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="#f
 const uploadIconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#00df89" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>`;
 const studioIconSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:2px;"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M6 3v11"/><path d="M10 3v11"/><path d="M14 3v11"/><path d="M18 3v11"/><path d="M2 14h20"/></svg>`;
 
-// Global, long-lived Client Cache registries to prevent layout blocking network storms
+// Global Cache registries
 const resolvedTitleCache = new Map();
 const validatedMidiCache = new Set();
 
-// Local hardcoded mock tracks arrays mimicking the reference layout
-const popularTracksData = [
-    {
-        id: 1,
-        title: "Golden Days",
-        artist: "Felix Carter",
-        duration: "3:12",
-        art: "https://picsum.photos/id/65/300/300"
-    },
-    {
-        id: 2,
-        title: "Fading Horizon",
-        artist: "Ella Hunt",
-        duration: "4:05",
-        art: "https://picsum.photos/id/1025/300/300"
-    },
-    {
-        id: 3,
-        title: "Waves of Time",
-        artist: "Lana Rivers",
-        duration: "2:54",
-        art: "https://picsum.photos/id/322/300/300"
-    },
-    {
-        id: 4,
-        title: "Electric Dreams",
-        artist: "Mia Lowell",
-        duration: "3:40",
-        art: "https://picsum.photos/id/338/300/300"
-    },
-    {
-        id: 5,
-        title: "Shadows & Light",
-        artist: "Ryan Miles",
-        duration: "3:22",
-        art: "https://picsum.photos/id/352/300/300"
-    },
-    {
-        id: 6,
-        title: "Echoes of Midnight",
-        artist: "Jon Hickman",
-        duration: "3:58",
-        art: "https://picsum.photos/id/322/300/300"
-    }
+// Fallback static tracks array (used only if Jamendo API fails or is offline)
+const popularTracksDataMockFallback = [
+    { id: 1, title: "Golden Days", artist: "Felix Carter", duration: "3:12", art: "https://picsum.photos/id/65/300/300" },
+    { id: 2, title: "Fading Horizon", artist: "Ella Hunt", duration: "4:05", art: "https://picsum.photos/id/1025/300/300" },
+    { id: 3, title: "Waves of Time", artist: "Lana Rivers", duration: "2:54", art: "https://picsum.photos/id/322/300/300" },
+    { id: 4, title: "Electric Dreams", artist: "Mia Lowell", duration: "3:40", art: "https://picsum.photos/id/338/300/300" }
 ];
 
 // Document Selectors
 const popularGrid = document.getElementById("popular-tracks-grid");
 const categoriesRow = document.getElementById("categories-row");
+const searchInput = document.getElementById("search-input");
 
-// Player details selectors
+// Player Details Selectors
 const playerAlbumArt = document.getElementById("player-album-art");
 const playerTrackTitle = document.getElementById("player-track-title");
 const playerTrackArtist = document.getElementById("player-track-artist");
@@ -84,30 +52,47 @@ const currentTime = document.getElementById("current-time");
 
 const playPauseBtn = document.getElementById("player-play-btn");
 const playPauseIcon = document.getElementById("play-pause-icon");
+const prevBtn = document.getElementById("player-prev-btn");
+const nextBtn = document.getElementById("player-next-btn");
 
-// Timeline trackers
+// Timeline Trackers
 const timelineTrack = document.getElementById("timeline-track");
 const timelineFill = document.getElementById("timeline-fill");
 const timelineThumb = document.getElementById("timeline-thumb");
 
-// Volume trackers
+// Volume Trackers
 const volumeTrack = document.getElementById("volume-track");
 const volumeFill = document.getElementById("volume-fill");
 const volumeThumb = document.getElementById("volume-thumb");
 
-// Tab Navigation elements
+// Tab Navigation Elements
 const navHome = document.getElementById("nav-home");
 const navTranscriptions = document.getElementById("nav-transcriptions");
 const homeView = document.getElementById("home-view");
 const transcriptionsView = document.getElementById("transcriptions-view");
 const transcriptionsList = document.getElementById("transcriptions-list");
 
+// Real Audio & Playback States
+const audioPlayer = new Audio();
 let isPlaying = false;
-let activeTrack = popularTracksData[5]; 
-let tickerInterval = null;
-let currentSeconds = 53; 
+let isRealPlayback = false; // flag indicating real Jamendo MP3 stream vs mockup ticker
+let currentTrackList = [];  // keeps track of the currently loaded lists (for prev/next navigation)
+let currentTrackIndex = -1;
+let tickerInterval = null;  // ticker fallback for static items
+let currentSeconds = 0;
+let currentVolume = 0.7;    // volume state (0.0 to 1.0)
+let activeTrack = { title: "Echoes of Midnight", artist: "Jon Hickman", duration: "3:58", art: "https://picsum.photos/id/322/100/100" };
 
-// Sidebar Navigation
+// Set initial volume visually
+if (volumeFill && volumeThumb) {
+    volumeFill.style.width = "70%";
+    volumeThumb.style.left = "70%";
+    audioPlayer.volume = currentVolume;
+}
+
+// ==========================================
+// NAVIGATION & AUTHENTICATION SECURE
+// ==========================================
 if (navHome && navTranscriptions) {
     navHome.addEventListener("click", (e) => {
         e.preventDefault();
@@ -130,7 +115,6 @@ function setActiveTab(activeNavItem, activeViewElement) {
     activeViewElement.style.display = "block";
 }
 
-// Monitor Auth State and secure the dashboard page
 let currentUser = null;
 
 if (auth) {
@@ -161,9 +145,9 @@ if (auth) {
   });
 }
 
-// ------------------------------------------------------------------
-// MUAT TURUN SENARAI TRANSKRIPSI NYATA DARI FIRESTORE (My Transcriptions)
-// ------------------------------------------------------------------
+// ==========================================
+// FIRESTORE TRANSCRIPTIONS LOAD & RENDER
+// ==========================================
 let snapshotUnsubscribe = null;
 
 function loadUserTranscriptions() {
@@ -172,12 +156,10 @@ function loadUserTranscriptions() {
         return;
     }
 
-    // Retain list structure during fetches to prevent layout blinking
     if (!transcriptionsList.children.length) {
         transcriptionsList.innerHTML = `<div style="text-align:center; color:rgba(255,255,255,0.4); font-size:0.85rem; padding:40px 0;">Loading transcriptions database...</div>`;
     }
 
-    // Clean up any stale listeners to avoid duplicates
     if (snapshotUnsubscribe) {
         snapshotUnsubscribe();
     }
@@ -203,11 +185,7 @@ function loadUserTranscriptions() {
             });
         });
 
-        // ------------------------------------------------------------------
-        // RESOLVE REAL TITLES FROM Storage (details.json) WITH LOCAL CACHE
-        // ------------------------------------------------------------------
         const resolveTitlesPromises = rawJobs.map(async (job) => {
-            // Check cache registry first to bypass redundant network requests
             if (resolvedTitleCache.has(job.id)) {
                 job.title = resolvedTitleCache.get(job.id);
                 return job;
@@ -225,7 +203,7 @@ function loadUserTranscriptions() {
                         const jsonDetails = await response.json();
                         if (jsonDetails && jsonDetails.title) {
                             job.title = jsonDetails.title;
-                            resolvedTitleCache.set(job.id, jsonDetails.title); // Store in cache
+                            resolvedTitleCache.set(job.id, jsonDetails.title);
                             return job;
                         }
                     }
@@ -234,21 +212,16 @@ function loadUserTranscriptions() {
                 }
             }
 
-            // Fallback: cache standard resolved title to prevent repeating network queries
             resolvedTitleCache.set(job.id, job.title);
             return job;
         });
 
         const resolvedJobs = await Promise.all(resolveTitlesPromises);
 
-        // ------------------------------------------------------------------
-        // METADATA SELF-HEALING SYSTEM WITH MEMORY RETENTION
-        // ------------------------------------------------------------------
         if (storage && resolvedJobs.length > 0) {
             const validationPromises = resolvedJobs.map(async (job) => {
                 if (!job.midiUrl) return null;
                 
-                // If this file has already been verified, proceed immediately (bypasses network checking)
                 if (validatedMidiCache.has(job.midiUrl)) {
                     return job;
                 }
@@ -256,7 +229,7 @@ function loadUserTranscriptions() {
                 try {
                     const fileRef = sRef(storage, job.midiUrl);
                     await getMetadata(fileRef);
-                    validatedMidiCache.add(job.midiUrl); // Save verification state
+                    validatedMidiCache.add(job.midiUrl);
                     return job; 
                 } catch (error) {
                     if (error.code === 'storage/object-not-found' || error.message.includes('not found')) {
@@ -313,13 +286,8 @@ function extractYouTubeTitle(url) {
     return "YouTube Track Asset";
 }
 
-// ------------------------------------------------------------------
-// HIGH PERFORMANCE DOCUMENT FRAGMENT RENDERING (Zero Jank painting)
-// ------------------------------------------------------------------
 function renderTranscriptionsList(list) {
     transcriptionsList.innerHTML = "";
-    
-    // Create an in-memory document fragment to hold generated rows
     const fragment = document.createDocumentFragment();
 
     list.forEach((track, index) => {
@@ -357,7 +325,6 @@ function renderTranscriptionsList(list) {
         fragment.appendChild(row);
     });
 
-    // Append all nodes inside a single paint cycle
     transcriptionsList.appendChild(fragment);
 }
 
@@ -368,35 +335,88 @@ function openStudioWithMidi(midiUrl) {
 
 function getMockTranscriptions() {
     return [
-        {
-            id: "mock_1",
-            title: "Scorpions - Still Loving You (Piano Arr.)",
-            source: "YOUTUBE",
-            midiUrl: "https://example.com/demo1.mid",
-            date: "2026-08-30"
-        },
-        {
-            id: "mock_2",
-            title: "Custom Golden Days Session.wav",
-            source: "UPLOAD",
-            midiUrl: "https://example.com/demo2.mid",
-            date: "2026-08-28"
-        }
+        { id: "mock_1", title: "Scorpions - Still Loving You (Piano Arr.)", source: "YOUTUBE", midiUrl: "https://example.com/demo1.mid", date: "2026-08-30" },
+        { id: "mock_2", title: "Custom Golden Days Session.wav", source: "UPLOAD", midiUrl: "https://example.com/demo2.mid", date: "2026-08-28" }
     ];
 }
 
-// ------------------------------------------------------------------
-// PEMAIN POPULAR SONGS (Sedia Ada)
-// ------------------------------------------------------------------
-function renderPopularTracks() {
+// ==========================================
+// JAMENDO MUSIC API INTEGRATION (POPULAR SONGS)
+// ==========================================
+async function fetchJamendoTracks(params = {}) {
+    const queryParams = new URLSearchParams({
+        client_id: JAMENDO_CLIENT_ID,
+        format: "json",
+        limit: "12",
+        include: "musicinfo",
+        ...params
+    });
+
+    // Elegant loading state inside layout grid
+    popularGrid.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; color: rgba(255,255,255,0.4); padding: 40px 0; font-size: 11.5px; font-weight: 500;">
+            Retrieving songs from Jamendo API...
+        </div>
+    `;
+
+    try {
+        const response = await fetch(`https://api.jamendo.com/v3.0/tracks/?${queryParams}`);
+        if (!response.ok) throw new Error("API Network connection failed");
+        
+        const data = await response.json();
+        if (data.results && data.results.length > 0) {
+            currentTrackList = data.results.map(track => ({
+                id: track.id,
+                title: track.name,
+                artist: track.artist_name,
+                duration: formatDuration(track.duration),
+                duration_seconds: track.duration,
+                art: track.image || "https://picsum.photos/id/1025/300/300",
+                audio: track.audio
+            }));
+            renderPopularTracks(currentTrackList);
+        } else {
+            popularGrid.innerHTML = `
+                <div style="grid-column: 1 / -1; text-align: center; color: rgba(255,255,255,0.4); padding: 40px 0; font-size: 11.5px;">
+                    No tracks match your query.
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.warn("[JAMENDO API ERROR] Falling back to default mockup database layout.", error);
+        currentTrackList = popularTracksDataMockFallback;
+        renderPopularTracks(currentTrackList);
+    }
+}
+
+function fetchJamendoTracksByGenre(genre) {
+    if (genre === "all") {
+        fetchJamendoTracks({ order: "popularity_total" });
+    } else {
+        // Tag search matches the precise capsule filter
+        fetchJamendoTracks({ fuzzytags: genre, order: "popularity_total" });
+    }
+}
+
+// Helper to translate seconds into M:SS standard notation
+function formatDuration(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60).toString().padStart(2, "0");
+    return `${mins}:${secs}`;
+}
+
+// ==========================================
+// POPULAR SONGS RENDERING
+// ==========================================
+function renderPopularTracks(tracks) {
     popularGrid.innerHTML = "";
     const fragment = document.createDocumentFragment();
 
-    popularTracksData.forEach(track => {
+    tracks.forEach((track, index) => {
         const card = document.createElement("div");
         card.className = "track-card";
         card.innerHTML = `
-            <img src="${track.art}" class="track-card-art" alt="Art">
+            <img src="${track.art}" class="track-card-art" alt="Art" onerror="this.src='https://picsum.photos/id/322/300/300'">
             <div class="track-card-meta">
                 <span class="track-card-title">${track.title}</span>
                 <span class="track-card-artist">${track.artist}</span>
@@ -404,6 +424,7 @@ function renderPopularTracks() {
         `;
         
         card.addEventListener("click", () => {
+            currentTrackIndex = index;
             selectAndPlayTrack(track);
         });
         fragment.appendChild(card);
@@ -412,29 +433,97 @@ function renderPopularTracks() {
     popularGrid.appendChild(fragment);
 }
 
+// ==========================================
+// REAL-TIME AUDIO STREAMING PLAYER
+// ==========================================
 function selectAndPlayTrack(track) {
     activeTrack = track;
     playerAlbumArt.src = track.art;
     playerTrackTitle.textContent = track.title;
     playerTrackArtist.textContent = track.artist;
-    trackLength.textContent = track.duration;
     
-    currentSeconds = 0;
-    currentTime.textContent = "0:00";
-    timelineFill.style.width = "0%";
-    timelineThumb.style.left = "0%";
-    
-    startPlaybackState();
+    // Reset player timers
+    if (tickerInterval) {
+        clearInterval(tickerInterval);
+        tickerInterval = null;
+    }
+
+    if (track.audio) {
+        // Play real music stream directly from Jamendo 
+        isRealPlayback = true;
+        audioPlayer.src = track.audio;
+        audioPlayer.volume = currentVolume;
+        
+        audioPlayer.play()
+            .then(() => {
+                isPlaying = true;
+                playPauseIcon.innerHTML = pauseIconSvg;
+                playPauseBtn.style.transform = "scale(1.05)";
+            })
+            .catch(err => {
+                console.warn("[PLAYBACK INTERRUPTED] Stream is loaded or playing elsewhere:", err);
+            });
+    } else {
+        // Fallback to static mockup ticker behavior
+        isRealPlayback = false;
+        audioPlayer.pause();
+        
+        trackLength.textContent = track.duration;
+        currentSeconds = 0;
+        currentTime.textContent = "0:00";
+        timelineFill.style.width = "0%";
+        timelineThumb.style.left = "0%";
+        
+        startPlaybackState();
+    }
 }
 
+// Player controls actions
 playPauseBtn.addEventListener("click", () => {
-    if (isPlaying) {
-        pausePlaybackState();
+    if (isRealPlayback) {
+        if (isPlaying) {
+            audioPlayer.pause();
+            isPlaying = false;
+            playPauseIcon.innerHTML = playIconSvg;
+            playPauseBtn.style.transform = "";
+        } else {
+            audioPlayer.play()
+                .then(() => {
+                    isPlaying = true;
+                    playPauseIcon.innerHTML = pauseIconSvg;
+                    playPauseBtn.style.transform = "scale(1.05)";
+                })
+                .catch(err => console.warn("Failed to play track stream:", err));
+        }
     } else {
-        startPlaybackState();
+        if (isPlaying) {
+            pausePlaybackState();
+        } else {
+            startPlaybackState();
+        }
     }
 });
 
+// Previous and Next buttons handlers
+if (prevBtn) {
+    prevBtn.addEventListener("click", () => {
+        if (currentTrackList.length > 0 && currentTrackIndex > 0) {
+            currentTrackIndex--;
+            selectAndPlayTrack(currentTrackList[currentTrackIndex]);
+        }
+    });
+}
+
+if (nextBtn) {
+    nextBtn.addEventListener("click", () => {
+        if (currentTrackList.length > 0 && currentTrackIndex < currentTrackList.length - 1) {
+            currentTrackIndex++;
+            selectAndPlayTrack(currentTrackList[currentTrackIndex]);
+        }
+    });
+}
+
+// Mock Player State handlers
 function startPlaybackState() {
     isPlaying = true;
     playPauseIcon.innerHTML = pauseIconSvg;
@@ -471,24 +560,112 @@ function updatePlayerTick() {
     timelineThumb.style.left = `${percentage}%`;
 }
 
-volumeTrack.addEventListener("click", (e) => {
-    const rect = volumeTrack.getBoundingClientRect();
-    const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1) * 100;
-    volumeFill.style.width = `${percent}%`;
-    volumeThumb.style.left = `${percent}%`;
+// ==========================================
+// AUDIO SYSTEM EVENT LISTENERS (REAL PROGRESSION)
+// ==========================================
+audioPlayer.addEventListener("timeupdate", () => {
+    if (!isRealPlayback) return;
+    const current = audioPlayer.currentTime;
+    const duration = audioPlayer.duration || activeTrack.duration_seconds || 1;
+    
+    currentTime.textContent = formatDuration(current);
+    const percentage = (current / duration) * 100;
+    timelineFill.style.width = `${percentage}%`;
+    timelineThumb.style.left = `${percentage}%`;
 });
 
+audioPlayer.addEventListener("loadedmetadata", () => {
+    if (!isRealPlayback) return;
+    trackLength.textContent = formatDuration(audioPlayer.duration);
+});
+
+audioPlayer.addEventListener("ended", () => {
+    if (!isRealPlayback) return;
+    // Auto-advance to the next track if available
+    if (currentTrackList.length > 0 && currentTrackIndex < currentTrackList.length - 1) {
+        currentTrackIndex++;
+        selectAndPlayTrack(currentTrackList[currentTrackIndex]);
+    } else {
+        isPlaying = false;
+        playPauseIcon.innerHTML = playIconSvg;
+        playPauseBtn.style.transform = "";
+    }
+});
+
+// Interactive Seek Bar (Timeline) click event
+timelineTrack.addEventListener("click", (e) => {
+    const rect = timelineTrack.getBoundingClientRect();
+    const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+    
+    if (isRealPlayback && audioPlayer.duration) {
+        audioPlayer.currentTime = percent * audioPlayer.duration;
+    } else if (!isRealPlayback) {
+        const lengthParts = activeTrack.duration.split(":");
+        const totalDurationSeconds = parseInt(lengthParts[0]) * 60 + parseInt(lengthParts[1]);
+        currentSeconds = Math.floor(percent * totalDurationSeconds);
+        
+        const minutes = Math.floor(currentSeconds / 60);
+        const seconds = (currentSeconds % 60).toString().padStart(2, "0");
+        currentTime.textContent = `${minutes}:${seconds}`;
+        timelineFill.style.width = `${percent * 100}%`;
+        timelineThumb.style.left = `${percent * 100}%`;
+    }
+});
+
+// Volume Bar setting logic
+volumeTrack.addEventListener("click", (e) => {
+    const rect = volumeTrack.getBoundingClientRect();
+    const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+    currentVolume = percent;
+    volumeFill.style.width = `${percent * 100}%`;
+    volumeThumb.style.left = `${percent * 100}%`;
+    
+    audioPlayer.volume = percent;
+});
+
+// ==========================================
+// FILTER CAPSULES & DEBOUNCED SEARCH ACTIONS
+// ==========================================
 categoriesRow.addEventListener("click", (e) => {
     if (e.target.classList.contains("capsule")) {
         document.querySelectorAll(".capsule").forEach(c => c.classList.remove("active"));
         e.target.classList.add("active");
+        
+        // Reset Search Input to avoid UI state mismatch
+        if (searchInput) searchInput.value = "";
+        
+        const genre = e.target.dataset.genre;
+        fetchJamendoTracksByGenre(genre);
     }
 });
 
-// Logout Action
+// Debounced Live Search event mapping
+let searchTimeout = null;
+if (searchInput) {
+    searchInput.addEventListener("input", (e) => {
+        const query = e.target.value.trim();
+        clearTimeout(searchTimeout);
+        
+        searchTimeout = setTimeout(() => {
+            if (query.length > 0) {
+                // Fetch tracks matching search parameters
+                fetchJamendoTracks({ namesearch: query });
+            } else {
+                // Restore search defaults based on selected capsule
+                const activeCapsule = document.querySelector(".capsule.active");
+                const genre = activeCapsule ? activeCapsule.dataset.genre : "all";
+                fetchJamendoTracksByGenre(genre);
+            }
+        }, 400); // 400ms delay to balance latency and rate limits
+    });
+}
+
+// ==========================================
+// SESSION DISCONNECT ACTIONS
+// ==========================================
 document.getElementById("dashboard-logout-btn").addEventListener("click", () => {
     if (confirm("Disconnect session?")) {
-        // Clean up open database handles
+        audioPlayer.pause();
         if (snapshotUnsubscribe) {
             snapshotUnsubscribe();
         }
@@ -510,5 +687,5 @@ document.getElementById("dashboard-logout-btn").addEventListener("click", () => 
     }
 });
 
-// Initial load
-renderPopularTracks();
+// Initial boot logic
+fetchJamendoTracksByGenre("all");
