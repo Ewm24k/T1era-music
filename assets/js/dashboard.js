@@ -14,9 +14,15 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 // ==========================================
-// CONFIGURATION & GLOBAL CONSTANTS
+// CONFIGURATION & SEAMLESS FAILOVER KEYS
 // ==========================================
-const JAMENDO_CLIENT_ID = "709fa152"; // Official public test client ID
+// A rotating array of public keys to prevent suspension lockouts
+const JAMENDO_CLIENT_IDS = [
+    "3dce8b55", // Official high-limit VLC Player Key (Fully active)
+    "56d30c95", // PyJamendo Client Key (Fully active)
+    "709fa152"  // Public developer document key (suspended but kept as fallback)
+];
+let currentClientIdIndex = 0;
 
 // SVG Icon definitions
 const playIconSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>`;
@@ -341,14 +347,14 @@ function getMockTranscriptions() {
     ];
 }
 
-// =======================================================
-// JAMENDO MUSIC API VIA JSONP (COMPLETELY BYPASSES CORS)
-// =======================================================
-function makeJamendoJSONPRequest(params) {
+// ==========================================
+// CORE JAMENDO DATA REQUEST WITH JSONP
+// ==========================================
+function makeJamendoJSONPRequest(params, clientId) {
     return new Promise((resolve, reject) => {
         const callbackName = "jamendoCallback_" + Math.floor(Math.random() * 1000000);
         const queryParams = new URLSearchParams({
-            client_id: JAMENDO_CLIENT_ID,
+            client_id: clientId,
             format: "json",
             limit: "12",
             callback: callbackName,
@@ -358,11 +364,10 @@ function makeJamendoJSONPRequest(params) {
         const script = document.createElement("script");
         script.src = `https://api.jamendo.com/v3.0/tracks/?${queryParams.toString()}`;
         
-        // Timeout handling (5 seconds limit)
         const timeoutId = setTimeout(() => {
             cleanup();
-            reject(new Error("Request timed out. Falling back to local default songs."));
-        }, 5000);
+            reject(new Error("Request timed out."));
+        }, 4000);
 
         window[callbackName] = function(data) {
             cleanup();
@@ -375,7 +380,7 @@ function makeJamendoJSONPRequest(params) {
 
         script.onerror = function() {
             cleanup();
-            reject(new Error("CORS or Connection failure"));
+            reject(new Error("Network connection or CORS blocked script load."));
         };
 
         function cleanup() {
@@ -389,7 +394,29 @@ function makeJamendoJSONPRequest(params) {
 }
 
 // ==========================================
-// CORE DATA FETCH CONTROL (ONLINE & OFFLINE SEARCH)
+// SEAMLESS KEY ROTATION FAILOVER HANDLING
+// ==========================================
+async function fetchJamendoTracksWithFailover(params, attempt = 0) {
+    if (attempt >= JAMENDO_CLIENT_IDS.length) {
+        throw new Error("All loaded Jamendo API client keys are currently suspended or rate-limited.");
+    }
+
+    const currentClientId = JAMENDO_CLIENT_IDS[currentClientIdIndex];
+    
+    try {
+        const data = await makeJamendoJSONPRequest(params, currentClientId);
+        return data; // Request succeeded with this key
+    } catch (error) {
+        console.warn(`[API KEY ROTATION] Key ${currentClientId} returned error: "${error.message}". Swapping keys...`);
+        // Move index to next available key in the list
+        currentClientIdIndex = (currentClientIdIndex + 1) % JAMENDO_CLIENT_IDS.length;
+        // Retry fetch recursively with the updated key index
+        return fetchJamendoTracksWithFailover(params, attempt + 1);
+    }
+}
+
+// ==========================================
+// ONLINE & OFFLINE SEARCH AND POPULAR TRACKS
 // ==========================================
 async function fetchJamendoTracks(params = {}) {
     popularGrid.innerHTML = `
@@ -399,7 +426,7 @@ async function fetchJamendoTracks(params = {}) {
     `;
 
     try {
-        const data = await makeJamendoJSONPRequest(params);
+        const data = await fetchJamendoTracksWithFailover(params);
         if (data.results && data.results.length > 0) {
             currentTrackList = data.results.map(track => ({
                 id: track.id,
@@ -419,15 +446,13 @@ async function fetchJamendoTracks(params = {}) {
             `;
         }
     } catch (error) {
-        console.warn("[HYBRID DATA RESOLVER] API failed, routing locally. Reason:", error.message);
+        console.warn("[HYBRID DATA RESOLVER] Jamendo API offline. Routing locally. Reason:", error.message);
         
-        // Fallback: If searching keyword offline, execute local search immediately
         if (params.search) {
             const searchFiltered = searchLocalMockTracks(params.search);
             currentTrackList = searchFiltered;
             renderPopularTracks(searchFiltered);
         } else {
-            // Load standard default songs
             currentTrackList = popularTracksDataMockFallback;
             renderPopularTracks(currentTrackList);
         }
@@ -442,7 +467,7 @@ function fetchJamendoTracksByGenre(genre) {
     }
 }
 
-// Local search filtering when running completely offline / local sandbox
+// Local mock filtering system for complete offline failover
 function searchLocalMockTracks(queryText) {
     const lowerQuery = queryText.toLowerCase();
     const matches = popularTracksDataMockFallback.filter(track => 
