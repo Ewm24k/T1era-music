@@ -34,12 +34,18 @@ tag.src = "https://www.youtube.com/iframe_api";
 const firstScriptTag = document.getElementsByTagName("script")[0];
 firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
-// High-speed keyless Invidious API mirrors for full-length search resolution
+// High-uptime CORS proxies to bypass origin restrictions
+const CORS_PROXIES = [
+    "https://corsproxy.io/?",
+    "https://api.allorigins.win/raw?url="
+];
+
+// High-uptime public Invidious API mirrors
 const INVIDIOUS_INSTANCES = [
     "https://yewtu.be",
-    "https://vid.puffyan.us",
-    "https://inv.tux.im",
-    "https://invidious.snopyta.org"
+    "https://inv.nadeko.net",
+    "https://inv.tux.pizza",
+    "https://yt.artemislena.eu"
 ];
 
 // SVG Icon definitions
@@ -100,7 +106,7 @@ const transcriptionsList = document.getElementById("transcriptions-list");
 const audioPlayer = new Audio();
 let isPlaying = false;
 let isRealPlayback = false; 
-let isYtPlayback = false; // Playing full stream via YouTube backplane
+let isYtPlayback = false; 
 let currentTrackList = [];  
 let currentTrackIndex = -1;
 let tickerInterval = null;  
@@ -143,7 +149,6 @@ window.onYouTubeIframeAPIReady = function() {
 function onPlayerStateChange(event) {
     if (!isYtPlayback) return;
     
-    // Sync UI to playing states
     if (event.data === YT.PlayerState.PLAYING) {
         isPlaying = true;
         playPauseIcon.innerHTML = pauseIconSvg;
@@ -156,7 +161,6 @@ function onPlayerStateChange(event) {
         stopYtProgressTracker();
     } else if (event.data === YT.PlayerState.ENDED) {
         stopYtProgressTracker();
-        // Dynamic Autoplay-Next track logic
         if (currentTrackList.length > 0 && currentTrackIndex < currentTrackList.length - 1) {
             currentTrackIndex++;
             selectAndPlayTrack(currentTrackList[currentTrackIndex]);
@@ -194,27 +198,56 @@ function stopYtProgressTracker() {
 // ==========================================
 // DYNAMIC KEYLESS FULL TRACK RESOLVER
 // ==========================================
+async function fetchWithProxyFallback(url) {
+    // Attempt proxied routes to bypass browser CORS headers constraints
+    for (const proxy of CORS_PROXIES) {
+        try {
+            const proxiedUrl = `${proxy}${encodeURIComponent(url)}`;
+            const response = await fetch(proxiedUrl);
+            if (response.ok) {
+                const text = await response.text();
+                try {
+                    return JSON.parse(text);
+                } catch (jsonErr) {
+                    console.warn("[PROXY PARSER] Non-JSON data returned from proxy. Trying next mirror...");
+                }
+            }
+        } catch (e) {
+            console.warn(`[PROXY WARNING] Failover route ${proxy} rejected:`, e.message);
+        }
+    }
+    
+    // Last resort: attempt raw direct connection
+    try {
+        const response = await fetch(url);
+        if (response.ok) return await response.json();
+    } catch (e) {
+        console.warn("[PROXY WARNING] Direct routing failed.");
+    }
+    throw new Error("All proxy routing mirrors failed.");
+}
+
 async function findYouTubeId(artist, title) {
     const cleanQuery = `${artist} - ${title} audio`;
     const searchParams = new URLSearchParams({ q: cleanQuery });
 
     for (const instance of INVIDIOUS_INSTANCES) {
         try {
-            const url = `${instance}/api/v1/search?${searchParams.toString()}`;
-            const response = await fetch(url);
-            if (response.ok) {
-                const results = await response.json();
-                // Extract first match of video types
-                const target = results.find(item => item.type === "video");
-                if (target && target.videoId) {
-                    return target.videoId;
-                }
+            const targetUrl = `${instance}/api/v1/search?${searchParams.toString()}`;
+            console.log(`[YOUTUBE FINDER] Trying instance mirror: ${instance}`);
+            
+            const results = await fetchWithProxyFallback(targetUrl);
+            const targetList = Array.isArray(results) ? results : (results.data || []);
+            
+            const target = targetList.find(item => item.type === "video");
+            if (target && target.videoId) {
+                return target.videoId;
             }
         } catch (e) {
-            console.warn(`[YOUTUBE FINDER] Server mirror ${instance} is rate-limited. Trying next...`);
+            console.warn(`[YOUTUBE FINDER] Mirror ${instance} failed: ${e.message}`);
         }
     }
-    throw new Error("No YouTube stream match found.");
+    throw new Error("No YouTube stream match found across active mirrors.");
 }
 
 // ==========================================
@@ -639,6 +672,7 @@ async function selectAndPlayTrack(track) {
     try {
         console.log(`[HYBRID STREAMING] Resolving full track for: ${track.artist} - ${track.title}`);
         const ytId = await findYouTubeId(track.artist, track.title);
+        console.log(`[HYBRID STREAMING] Success! Playing full length YouTube track: ${ytId}`);
         
         isRealPlayback = true;
         isYtPlayback = true;
