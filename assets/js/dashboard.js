@@ -13,6 +13,14 @@ import {
     getMetadata 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
+// SVG Icon definitions
+const playIconSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>`;
+const pauseIconSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>`;
+
+const youtubeIconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="#ff4d4d" style="display:block;"><path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.517 3.545 12 3.545 12 3.545s-7.517 0-9.388.508a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.871.508 9.388.508 9.388.508s7.517 0 9.388-.508a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>`;
+const uploadIconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#00df89" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+const studioIconSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:2px;"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M6 3v11"/><path d="M10 3v11"/><path d="M14 3v11"/><path d="M18 3v11"/><path d="M2 14h20"/></svg>`;
+
 // Global, long-lived Client Cache registries to prevent layout blocking network storms
 const resolvedTitleCache = new Map();
 const validatedMidiCache = new Set();
@@ -142,7 +150,7 @@ if (auth) {
         } else {
           const initials = user.email ? user.email.substring(0, 2).toUpperCase() : "ST";
           profileAvatar.textContent = initials;
-          profileAvatar.style.fontSize = "0.85rem";
+          profileAvatar.style.fontSize = "10px";
           profileAvatar.style.fontWeight = "bold";
           profileAvatar.style.color = "rgba(255,255,255,0.7)";
         }
@@ -166,7 +174,7 @@ function loadUserTranscriptions() {
 
     // Retain list structure during fetches to prevent layout blinking
     if (!transcriptionsList.children.length) {
-        transcriptionsList.innerHTML = `<div style="text-align:center; color:rgba(255,255,255,0.4); font-size:0.9rem; padding:40px 0;">Loading transcriptions database...</div>`;
+        transcriptionsList.innerHTML = `<div style="text-align:center; color:rgba(255,255,255,0.4); font-size:0.85rem; padding:40px 0;">Loading transcriptions database...</div>`;
     }
 
     // Clean up any stale listeners to avoid duplicates
@@ -321,7 +329,7 @@ function renderTranscriptionsList(list) {
         
         const isYT = track.source === "YOUTUBE";
         const artClass = isYT ? "youtube" : "upload";
-        const artIcon = isYT ? "📺" : "📁";
+        const artIcon = isYT ? youtubeIconSvg : uploadIconSvg;
         const badgeLabel = isYT ? "YouTube" : "Upload";
         const badgeClass = isYT ? "youtube" : "upload";
 
@@ -337,7 +345,7 @@ function renderTranscriptionsList(list) {
             <div class="trans-row__right">
                 <span class="trans-badge ${badgeClass}">${badgeLabel}</span>
                 <button class="trans-row__action" type="button">
-                    <span>🎹</span> Open Studio
+                    ${studioIconSvg} Open Studio
                 </button>
             </div>
         `;
@@ -429,8 +437,8 @@ playPauseBtn.addEventListener("click", () => {
 
 function startPlaybackState() {
     isPlaying = true;
-    playPauseIcon.textContent = "⏸";
-    playPauseBtn.style.transform = "scale(1.1)";
+    playPauseIcon.innerHTML = pauseIconSvg;
+    playPauseBtn.style.transform = "scale(1.05)";
     
     if (tickerInterval) clearInterval(tickerInterval);
     tickerInterval = setInterval(updatePlayerTick, 1000);
@@ -438,7 +446,7 @@ function startPlaybackState() {
 
 function pausePlaybackState() {
     isPlaying = false;
-    playPauseIcon.textContent = "▶";
+    playPauseIcon.innerHTML = playIconSvg;
     playPauseBtn.style.transform = "";
     if (tickerInterval) clearInterval(tickerInterval);
 }
