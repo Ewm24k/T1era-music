@@ -212,6 +212,11 @@ const fileDropzoneTrigger = document.getElementById("file-dropzone-trigger");
 const audioFileInput = document.getElementById("audio-file-input");
 const dropzoneLabelText = document.getElementById("dropzone-label-text");
 
+// Model Picker (Step 1) Controls
+const modelCards = document.querySelectorAll(".model-card");
+const inputMethodsWrapper = document.getElementById("input-methods-wrapper");
+let selectedModel = null;
+
 let isSignUpState = false;
 
 // Track Auth State & Live sync profile variables
@@ -506,6 +511,7 @@ function resetConsoleState() {
   uploadServicesGrid.style.display = "none";
   consoleTitle.textContent = "Studio Console";
   backToConsoleBtn.classList.remove("show");
+  resetModelSelection();
 }
 
 function runSessionVerification() {
@@ -647,6 +653,33 @@ logoutBtn.addEventListener("click", () => {
 });
 
 // =========================================================
+// --- T1ERA MUSIC MODEL PICKER (STEP 1) LOGIC ---
+// =========================================================
+
+function selectModel(modelName, cardEl) {
+  selectedModel = modelName;
+  modelCards.forEach((c) => c.classList.remove("active"));
+  cardEl.classList.add("active");
+  if (inputMethodsWrapper) {
+    inputMethodsWrapper.classList.remove("selection-locked");
+  }
+}
+
+function resetModelSelection() {
+  selectedModel = null;
+  modelCards.forEach((c) => c.classList.remove("active"));
+  if (inputMethodsWrapper) {
+    inputMethodsWrapper.classList.add("selection-locked");
+  }
+}
+
+modelCards.forEach((card) => {
+  card.addEventListener("click", () => {
+    selectModel(card.dataset.model, card);
+  });
+});
+
+// =========================================================
 // --- T1ERA MUSIC WEB3 UPLOAD & PIPELINE INTEGRATION ---
 // =========================================================
 
@@ -734,6 +767,15 @@ function isValidYouTubeUrl(url) {
 
 if (youtubeSubmitBtn) {
   youtubeSubmitBtn.addEventListener("click", () => {
+    if (!selectedModel) {
+      alert("Please select an AI Neural Transcriber Engine first (Step 1).");
+      return;
+    }
+    if (selectedModel !== "T1ERA-Nexus-6") {
+      alert("This model is not available yet. Please select TiERA Nexus-6 for now.");
+      return;
+    }
+
     const urlValue = youtubeLinkInput ? youtubeLinkInput.value.trim() : "";
     if (!urlValue) {
       alert("Please enter a YouTube video URL first.");
@@ -826,7 +868,17 @@ function printTerminalFailureLog(err) {
   showTerminalFailure(err.message || "Failed to start YouTube transcription job.");
 }
 
-fileDropzoneTrigger.addEventListener("click", () => { audioFileInput.click(); });
+fileDropzoneTrigger.addEventListener("click", () => {
+  if (!selectedModel) {
+    alert("Please select an AI Neural Transcriber Engine first (Step 1).");
+    return;
+  }
+  if (selectedModel !== "T1ERA-Nexus-6") {
+    alert("This model is not available yet. Please select TiERA Nexus-6 for now.");
+    return;
+  }
+  audioFileInput.click();
+});
 
 audioFileInput.addEventListener("change", (event) => {
   const files = event.target.files;
