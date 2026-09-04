@@ -175,8 +175,6 @@ function renderSheetMusic() {
         svgContent += `<ellipse cx="${x}" cy="${y}" rx="7" ry="5" fill="${color}" id="sheet-notehead-${index}" transform="rotate(-15, ${x}, ${y})" />`;
 
         // Stems standard attachment:
-        // Upward stems attach to the right side of the notehead (x + 6) and extend up.
-        // Downward stems attach to the left side of the notehead (x - 6) and extend down.
         if (stemDirection === "up") {
             svgContent += `<line x1="${x + 6}" y1="${y}" x2="${x + 6}" y2="${y - 25}" stroke="${color}" stroke-width="1.5" id="sheet-stem-${index}" />`;
         } else {
@@ -211,14 +209,29 @@ function renderVerticalSheetMusic(targetContainerId) {
     const dy = 3;
 
     const marginLeft = 100;
-    const systemWidth = 800;
+
+    // 1. Dynamic Width Calculation based on Maximize View viewport parent width
+    let containerWidth = 950; // default for embedded section 2
+    if (targetContainerId === 'sheet-music-notation-max') {
+        const container = document.getElementById('max-modal-scroll-container');
+        if (container && container.clientWidth) {
+            containerWidth = Math.max(950, container.clientWidth - 60); // Cushioned cushion padding buffer
+        } else {
+            containerWidth = Math.max(1200, window.innerWidth * 0.88);
+        }
+    }
+    
+    const svgWidth = containerWidth;
     const marginRight = 50;
-    const svgWidth = marginLeft + systemWidth + marginRight;
+    const systemWidth = svgWidth - marginLeft - marginRight;
     const svgHeight = numSystems * systemHeight + 100; // Buffered bottom layout space for copyright
 
     // Check if we should render colorful notes
     const chkShowColors = document.getElementById('chk-show-colors');
     const showColors = chkShowColors ? chkShowColors.checked : false;
+
+    // 2. Proportional Scaling so notes perfectly stretch across full maximized staves
+    const localPixelsPerSecond = systemWidth / systemDuration;
 
     let svgContent = "";
 
@@ -228,26 +241,25 @@ function renderVerticalSheetMusic(targetContainerId) {
     for (let i = 0; i < numSystems; i++) {
         const yOffset = i * systemHeight + 40;
 
-        // 1. Draw RH staff lines (Treble) - Reduced staff line boldness to stroke-width="0.75" and soft grey stroke
+        // Draw Treble staff lines
         const rhLines = [64, 67, 71, 74, 77];
         rhLines.forEach(pitch => {
             const y = yOffset + rhStaffCenterY - (pitch - 71) * dy;
             svgContent += `<line x1="${marginLeft}" y1="${y}" x2="${marginLeft + systemWidth}" y2="${y}" stroke="#9ca3af" stroke-width="0.75" />`;
         });
 
-        // 2. Draw LH staff lines (Bass) - Reduced staff line boldness to stroke-width="0.75" and soft grey stroke
+        // Draw Bass staff lines
         const lhLines = [43, 47, 50, 53, 57];
         lhLines.forEach(pitch => {
             const y = yOffset + lhStaffCenterY - (pitch - 50) * dy;
             svgContent += `<line x1="${marginLeft}" y1="${y}" x2="${marginLeft + systemWidth}" y2="${y}" stroke="#9ca3af" stroke-width="0.75" />`;
         });
 
-        // 3. Draw system bracket linkages and labels
+        // Draw bracket linkage and labels
         svgContent += `<line x1="${marginLeft - 80}" y1="${yOffset + 20}" x2="${marginLeft - 80}" y2="${yOffset + 200}" stroke="#111115" stroke-width="1.5" />`;
         svgContent += `<text x="${marginLeft - 60}" y="${yOffset + rhStaffCenterY + 5}" fill="#111115" font-size="14" font-weight="bold" font-family="-apple-system, sans-serif">RH</text>`;
         svgContent += `<text x="${marginLeft - 60}" y="${yOffset + lhStaffCenterY + 5}" fill="#111115" font-size="14" font-weight="bold" font-family="-apple-system, sans-serif">LH</text>`;
 
-        // 4. Draw Clef symbols aligned with each system row
         // Treble Clef
         svgContent += `
         <g transform="translate(${marginLeft - 30}, ${yOffset + rhStaffCenterY})" stroke="#111115" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round" stroke-linejoin="round">
@@ -270,46 +282,30 @@ function renderVerticalSheetMusic(targetContainerId) {
     // 5. Draw the notes into their corresponding staff systems
     activeNotesMemory.forEach((note, index) => {
         const shiftedStart = Math.max(0, note.time - firstNoteTime);
-        
-        // Determine system row target
         const systemIdx = Math.floor(shiftedStart / systemDuration);
         if (systemIdx >= numSystems) return;
 
         const yOffset = systemIdx * systemHeight + 40;
-        
-        // Math positioning relative to system bounds
         const systemTimeOffset = shiftedStart - systemIdx * systemDuration;
-        const noteX = systemTimeOffset * pixelsPerSecond + marginLeft;
+        const noteX = systemTimeOffset * localPixelsPerSecond + marginLeft;
         
-        // Prevent horizontal overflow past system bounds (cap note width within margins)
+        // Prevent horizontal overflow past system bounds dynamically
         const maxAllowedWidth = (marginLeft + systemWidth) - noteX;
-        const noteW = Math.min(Math.max(10, note.duration * pixelsPerSecond), maxAllowedWidth);
-        
+        const noteW = Math.min(Math.max(10, note.duration * localPixelsPerSecond), maxAllowedWidth);
         const pitch = note.midi;
 
         let y = 0;
-        // High contrast darker colors or traditional monochrome black/dark-charcoal
         let color = "";
         let stemDirection = "";
 
         if (pitch >= 60) {
             y = yOffset + rhStaffCenterY - (pitch - 71) * dy;
-            color = showColors ? "#4f46e5" : "#111115"; // Deep indigo or standard black
-            
-            if (pitch >= 72) {
-                stemDirection = "down";
-            } else {
-                stemDirection = "up";
-            }
+            color = showColors ? "#4f46e5" : "#111115";
+            stemDirection = (pitch >= 72) ? "down" : "up";
         } else {
             y = yOffset + lhStaffCenterY - (pitch - 50) * dy;
-            color = showColors ? "#d97706" : "#111115"; // Deep amber or standard black
-            
-            if (pitch >= 51) {
-                stemDirection = "down";
-            } else {
-                stemDirection = "up";
-            }
+            color = showColors ? "#d97706" : "#111115";
+            stemDirection = (pitch >= 51) ? "down" : "up";
         }
 
         // Render dynamic ledger lines for notes that are placed off-staff
@@ -339,7 +335,7 @@ function renderVerticalSheetMusic(targetContainerId) {
             }
         }
 
-        // Note duration bar (white page style - render only if colorful mode is enabled)
+        // Note duration bar
         if (showColors) {
             svgContent += `<rect x="${noteX}" y="${y - 4}" width="${noteW}" height="8" rx="4" fill="${color}" opacity="0.6" id="${targetContainerId}-note-rect-${index}" />`;
         }
@@ -355,7 +351,7 @@ function renderVerticalSheetMusic(targetContainerId) {
         }
     });
 
-    // 6. Draw the vertical playback tracking pointer cursor
+    // Vertical playback tracking pointer cursor
     svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeft}" y1="10" x2="${marginLeft}" y2="${svgHeight - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
 
     // Draw footer copyright on the bottom center
@@ -396,6 +392,19 @@ function startVerticalPlayback(targetContainerId) {
     const systemHeight = 220;
     const marginLeft = 100;
 
+    // Dynamic width calculation matched exactly with renderVerticalSheetMusic
+    let containerWidth = 950;
+    if (targetContainerId === 'sheet-music-notation-max') {
+        const container = document.getElementById('max-modal-scroll-container');
+        if (container && container.clientWidth) {
+            containerWidth = Math.max(950, container.clientWidth - 60);
+        } else {
+            containerWidth = Math.max(1200, window.innerWidth * 0.88);
+        }
+    }
+    const systemWidth = containerWidth - marginLeft - 50;
+    const localPixelsPerSecond = systemWidth / systemDuration;
+
     const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
     
     // Fast seek of starting index
@@ -403,6 +412,9 @@ function startVerticalPlayback(targetContainerId) {
     while (verticalPlaybackNoteIndex < activeNotesMemory.length && Math.max(0, activeNotesMemory[verticalPlaybackNoteIndex].time - firstNoteTime) < verticalPlaybackTime) {
         verticalPlaybackNoteIndex++;
     }
+
+    // Optimization: State variables to cache vertical scrolling to prevent 60-FPS browser layout reflow thrashing
+    let lastScrolledSystemIdx = -1;
 
     function updateVerticalFrame(now) {
         if (!isVerticalPlaying) return;
@@ -424,7 +436,7 @@ function startVerticalPlayback(targetContainerId) {
         const currentSystemIdx = Math.floor(verticalPlaybackTime / systemDuration);
         const systemTimeOffset = verticalPlaybackTime - currentSystemIdx * systemDuration;
 
-        const cursorX = systemTimeOffset * pixelsPerSecond + marginLeft;
+        const cursorX = systemTimeOffset * localPixelsPerSecond + marginLeft;
         const yOffset = currentSystemIdx * systemHeight + 40;
 
         if (cursor) {
@@ -434,20 +446,24 @@ function startVerticalPlayback(targetContainerId) {
             cursor.setAttribute('y2', yOffset + 210);
         }
 
-        // 2. Smoothly scroll container vertically to center the active row
-        let scrollContainer = null;
-        if (targetContainerId === 'sheet-music-notation-vertical') {
-            scrollContainer = document.getElementById('sheet-tab-notation-content-vertical');
-        } else if (targetContainerId === 'sheet-music-notation-max') {
-            scrollContainer = document.getElementById('max-modal-scroll-container');
+        // 2. Smoothly scroll container vertically (OPTIMIZED: only scroll when active line row shifts)
+        if (currentSystemIdx !== lastScrolledSystemIdx) {
+            lastScrolledSystemIdx = currentSystemIdx;
+            
+            let scrollContainer = null;
+            if (targetContainerId === 'sheet-music-notation-vertical') {
+                scrollContainer = document.getElementById('sheet-tab-notation-content-vertical');
+            } else if (targetContainerId === 'sheet-music-notation-max') {
+                scrollContainer = document.getElementById('max-modal-scroll-container');
+            }
+
+            if (scrollContainer) {
+                const targetScrollTop = currentSystemIdx * systemHeight - scrollContainer.clientHeight / 2 + systemHeight / 2;
+                scrollContainer.scrollTop = Math.max(0, targetScrollTop);
+            }
         }
 
-        if (scrollContainer) {
-            const targetScrollTop = currentSystemIdx * systemHeight - scrollContainer.clientHeight / 2 + systemHeight / 2;
-            scrollContainer.scrollTop = Math.max(0, targetScrollTop);
-        }
-
-        // 3. Audio Dispatcher (Dynamic Cursor-Indexed trigger)
+        // 3. Audio Dispatcher (Dynamic Cursor-Indexed trigger with soft safety lookahead queue)
         while (verticalPlaybackNoteIndex < activeNotesMemory.length) {
             const note = activeNotesMemory[verticalPlaybackNoteIndex];
             const shiftedStart = Math.max(0, note.time - firstNoteTime);
@@ -455,7 +471,9 @@ function startVerticalPlayback(targetContainerId) {
                 if (shiftedStart >= prevTime) {
                     const playDelay = Math.max(0, shiftedStart - prevTime) / playbackSpeed;
                     const noteName = Tone.Frequency(note.midi, "midi").toNote();
-                    activeInstrument.triggerAttackRelease(noteName, note.duration, Tone.now() + playDelay, note.velocity);
+                    
+                    // Scheduled with a stable 15ms lookahead headroom to bypass main-thread GC lags
+                    activeInstrument.triggerAttackRelease(noteName, note.duration, Tone.now() + playDelay + 0.015, note.velocity);
 
                     // Highlight note on the specific SVG container
                     const noteHead = document.getElementById(`${targetContainerId}-notehead-${verticalPlaybackNoteIndex}`);
@@ -716,7 +734,7 @@ function startSheetPlayback() {
             contentContainer.scrollLeft = targetScroll;
         }
 
-        // 3. Audio Triggering Scheduler (Highly Optimized Pointer check)
+        // 3. Audio Triggering Scheduler (Highly Optimized Pointer check with 15ms lookahead)
         while (sheetPlaybackNoteIndex < activeNotesMemory.length) {
             const note = activeNotesMemory[sheetPlaybackNoteIndex];
             const shiftedStart = Math.max(0, note.time - firstNoteTime);
@@ -724,7 +742,9 @@ function startSheetPlayback() {
                 if (shiftedStart >= prevTime) {
                     const playDelay = Math.max(0, shiftedStart - prevTime) / playbackSpeed;
                     const noteName = Tone.Frequency(note.midi, "midi").toNote();
-                    activeInstrument.triggerAttackRelease(noteName, note.duration, Tone.now() + playDelay, note.velocity);
+                    
+                    // Added 15ms lookahead to bypassed layout-induced buffer underruns
+                    activeInstrument.triggerAttackRelease(noteName, note.duration, Tone.now() + playDelay + 0.015, note.velocity);
 
                     // Visual highlight
                     const noteHead = document.getElementById(`sheet-notehead-${sheetPlaybackNoteIndex}`);
@@ -990,6 +1010,9 @@ function startStudioPlayback() {
         studioPlaybackNoteIndex++;
     }
 
+    // Optimization: State variable to cache vertical scrolling to prevent 60-FPS browser layout reflow thrashing inside Studio
+    let lastStudioScrolledIdx = -1;
+
     function updateStudioFrame(now) {
         if (!isStudioPlaying) return;
 
@@ -1019,13 +1042,17 @@ function startStudioPlayback() {
             cursor.setAttribute('y2', yOffset + 210);
         }
 
-        const scrollContainer = document.getElementById('sheet-tab-studio-content-vertical');
-        if (scrollContainer) {
-            const targetScrollTop = currentSystemIdx * systemHeight - scrollContainer.clientHeight / 2 + systemHeight / 2;
-            scrollContainer.scrollTop = Math.max(0, targetScrollTop);
+        // OPTIMIZED: only scroll Studio panel container when line wraps
+        if (currentSystemIdx !== lastStudioScrolledIdx) {
+            lastStudioScrolledIdx = currentSystemIdx;
+            const scrollContainer = document.getElementById('sheet-tab-studio-content-vertical');
+            if (scrollContainer) {
+                const targetScrollTop = currentSystemIdx * systemHeight - scrollContainer.clientHeight / 2 + systemHeight / 2;
+                scrollContainer.scrollTop = Math.max(0, targetScrollTop);
+            }
         }
 
-        // Audio Dispatcher (Dynamic Cursor-Indexed Trigger)
+        // Audio Dispatcher (Dynamic Cursor-Indexed Trigger with soft 15ms lookahead)
         while (studioPlaybackNoteIndex < studioNotesMemory.length) {
             const note = studioNotesMemory[studioPlaybackNoteIndex];
             const shiftedStart = Math.max(0, note.time - firstNoteTime);
@@ -1033,7 +1060,9 @@ function startStudioPlayback() {
                 if (shiftedStart >= prevTime) {
                     const playDelay = Math.max(0, shiftedStart - prevTime) / playbackSpeed;
                     const noteName = Tone.Frequency(note.midi, "midi").toNote();
-                    activeInstrument.triggerAttackRelease(noteName, note.duration, Tone.now() + playDelay, note.velocity);
+                    
+                    // Added 15ms lookahead to bypass layout reflow lags
+                    activeInstrument.triggerAttackRelease(noteName, note.duration, Tone.now() + playDelay + 0.015, note.velocity);
 
                     const noteHead = document.getElementById(`sheet-music-notation-studio-notehead-${studioPlaybackNoteIndex}`);
                     const noteRect = document.getElementById(`sheet-music-notation-studio-note-rect-${studioPlaybackNoteIndex}`);
