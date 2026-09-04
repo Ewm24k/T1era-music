@@ -71,6 +71,22 @@ customStyle.innerHTML = `
     gap: 20px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
+  .proc-card {
+    width: 100%;
+    max-width: 500px;
+    background: rgba(10, 7, 22, 0.88);
+    border: 1px solid rgba(255, 145, 77, 0.25);
+    box-shadow: 0 20px 80px rgba(255, 145, 77, 0.15), 0 0 35px rgba(60, 42, 107, 0.25);
+    border-radius: 18px;
+    padding: 30px;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
   .proc-header {
     display: flex;
     align-items: center;
@@ -1732,7 +1748,7 @@ function openLiveTerminalConsole(userId, jobId) {
         setStepStatus("step-reconstruct", "success");
         setStepStatus("step-stabilize", "success");
         setStepStatus("step-styling", "loading");
-      } else if (status === "QUANTIZING_TIMELINE") {
+    } else if (status === "QUANTIZING_TIMELINE") {
         setStepStatus("step-transcribe", "success");
         setStepStatus("step-repair", "success");
         setStepStatus("step-reconstruct", "success");
@@ -1811,3 +1827,54 @@ function bypassIntroForAuthenticatedUser() {
 
 // Jalankan pemeriksaan pintasan serta-merta apabila skrip dimuatkan
 bypassIntroForAuthenticatedUser();
+
+// =========================================================
+// SISTEM PEMINTASAN & HALAAN AUTOMATIK DARI MIDIANO.HTML
+// =========================================================
+function handleTranscribeQueryRedirections() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const action = urlParams.get("action");
+  const modelParam = urlParams.get("model");
+  const youtubeParam = urlParams.get("youtube");
+
+  if (action === "transcribe") {
+    console.log("[T1ERA ROUTER] Halaan dari midiano.html dikesan.");
+    
+    // 1. Force visual console active instantly
+    if (servicesOverlay) {
+      servicesOverlay.classList.add("active");
+    }
+    if (menuToggle) {
+      menuToggle.style.display = "flex";
+    }
+
+    // 2. Automatically bypass and transition layout grid to show STEP 1 and STEP 2
+    switchToUploadMenu();
+
+    // 3. Auto-Select the neural model card passed from the player
+    if (modelParam) {
+      const targetCard = document.querySelector(`.model-card[data-model="${modelParam}"]`);
+      if (targetCard) {
+        // Triggers native selected highlights mapping
+        selectModel(modelParam, targetCard);
+      }
+    }
+
+    // 4. Pre-fill and auto-submit the YouTube stream if passed
+    if (youtubeParam && youtubeLinkInput) {
+      youtubeLinkInput.value = decodeURIComponent(youtubeParam);
+      
+      // Delay click slightly to allow DOM buffers to update safely
+      setTimeout(() => {
+        if (youtubeSubmitBtn) {
+          youtubeSubmitBtn.click();
+        }
+      }, 800);
+    }
+  }
+}
+
+// Attach the redirection observer as part of DOM Loaded sequence
+window.addEventListener("DOMContentLoaded", () => {
+  handleTranscribeQueryRedirections();
+})
