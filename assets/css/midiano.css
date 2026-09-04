@@ -428,7 +428,7 @@ select {
     bottom: 12px;
     left: 50%;
     transform: translateX(-50%);
-    font-size: 0.65rem;
+    font-size: 0.85rem;
     font-weight: 700;
     color: #8b8b9c;
     pointer-events: none;
@@ -440,7 +440,7 @@ select {
 .key.black .key-label {
     color: #a1a1b5;
     bottom: 8px;
-    font-size: 0.55rem;
+    font-size: 0.75rem;
 }
 
 #piano-keyboard.show-labels .key-label {
