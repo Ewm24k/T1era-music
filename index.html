@@ -1078,7 +1078,7 @@
         }
         .model-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 16px;
             width: 100%;
         }
@@ -1125,6 +1125,11 @@
             color: #22d3ee;
             border: 1px solid rgba(6, 182, 212, 0.25);
         }
+        .model-badge.bytedance {
+            background: rgba(234, 179, 8, 0.12);
+            color: #facc15;
+            border: 1px solid rgba(234, 179, 8, 0.3);
+        }
         .model-name {
             font-size: 0.95rem;
             font-weight: 700;
@@ -1146,6 +1151,11 @@
             padding-top: 8px;
             margin-top: 4px;
         }
+        .model-stages.best-badge {
+            color: #facc15;
+            font-weight: 700;
+            text-shadow: 0 0 8px rgba(250, 204, 21, 0.35);
+        }
         
         /* Active Glowing Configurations */
         .model-card.active[data-model="T1ERA-Nexus-6"] {
@@ -1162,6 +1172,11 @@
             background: rgba(6, 182, 212, 0.03);
             border-color: #06b6d4;
             box-shadow: 0 0 25px rgba(6, 182, 212, 0.35);
+        }
+        .model-card.active[data-model="T1ERA-Ivory-2"] {
+            background: rgba(234, 179, 8, 0.05);
+            border-color: #eab308;
+            box-shadow: 0 0 25px rgba(234, 179, 8, 0.4);
         }
         
         /* Step 2 Selection Locking and Dimming */
@@ -1206,6 +1221,11 @@
             .model-card {
                 padding: 14px;
                 gap: 8px;
+            }
+        }
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .model-grid {
+                grid-template-columns: repeat(2, 1fr);
             }
         }
     </style>
@@ -1343,6 +1363,14 @@
                                     <div class="model-name">TiERA Ivory-4</div>
                                     <p class="model-desc">Solo Piano Master. Streamlined 4-Stage processing. Bypasses styling/quantization to capture authentic, single-instrument performances.</p>
                                     <div class="model-stages">STAGES 0 - 4</div>
+                                </div>
+
+                                <!-- Model Card 4: Ivory-2 (ByteDance dedicated piano engine) -->
+                                <div class="model-card" data-model="T1ERA-Ivory-2">
+                                    <div class="model-badge bytedance">Ivory-2</div>
+                                    <div class="model-name">TiERA Ivory-2</div>
+                                    <p class="model-desc">Dedicated Piano-Only Engine (ByteDance). Purpose-built exclusively for solo piano recordings - captures onsets, offsets, velocity and pedaling directly. Audio must be a single instrument, piano sound only.</p>
+                                    <div class="model-stages best-badge">★ THE BEST FOR PIANO TRANSCRIBE</div>
                                 </div>
                             </div>
                         </div>
