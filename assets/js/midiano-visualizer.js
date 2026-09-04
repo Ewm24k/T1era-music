@@ -72,6 +72,12 @@ function buildKeyElement(midi, isBlack) {
     key.style.width = `${isBlack ? blackKeyWidth : whiteKeyWidth}px`;
     key.style.left = `${getNoteX(midi)}px`;
     
+    // Added Procedural Note Label Element
+    const label = document.createElement('span');
+    label.className = 'key-label';
+    label.textContent = PITCH_NAMES[midi % 12];
+    key.appendChild(label);
+    
     elKeyboard.appendChild(key);
     pianoKeysMap.set(midi, key);
 }
