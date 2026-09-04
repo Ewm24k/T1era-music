@@ -1,5 +1,17 @@
+// --- Optimization Cache Pools ---
+const currentlyActiveMidiKeys = new Set(); // Reused to prevent garbage collection allocation
+const pianoKeyStateCache = new Map();       // Tracks true state transitions of keys to eliminate DOM thrashing
+const gradientCache = {};                    // Caches note gradient objects
+let lastActiveKeysString = "";               // Prevents constant layout-triggering chord calculations
+
 // --- Particle System Physics ---
+const MAX_PARTICLES_LIMIT = 120; // Caps particle bloat during dense note segments
+
 function spawnParticles(x, y, color) {
+    // Drop the oldest particle burst if we exceed the physical buffer limit
+    if (particles.length >= MAX_PARTICLES_LIMIT) {
+        particles.splice(0, 8);
+    }
     const numParticles = 8;
     for (let i = 0; i < numParticles; i++) {
         particles.push({
@@ -42,6 +54,7 @@ function getNoteX(midi) {
 function createKeyboard() {
     elKeyboard.innerHTML = '';
     pianoKeysMap.clear();
+    pianoKeyStateCache.clear(); // Flush key transitions cache
 
     // Render white keys first
     for (let m = RANGE_START; m <= RANGE_END; m++) {
@@ -219,6 +232,32 @@ function getVisibleNotesSlice() {
     return activeNotesMemory.slice(start, end + 1);
 }
 
+// Retrieves or generates pre-allocated gradients to optimize paint iterations
+function getCachedNoteGradient(ctx, x, yEnd, w, yStart, isBlack, isNoteActiveNow) {
+    const height = Math.round(yStart - yEnd);
+    const width = Math.round(w);
+    const cacheKey = `${width}_${height}_${isBlack ? 'B' : 'W'}_${isNoteActiveNow ? 'A' : 'I'}`;
+    
+    if (gradientCache[cacheKey]) {
+        return gradientCache[cacheKey];
+    }
+    
+    const noteGrad = ctx.createLinearGradient(x, yEnd, x + w, yStart);
+    if (isNoteActiveNow) {
+        noteGrad.addColorStop(0, '#e879f9');
+        noteGrad.addColorStop(1, '#a855f7');
+    } else {
+        noteGrad.addColorStop(0, isBlack ? '#4f46e5' : '#6366f1');
+        noteGrad.addColorStop(1, isBlack ? '#1e1b4b' : '#312e81');
+    }
+    
+    // Clear pool size limits to prevent excessive memory cache expansion
+    if (Object.keys(gradientCache).length < 600) {
+        gradientCache[cacheKey] = noteGrad;
+    }
+    return noteGrad;
+}
+
 // --- Real-Time Execution Tick & Canvas Render Loop ---
 function renderFrame(now) {
     requestAnimationFrame(renderFrame);
@@ -259,7 +298,7 @@ function renderFrame(now) {
     // Draw Process
     ctx.clearRect(0, 0, elCanvas.width, elCanvas.height);
 
-    const currentlyActiveMidiKeys = new Set();
+    currentlyActiveMidiKeys.clear(); // Reused directly to eliminate GC frame pauses
 
     if (midiData) {
         // Fetch the clipped visible notes slice instead of scanning all notes
@@ -291,40 +330,42 @@ function renderFrame(now) {
             const x = getNoteX(note.midi);
             const w = isBlack ? blackKeyWidth : whiteKeyWidth;
 
-            const noteGrad = ctx.createLinearGradient(x, noteVisualYEnd, x + w, noteVisualYStart);
-            if (isNoteActiveNow) {
-                noteGrad.addColorStop(0, '#e879f9');
-                noteGrad.addColorStop(1, '#a855f7');
-            } else {
-                noteGrad.addColorStop(0, isBlack ? '#4f46e5' : '#6366f1');
-                noteGrad.addColorStop(1, isBlack ? '#1e1b4b' : '#312e81');
-            }
-
-            ctx.fillStyle = noteGrad;
+            // Fetch optimized cached gradient
+            ctx.fillStyle = getCachedNoteGradient(ctx, x, noteVisualYEnd, w, noteVisualYStart, isBlack, isNoteActiveNow);
             ctx.beginPath();
             ctx.roundRect(x + 2, noteVisualYEnd, w - 4, noteVisualHeight, 6);
             ctx.fill();
 
-            // Active glow trace element
+            // Active glow trace element (Optimized to simulate neon without costly canvas shadowBlur context)
             if (isNoteActiveNow) {
-                ctx.shadowColor = '#c084fc';
-                ctx.shadowBlur = 10;
                 ctx.fillStyle = '#f3e8ff';
                 ctx.fillRect(x + 2, elCanvas.height - 4, w - 4, 4);
-                ctx.shadowBlur = 0; // Reset canvas shadow context
+                
+                // Fast double-pass glow mapping
+                ctx.fillStyle = 'rgba(192, 132, 252, 0.4)';
+                ctx.fillRect(x, elCanvas.height - 6, w, 2);
             }
         });
     }
 
-    // Real-time Live Chord computational readout
-    document.getElementById('stat-chord').textContent = identifyCurrentChord(currentlyActiveMidiKeys);
+    // Real-time Live Chord computational readout (Optimized: DOM only updated on actual changes)
+    const activeKeysArray = Array.from(currentlyActiveMidiKeys).sort((a, b) => a - b);
+    const activeKeysString = activeKeysArray.join(",");
+    if (activeKeysString !== lastActiveKeysString) {
+        lastActiveKeysString = activeKeysString;
+        document.getElementById('stat-chord').textContent = identifyCurrentChord(currentlyActiveMidiKeys);
+    }
 
-    // Update Physical DOM Keyboard Key highlights
+    // Update Physical DOM Keyboard Key highlights (Optimized: Eliminates constant DOM write thrashing)
     pianoKeysMap.forEach((elKey, midi) => {
-        if (currentlyActiveMidiKeys.has(midi)) {
-            elKey.classList.add('active');
-        } else {
-            elKey.classList.remove('active');
+        const isActive = currentlyActiveMidiKeys.has(midi);
+        if (pianoKeyStateCache.get(midi) !== isActive) {
+            pianoKeyStateCache.set(midi, isActive);
+            if (isActive) {
+                elKey.classList.add('active');
+            } else {
+                elKey.classList.remove('active');
+            }
         }
     });
 
