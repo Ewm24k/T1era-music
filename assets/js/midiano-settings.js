@@ -1,11 +1,16 @@
-// Initialize global setting state
+// Initialize global setting states
 window.showSplashParticles = true;
+window.showKeyLabels = false;
 
 document.addEventListener("DOMContentLoaded", () => {
     const btnSettings = document.getElementById("btn-settings");
     const btnCloseSettings = document.getElementById("btn-close-settings");
     const settingsModal = document.getElementById("settings-modal");
     const chkToggleSplash = document.getElementById("chk-toggle-splash");
+    
+    // Target Key Labels Selector Node
+    const chkToggleLabels = document.getElementById("chk-toggle-labels");
+    const pianoKeyboard = document.getElementById("piano-keyboard");
 
     // Open Settings Modal
     btnSettings.addEventListener("click", () => {
@@ -32,6 +37,16 @@ document.addEventListener("DOMContentLoaded", () => {
             if (typeof particles !== 'undefined') {
                 particles.length = 0; 
             }
+        }
+    });
+
+    // Toggle Keyboard Key Note Labels Event Handler
+    chkToggleLabels.addEventListener("change", (e) => {
+        window.showKeyLabels = e.target.checked;
+        if (window.showKeyLabels) {
+            pianoKeyboard.classList.add("show-labels");
+        } else {
+            pianoKeyboard.classList.remove("show-labels");
         }
     });
 });
