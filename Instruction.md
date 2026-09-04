@@ -166,3 +166,8 @@ curl -i -X POST https://crock-blast-purchase.ngrok-free.dev/transcribe-vortex \
   -H 'Content-Type: application/json' -H 'ngrok-skip-browser-warning: true' \
   -d '{"userId":"test_user","jobId":"test_job_vortex2","youtubeUrl":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
 ```
+#Check error log
+
+```
+tail -n 100 /home/tengkufiboking/T1era-music/error.log
+```
