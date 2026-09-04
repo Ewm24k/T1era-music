@@ -28,6 +28,12 @@ import {
   showIvoryTerminalFailure,
   openIvoryLiveTerminalConsole
 } from "./ivory-progress.js";
+import {
+  createByteDanceProgressCardMarkup,
+  setByteDanceStepStatus,
+  showByteDanceTerminalFailure,
+  openByteDanceLiveTerminalConsole
+} from "./bytedance-progress.js";
 
 // Pautan URL Pelayan GCP VM API T1era Music (Menggunakan Terowong Selamat Ngrok)
 const RENDER_BACKEND_URL = "https://crock-blast-purchase.ngrok-free.dev/transcribe";
@@ -35,6 +41,8 @@ const RENDER_BACKEND_URL = "https://crock-blast-purchase.ngrok-free.dev/transcri
 const RENDER_BACKEND_URL_VORTEX = RENDER_BACKEND_URL.replace("/transcribe", "/transcribe-vortex");
 // Endpoint Ivory-4 (Stage 0 - 4) - dikendalikan oleh ivory_orchestrator.py, sama pelayan
 const RENDER_BACKEND_URL_IVORY = RENDER_BACKEND_URL.replace("/transcribe", "/transcribe-ivory");
+// Endpoint Ivory-2 (ByteDance single-pass piano engine) - dikendalikan oleh bytedance_orchestrator.py, sama pelayan
+const RENDER_BACKEND_URL_BYTEDANCE = RENDER_BACKEND_URL.replace("/transcribe", "/transcribe-bytedance");
 
 // =========================================================
 // INJEKSI STYLING NEON KONSOL PEMPROSESAN (AAA GRADE UI/UX)
@@ -1311,6 +1319,179 @@ function runIvoryFileUpload(selectedFile) {
 }
 
 // =========================================================
+// IVORY-2 (BYTEDANCE) JOB RUNNERS - single-pass piano engine
+// =========================================================
+
+function runByteDanceYoutubeJob(urlValue) {
+  const userId = currentUserObj ? currentUserObj.uid : "guest_studio_creator";
+  const jobId = "yt_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
+
+  if (menuToggle) menuToggle.style.display = "none";
+
+  servicesOverlay.classList.remove("active");
+  verificationScreen.classList.add("active");
+  verificationTerminal.innerHTML = createByteDanceProgressCardMarkup();
+
+  setByteDanceStepStatus("step-init", "loading");
+
+  setTimeout(() => {
+    setByteDanceStepStatus("step-init", "success");
+    setByteDanceStepStatus("step-download", "loading");
+
+    const stepDownloadLabel = document.querySelector("#step-download .step-label");
+    if (stepDownloadLabel) stepDownloadLabel.textContent = "Requesting YouTube Audio Link";
+
+    setTimeout(() => {
+      setByteDanceStepStatus("step-download", "success");
+      setByteDanceStepStatus("step-temp", "loading");
+
+      const stepTempLabel = document.querySelector("#step-temp .step-label");
+      if (stepTempLabel) stepTempLabel.textContent = "Downloading Audio on Server";
+
+      const triggerYoutubeSequence = () => {
+        openByteDanceLiveTerminalConsole(userId, jobId);
+
+        fetch(RENDER_BACKEND_URL_BYTEDANCE, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true"
+          },
+          body: JSON.stringify({ userId: userId, jobId: jobId, youtubeUrl: urlValue })
+        })
+        .then((res) => {
+          if (!res.ok) {
+            return res.json().then((body) => {
+              throw new Error(body.error || "Server rejected the YouTube transcription request.");
+            });
+          }
+        })
+        .catch((err) => {
+          console.error("Ivory-2 (ByteDance) YouTube Transcribe request failed:", err);
+          showByteDanceTerminalFailure(err.message || "Failed to start YouTube transcription job.");
+        });
+      };
+
+      if (db && userId !== "guest_studio_creator") {
+        const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
+        setDoc(jobRef, {
+          status: "QUEUED",
+          progress: 0,
+          youtubeUrl: urlValue,
+          createdAt: serverTimestamp()
+        })
+        .then(() => {
+          triggerYoutubeSequence();
+        })
+        .catch(err => {
+          console.warn("[FIRESTORE BYPASS] Write blocked by Rules. Bypassing straight to Render...", err);
+          triggerYoutubeSequence();
+        });
+      } else {
+        triggerYoutubeSequence();
+      }
+
+    }, 1000);
+  }, 1000);
+}
+
+function runByteDanceFileUpload(selectedFile) {
+  const userId = currentUserObj ? currentUserObj.uid : "guest_studio_creator";
+  const jobId = "file_" + Math.random().toString(36).substring(2, 11) + "_" + Date.now();
+
+  if (menuToggle) menuToggle.style.display = "none";
+
+  servicesOverlay.classList.remove("active");
+  dropzoneLabelText.textContent = "UPLOADING...";
+  dropzoneLabelText.style.color = "#10b981";
+  dropzoneLabelText.style.textShadow = "0 0 10px rgba(16, 185, 129, 0.4)";
+
+  verificationScreen.classList.add("active");
+  verificationTerminal.innerHTML = createByteDanceProgressCardMarkup();
+  setByteDanceStepStatus("step-init", "loading");
+
+  if (!storage) {
+    alert("Firebase Storage is uninitialized. Local upload is offline.");
+    verificationScreen.classList.remove("active");
+    dropzoneLabelText.textContent = "Select Music File";
+    return;
+  }
+
+  const storageRef = ref(storage, `users/${userId}/transcriptions/${jobId}/${selectedFile.name}`);
+  const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+
+  uploadTask.on("state_changed",
+    (snapshot) => {
+      const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+      const progressBar = document.getElementById("proc-bar");
+      const progressPct = document.getElementById("proc-pct");
+      if (progressBar) progressBar.style.width = `${percent / 4}%`;
+      if (progressPct) progressPct.textContent = `${Math.round(percent / 4)}%`;
+      const stepInitLabel = document.querySelector("#step-init .step-label");
+      if (stepInitLabel) stepInitLabel.textContent = `Uploading File: ${percent}%`;
+    },
+    (error) => {
+      alert("Failed to upload: " + error.message);
+      verificationScreen.classList.remove("active");
+      dropzoneLabelText.textContent = "Select Music File";
+    },
+    () => {
+      setByteDanceStepStatus("step-init", "success");
+      setByteDanceStepStatus("step-download", "loading");
+      getDownloadURL(uploadTask.snapshot.ref).then((downloadUrl) => {
+        setByteDanceStepStatus("step-download", "success");
+        setByteDanceStepStatus("step-temp", "loading");
+
+        const triggerUploadSequence = () => {
+          openByteDanceLiveTerminalConsole(userId, jobId);
+          fetch(RENDER_BACKEND_URL_BYTEDANCE, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "ngrok-skip-browser-warning": "true"
+            },
+            body: JSON.stringify({ userId: userId, jobId: jobId, audioUrl: downloadUrl })
+          })
+          .then((res) => {
+            if (!res.ok) {
+              return res.json().then((body) => {
+                throw new Error(body.error || "Server rejected the transcription request.");
+              });
+            }
+          })
+          .catch((err) => {
+            console.error("Ivory-2 (ByteDance) Transcribe request failed:", err);
+            showByteDanceTerminalFailure(err.message || "Failed to start transcription job.");
+          });
+        };
+
+        if (db && userId !== "guest_studio_creator") {
+          const jobRef = doc(db, "users", userId, "midi_jobs", jobId);
+          setDoc(jobRef, {
+            status: "QUEUED",
+            progress: 0,
+            audioUrl: downloadUrl,
+            createdAt: serverTimestamp()
+          })
+          .then(() => {
+            setByteDanceStepStatus("step-temp", "success");
+            triggerUploadSequence();
+          })
+          .catch(err => {
+            console.warn("[FIRESTORE BYPASS] Write blocked by Rules. Bypassing straight to Render...", err);
+            setByteDanceStepStatus("step-temp", "success");
+            triggerUploadSequence();
+          });
+        } else {
+          setByteDanceStepStatus("step-temp", "success");
+          triggerUploadSequence();
+        }
+      });
+    }
+  );
+}
+
+// =========================================================
 // MODEL DISPATCH: YouTube submit & File dropzone entry points
 // =========================================================
 
@@ -1337,8 +1518,10 @@ if (youtubeSubmitBtn) {
       runVortexYoutubeJob(urlValue);
     } else if (selectedModel === "T1ERA-Ivory-4") {
       runIvoryYoutubeJob(urlValue);
+    } else if (selectedModel === "T1ERA-Ivory-2") {
+      runByteDanceYoutubeJob(urlValue);
     } else {
-      alert("This model is not available yet. Please select TiERA Nexus-6, Vortex-Ultra, or Ivory-4.");
+      alert("This model is not available yet. Please select another engine.");
     }
   });
 }
@@ -1348,12 +1531,9 @@ fileDropzoneTrigger.addEventListener("click", () => {
     alert("Please select an AI Neural Transcriber Engine first (Step 1).");
     return;
   }
-  if (
-    selectedModel !== "T1ERA-Nexus-6" &&
-    selectedModel !== "T1ERA-Vortex-Ultra" &&
-    selectedModel !== "T1ERA-Ivory-4"
-  ) {
-    alert("This model is not available yet. Please select TiERA Nexus-6, Vortex-Ultra, or Ivory-4.");
+  const availableModels = ["T1ERA-Nexus-6", "T1ERA-Vortex-Ultra", "T1ERA-Ivory-4", "T1ERA-Ivory-2"];
+  if (!availableModels.includes(selectedModel)) {
+    alert("This model is not available yet. Please select another engine.");
     return;
   }
   audioFileInput.click();
@@ -1375,8 +1555,10 @@ audioFileInput.addEventListener("change", (event) => {
     runVortexFileUpload(selectedFile);
   } else if (selectedModel === "T1ERA-Ivory-4") {
     runIvoryFileUpload(selectedFile);
+  } else if (selectedModel === "T1ERA-Ivory-2") {
+    runByteDanceFileUpload(selectedFile);
   } else {
-    alert("This model is not available yet. Please select TiERA Nexus-6, Vortex-Ultra, or Ivory-4.");
+    alert("This model is not available yet. Please select another engine.");
     dropzoneLabelText.textContent = "Select Music File";
   }
 });
