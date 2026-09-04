@@ -108,7 +108,8 @@ export function openByteDanceLiveTerminalConsole(userId, jobId) {
   const progressBar = document.getElementById("proc-bar");
   const progressPct = document.getElementById("proc-pct");
 
-  let isFirestoreActive = true;
+  // Fix 1: Initialize to false because on load, we have not connected or received Firestore data
+  let isFirestoreActive = false;
   let detailsSynced = false;
 
   const handleByteDanceMidiComplete = (midiUrl) => {
@@ -130,7 +131,8 @@ export function openByteDanceLiveTerminalConsole(userId, jobId) {
   };
 
   const fallbackTimeout = setTimeout(() => {
-    if (isFirestoreActive) {
+    // Fix 2: Only switch to fallback simulation if Firestore active listening is blocked
+    if (!isFirestoreActive) {
       isFirestoreActive = false;
       console.warn("[FIRESTORE BYPASS - IVORY-2/BYTEDANCE] Active snapshot listening blocked. Switching to fallback...");
 
@@ -141,19 +143,20 @@ export function openByteDanceLiveTerminalConsole(userId, jobId) {
 
       const constructedMidiUrl = `https://firebasestorage.googleapis.com/v0/b/t1era-musicv1.firebasestorage.app/o/users%2F${userId}%2Ftranscriptions%2F${jobId}%2Ffinal_score.mid?alt=media`;
 
+      // Fix 3: Increase fallback timer increments to match real-world CPU processing timelines (approx 20 mins)
       let fakeProgress = 30;
       const fakeInterval = setInterval(() => {
-        fakeProgress += 5;
+        fakeProgress += 1;
         if (progressBar) progressBar.style.width = `${Math.min(99, fakeProgress)}%`;
         if (progressPct) progressPct.textContent = `${Math.min(99, fakeProgress)}%`;
 
-        if (fakeProgress >= 40 && fakeProgress < 95) {
+        if (fakeProgress >= 40 && fakeProgress < 99) {
           setByteDanceStepStatus("step-transcribe", "loading");
-        } else if (fakeProgress >= 95) {
+        } else if (fakeProgress >= 99) {
           clearInterval(fakeInterval);
           handleByteDanceMidiComplete(constructedMidiUrl);
         }
-      }, 750);
+      }, 10000); // Increments 1% every 10 seconds as a gentle visual buffer if offline
     }
   }, 4000);
 
@@ -162,6 +165,7 @@ export function openByteDanceLiveTerminalConsole(userId, jobId) {
     const unsubscribe = onSnapshot(jobRef, (snapshot) => {
       if (!snapshot.exists()) return;
 
+      // Fix 4: Correctly clear the fallback timeout and set flag to true upon successful connection
       clearTimeout(fallbackTimeout);
       isFirestoreActive = true;
 
