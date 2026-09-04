@@ -278,8 +278,8 @@ function renderFrame(now) {
             if (isNoteActiveNow) {
                 currentlyActiveMidiKeys.add(note.midi);
                 
-                // Particle collision generation
-                if (Math.random() < 0.25) {
+                // Particle collision generation (Condition altered non-destructively to respect setting toggles)
+                if ((window.showSplashParticles !== false) && Math.random() < 0.25) {
                     const isBlack = IS_BLACK_KEY[note.midi % 12];
                     const noteX = getNoteX(note.midi) + (isBlack ? blackKeyWidth : whiteKeyWidth) / 2;
                     spawnParticles(noteX, elCanvas.height, isBlack ? '#a855f7' : '#818cf8');
