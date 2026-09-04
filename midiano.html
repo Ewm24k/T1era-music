@@ -71,8 +71,11 @@
 
                 <button id="btn-loop">Loop: Off</button>
                 
-                <!-- Added Settings Gear Button -->
+                <!-- Settings Gear Button -->
                 <button id="btn-settings" style="margin-left: 10px; min-width: 40px; padding: 8px 10px;" title="Settings">⚙️</button>
+
+                <!-- "Generate Music" Orange Button -->
+                <button id="btn-transcribe" style="background-color: #f35f22; border-color: #f35f22; color: #ffffff; font-weight: 600; margin-left: 5px;" title="Generate Music">Generate Music</button>
             </div>
         </div>
 
@@ -278,7 +281,7 @@
             <h3 style="margin-bottom: 20px; font-size: 1.1rem; border-bottom: 1px solid var(--panel-border); padding-bottom: 10px; display: flex; align-items: center; gap: 8px;">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.51 1z"></path>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0 4h-.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.51 1z"></path>
                 </svg>
                 Settings
             </h3>
@@ -305,9 +308,109 @@
         </div>
     </div>
 
+    <!-- Added Modular Generate Music/Transcribe Overlay Panel Modal -->
+    <div id="transcribe-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); z-index: 1250; align-items: center; justify-content: center; backdrop-filter: blur(8px); padding: calc(10px + env(safe-area-inset-top)) calc(15px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(15px + env(safe-area-inset-left));">
+        <div class="services-hub-card" style="background: rgba(15, 15, 19, 0.95); border: 1px solid var(--panel-border); color: var(--text-color); max-width: 850px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 30px; border-radius: 20px; display: flex; flex-direction: column; gap: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); text-align: center;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--panel-border); padding-bottom: 15px; width: 100%;">
+                <h3 style="font-size: 1.2rem; letter-spacing: 4px; text-transform: uppercase; font-weight: 600; text-align: left; display: flex; align-items: center; gap: 10px;">
+                    🤖 Generate Music Console
+                </h3>
+                <button id="btn-close-transcribe" style="background: #ef4444; color: white; border: none; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-weight: 600; font-size: 0.85rem;">Close</button>
+            </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 24px; width: 100%; text-align: left;">
+                <!-- STEP 1: CHOOSE NEURAL TRANSCRIBER ENGINE -->
+                <div class="model-picker-section" id="transcribe-model-picker-container">
+                    <div class="step-header">
+                        <span class="step-num">STEP 1</span>
+                        <span class="step-desc">Select AI Neural Transcriber Engine</span>
+                    </div>
+                    <div class="model-grid">
+                        <!-- Model Card 1: Nexus-6 -->
+                        <div class="model-card" data-model="T1ERA-Nexus-6">
+                            <div class="model-badge nexus">Nexus-6</div>
+                            <div class="model-name">TiERA Nexus-6</div>
+                            <p class="model-desc">Advanced Multi-Instrument Array. Best for complex band arrangements, pop ballads, and multi-instrument tracking with full quantization.</p>
+                            <div class="model-stages">STAGES 0 - 6</div>
+                        </div>
+
+                        <!-- Model Card 2: Vortex-Ultra -->
+                        <div class="model-card" data-model="T1ERA-Vortex-Ultra">
+                            <div class="model-badge vortex">Vortex-Ultra</div>
+                            <div class="model-name">TiERA Vortex-Ultra</div>
+                            <p class="model-desc">Expressive Acoustic Ensemble. Skips Stage 6 grid quantization to preserve natural micro-timing and expressive human dynamics.</p>
+                            <div class="model-stages">STAGES 0 - 5</div>
+                        </div>
+
+                        <!-- Model Card 3: Ivory-4 -->
+                        <div class="model-card" data-model="T1ERA-Ivory-4">
+                            <div class="model-badge ivory">Ivory-4</div>
+                            <div class="model-name">TiERA Ivory-4</div>
+                            <p class="model-desc">Solo Piano Master. Streamlined 4-Stage processing. Bypasses styling/quantization to capture authentic, single-instrument performances.</p>
+                            <div class="model-stages">STAGES 0 - 4</div>
+                        </div>
+
+                        <!-- Model Card 4: Ivory-2 (ByteDance piano engine) -->
+                        <div class="model-card" data-model="T1ERA-Ivory-2">
+                            <div class="model-badge bytedance">Ivory-2</div>
+                            <div class="model-name">TiERA Ivory-2</div>
+                            <p class="model-desc">Dedicated Piano-Only Engine (ByteDance). Purpose-built exclusively for solo piano recordings - captures onsets, offsets, velocity and pedaling directly.</p>
+                            <div class="model-stages best-badge" style="color: #facc15; font-weight: 700;">★ THE BEST FOR PIANO TRANSCRIBE</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STEP 2: SELECT AUDIO INPUT METHOD (Dimmed until Step 1 is completed) -->
+                <div class="input-method-section selection-locked" id="transcribe-input-methods-wrapper">
+                    <div class="step-header">
+                        <span class="step-num">STEP 2</span>
+                        <span class="step-desc">Select Media Source Input Method</span>
+                    </div>
+                    
+                    <div class="services-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; width: 100%;">
+                        <!-- Upload Option 1: YouTube Import (Web3 Card) -->
+                        <div class="service-card-expanded blue-glow">
+                            <div class="card-icon-header">
+                                <svg class="yt-logo" viewBox="0 0 24 24" fill="#FF0000" style="width: 24px; height: 24px; filter: drop-shadow(0 0 5px rgba(255, 0, 0, 0.6));">
+                                    <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.518 3.545 12 3.545 12 3.545s-7.518 0-9.388.507a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.87.507 9.388.507 9.388.507s7.518 0 9.388-.507a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                                </svg>
+                                <div class="card-subtitle" style="font-size: 0.85rem; font-weight: 500; letter-spacing: 2px; text-transform: uppercase;">YouTube Link</div>
+                            </div>
+                            <div class="web3-input-wrapper">
+                                <input type="url" id="transcribe-youtube-link-input" placeholder="https://www.youtube.com/watch?v=..." class="web3-input" style="width: 100%; padding: 10px; font-family: monospace; font-size: 0.8rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #fff; text-align: center; outline: none;">
+                                <button type="button" id="transcribe-youtube-submit-btn" class="web3-action-btn pulse-glow-blue" style="cursor: pointer; padding: 8px 12px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; background: rgba(255,255,255,0.05); color: #fff; font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase;">Import Stream</button>
+                            </div>
+                        </div>
+
+                        <!-- Upload Option 2: File Explorer Audio Upload (Web3 Dropzone) -->
+                        <div class="service-card-expanded emerald-glow" id="transcribe-file-dropzone-trigger" style="cursor: pointer;">
+                            <div class="card-icon-header">
+                                <div class="card-subtitle" style="font-size: 0.85rem; font-weight: 500; letter-spacing: 2px; text-transform: uppercase;">Local Audio File</div>
+                            </div>
+                            <div class="upload-dropzone" style="flex: 1; border: 1px dashed rgba(16, 185, 129, 0.3); border-radius: 8px; background: rgba(16, 185, 129, 0.02); display: flex; align-items: center; justify-content: center; padding: 10px;">
+                                <div class="dropzone-inner" style="display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center;">
+                                    <span class="upload-icon" style="font-size: 1.2rem;">📤</span>
+                                    <span class="dropzone-text" style="font-size: 0.75rem; letter-spacing: 1.5px; text-transform: uppercase; color: rgba(255,255,255,0.7);">Select Music File</span>
+                                    <span class="dropzone-subtext" style="font-size: 0.6rem; color: rgba(255,255,255,0.3);">WAV, MP3 Supported</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Upload Option 3: MIDI Player (Standard Visual Link Card) -->
+                        <div class="service-card glowing-active" id="transcribe-midi-upload-card" style="cursor: pointer;">
+                            <div class="card-icon" style="font-size: 2rem;">🎹</div>
+                            <div class="card-name" style="font-size: 0.9rem; letter-spacing: 2px; font-weight: 500; text-transform: uppercase;">Upload MIDI file</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Separated JavaScript External Links in Exact Execution Order -->
     <script src="assets/js/midiano-core.js"></script>
     <script src="assets/js/midiano-settings.js"></script>
+    <script src="assets/js/midiano-transcribe.js"></script>
     <script src="assets/js/midiano-visualizer.js"></script>
     <script src="assets/js/midiano-sheet.js"></script>
 </body>
