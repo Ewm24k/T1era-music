@@ -1,0 +1,2404 @@
+// --- Music Theory Profiles (Krumhansl-Schmuckler Key Finding) ---
+const K_K_MAJOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
+const K_K_MINOR = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+const PITCH_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+// Speller maps for accurate diatonic rendering matching the target Key Signatures
+const KEY_MAPS = {
+    "C":  ["C", "^C", "D", "^D", "E", "F", "^F", "G", "^G", "A", "^A", "B"],
+    "G":  ["C", "^C", "D", "^D", "E", "=F", "F", "G", "^G", "A", "^A", "B"],
+    "D":  ["=C", "C", "D", "^D", "E", "=F", "F", "G", "^G", "A", "^A", "B"],
+    "A":  ["=C", "C", "D", "^D", "E", "=F", "F", "=G", "G", "A", "^A", "B"],
+    "E":  ["=C", "C", "=D", "D", "E", "=F", "F", "=G", "G", "A", "^A", "B"],
+    "B":  ["=C", "C", "=D", "D", "E", "=F", "F", "=G", "G", "=A", "A", "B"],
+    "F#": ["=C", "C", "=D", "D", "=E", "E", "F", "=G", "G", "=A", "A", "B"],
+    "F":  ["C", "^C", "D", "^D", "E", "F", "^F", "G", "^G", "A", "B", "=B"],
+    "Bb": ["C", "^C", "D", "^D", "=E", "E", "^F", "G", "^G", "A", "B", "=B"],
+    "Eb": ["C", "^C", "D", "^D", "=E", "E", "^F", "G", "=A", "A", "B", "=B"],
+    "Ab": ["C", "C", "D", "^D", "=E", "E", "^F", "G", "=A", "A", "B", "=B"],
+    "Db": ["C", "C", "D", "^D", "=E", "E", "F", "G", "=A", "A", "B", "=B"]
+};
+// Map minors as aliases to relative major scale sets
+KEY_MAPS["Am"] = KEY_MAPS["C"]; KEY_MAPS["Em"] = KEY_MAPS["G"]; KEY_MAPS["Bm"] = KEY_MAPS["D"];
+KEY_MAPS["F#m"] = KEY_MAPS["A"]; KEY_MAPS["C#m"] = KEY_MAPS["E"]; KEY_MAPS["G#m"] = KEY_MAPS["B"];
+KEY_MAPS["Dm"] = KEY_MAPS["F"]; KEY_MAPS["Gm"] = KEY_MAPS["Bb"]; KEY_MAPS["Cm"] = KEY_MAPS["Eb"];
+KEY_MAPS["Fm"] = KEY_MAPS["Ab"]; KEY_MAPS["Bbm"] = KEY_MAPS["Db"];
+
+// --- Layout Range Variables (Standard 88 Keys, Static Keyboard) ---
+const RANGE_START = 21; // A0 (Fixed full 88-key layout)
+const RANGE_END = 108;  // C8 (Fixed full 88-key layout)
+const IS_BLACK_KEY = [false, true, false, true, false, false, true, false, true, false, true, false];
+
+// --- Application State ---
+let midiData = null;
+let isPlaying = false;
+let isLooping = false;
+let playbackSpeed = 1.0;
+let noteSpeed = 200; // Falling speed in pixels/sec
+let totalDuration = 0;
+let currentPlaybackTime = 0;
+let lastFrameTime = performance.now();
+let lastTriggeredTime = 0;
+
+// Optimized Audio Trigger Heads
+let playbackNoteIndex = 0;
+let sheetPlaybackNoteIndex = 0;
+let verticalPlaybackNoteIndex = 0;
+let studioPlaybackNoteIndex = 0;
+let maxNoteDuration = 5; // Updated dynamically upon loading file
+
+// DSP nodes
+let activeInstrument = null;
+let samplerPiano = null;
+let samplerLoaded = false;
+let reverbNode = null;
+let volNode = null;
+
+// Setup a global variable for splendid piano
+let splendidPiano = null;
+let splendidLoaded = false;
+
+// Note tracking maps
+let activeNotesMemory = [];
+let pianoKeysMap = new Map();
+let particles = [];
+
+// Layout metrics scaled dynamically
+let totalWhiteKeys = 0;
+let whiteKeyWidth = 0;
+let blackKeyWidth = 0;
+
+// --- Studio State ---
+let studioNotesMemory = [];
+let isStudioUnlocked = false;
+let isStudioPlaying = false;
+let studioPlaybackTime = 0;
+let studioLastFrameTime = 0;
+let studioPlaybackTimer = null;
+
+// DOM Elements
+const elCanvas = document.getElementById('visualizer-canvas');
+const ctx = elCanvas.getContext('2d');
+const elKeyboard = document.getElementById('piano-keyboard');
+const elTimeline = document.getElementById('timeline');
+const elTimeDisplay = document.getElementById('time-display');
+
+const btnPlay = document.getElementById('btn-play');
+const btnPause = document.getElementById('btn-pause');
+const btnStop = document.getElementById('btn-stop');
+const btnRestart = document.getElementById('btn-restart');
+const btnSheet = document.getElementById('btn-sheet');
+const btnLoop = document.getElementById('btn-loop');
+const selectSpeed = document.getElementById('select-speed');
+const sliderZoom = document.getElementById('slider-zoom');
+const selectInstrument = document.getElementById('select-instrument');
+const sliderVolume = document.getElementById('slider-volume');
+const sliderReverb = document.getElementById('slider-reverb');
+const fileInput = document.getElementById('midi-file');
+const elSamplerStatus = document.getElementById('sampler-status');
+
+// Sheet Music Elements
+const elSheetModal = document.getElementById('sheet-modal');
+const btnCloseSheet = document.getElementById('btn-close-sheet');
+const elSheetMusicNotation = document.getElementById('sheet-music-notation');
+
+// Playback Sync Memory
+let sheetMusicPlaying = false;
+let sheetMusicPlaybackTime = 0;
+let sheetMusicLastFrameTime = 0;
+let sheetMusicPlaybackTimer = null;
+const pixelsPerSecond = 120; // Proportional horizontal scale
+
+// Vertical Portrait Sheet Playback states
+let isVerticalPlaying = false;
+let verticalPlaybackTime = 0;
+let verticalLastFrameTime = 0;
+let verticalPlaybackTimer = null;
+let activeVerticalContainerId = "";
+
+// Class wrapper to seamlessly connect smplr SplendidGrandPiano with Tone.js syntax
+class SmplrToneWrapper {
+    constructor(smplrInstance) {
+        this.smplr = smplrInstance;
+    }
+    triggerAttackRelease(noteName, duration, time, velocity) {
+        // smplr expects midi-scaled velocity values from 0 to 127
+        const midiVelocity = Math.round((velocity || 0.8) * 127);
+        this.smplr.start({
+            note: noteName,
+            time: time,
+            duration: duration,
+            velocity: midiVelocity
+        });
+    }
+    releaseAll() {
+        if (this.smplr && typeof this.smplr.stop === 'function') {
+            this.smplr.stop();
+        }
+    }
+    dispose() {
+        // Kept alive globally to avoid reloading buffers from CDN
+    }
+}
+
+// --- Initialization ---
+init();
+
+function init() {
+    setupAudioEngine();
+    handleResize();
+    setupEventListeners();
+    window.addEventListener('resize', handleResize);
+    requestAnimationFrame(renderFrame);
+}
+
+// --- Audio Synthesizer Construction ---
+function setupAudioEngine() {
+    // Master Reverb Unit
+    reverbNode = new Tone.Reverb({
+        roomSize: 0.85,
+        wet: 0.3
+    }).toDestination();
+
+    // Master Volume Node
+    volNode = new Tone.Volume(-6).connect(reverbNode);
+
+    // Initiate loading of sampled piano assets asynchronously immediately
+    loadSampledPiano();
+
+    // Set initial fallback/dynamic instrument
+    setInstrument('sampled');
+}
+
+// Load premium real concert piano samples asynchronously
+function loadSampledPiano() {
+    if (samplerPiano) return;
+
+    elSamplerStatus.textContent = "• Loading Samples...";
+    elSamplerStatus.style.color = "#fbbf24";
+
+    samplerPiano = new Tone.Sampler({
+        urls: {
+            "A0": "A0.mp3", "C1": "C1.mp3", "D#1": "Ds1.mp3", "F#1": "Fs1.mp3",
+            "A1": "A1.mp3", "C2": "C2.mp3", "D#2": "Ds2.mp3", "F#2": "Fs2.mp3",
+            "A2": "A2.mp3", "C3": "C3.mp3", "D#3": "Ds3.mp3", "F#3": "Fs3.mp3",
+            "A3": "A3.mp3", "C4": "C4.mp3", "D#4": "Ds4.mp3", "F#4": "Fs4.mp3",
+            "A4": "A4.mp3", "C5": "C5.mp3", "D#5": "Ds5.mp3", "F#5": "Fs5.mp3",
+            "A5": "A5.mp3", "C6": "C6.mp3", "D#6": "Ds6.mp3", "F#6": "Fs6.mp3",
+            "A6": "A6.mp3", "C7": "C7.mp3", "D#7": "Ds7.mp3", "F#7": "Fs7.mp3",
+            "A7": "A7.mp3", "C8": "C8.mp3"
+        },
+        release: 1.5,
+        baseUrl: "https://tonejs.github.io/audio/salamander/",
+        onload: () => {
+            samplerLoaded = true;
+            elSamplerStatus.textContent = "• Ready";
+            elSamplerStatus.style.color = "#10b981";
+            
+            // If the active dropdown choice is 'sampled', smoothly route it live
+            if (selectInstrument.value === 'sampled') {
+                if (activeInstrument && activeInstrument !== samplerPiano) {
+                    activeInstrument.releaseAll();
+                    activeInstrument.dispose();
+                }
+                activeInstrument = samplerPiano;
+                activeInstrument.connect(volNode);
+            }
+        },
+        onerror: (err) => {
+            console.warn("Could not load high-def sampler nodes. Falling back to synthesized engines.", err);
+            elSamplerStatus.textContent = "• Error";
+            elSamplerStatus.style.color = "#ef4444";
+        }
+    });
+}
+
+async function setInstrument(type) {
+    // Stop prior notes
+    if (activeInstrument) {
+        activeInstrument.releaseAll();
+        // Avoid disposing of our premium sample node or splendid wrapper
+        if (activeInstrument !== samplerPiano && activeInstrument !== splendidPiano) {
+            activeInstrument.dispose();
+        }
+    }
+
+    if (type === 'splendid') {
+        if (!splendidPiano) {
+            elSamplerStatus.textContent = "• Loading HD Steinway...";
+            elSamplerStatus.style.color = "#fbbf24";
+
+            try {
+                // Dynamically import the ES module directly from the browser CDN
+                const { SplendidGrandPiano } = await import("https://unpkg.com/smplr/dist/index.mjs");
+                
+                const inst = new SplendidGrandPiano(Tone.context.rawContext, {
+                    destination: volNode.input
+                });
+
+                const loadPromise = inst.ready || inst.load || Promise.resolve();
+                await loadPromise;
+
+                splendidLoaded = true;
+                splendidPiano = new SmplrToneWrapper(inst);
+                elSamplerStatus.textContent = "• Ready";
+                elSamplerStatus.style.color = "#10b981";
+                if (selectInstrument.value === 'splendid') {
+                    activeInstrument = splendidPiano;
+                }
+            } catch (err) {
+                console.error("Failed to load Splendid Grand Piano ES Module:", err);
+                elSamplerStatus.textContent = "• Error Loading";
+                elSamplerStatus.style.color = "#ef4444";
+            }
+        } else {
+            activeInstrument = splendidPiano;
+            if (splendidLoaded) {
+                elSamplerStatus.textContent = "• Ready";
+                elSamplerStatus.style.color = "#10b981";
+            }
+        }
+    } else if (type === 'sampled') {
+        if (samplerLoaded) {
+            activeInstrument = samplerPiano;
+            activeInstrument.connect(volNode);
+        } else {
+            // Temporary warm synth fallback while downloading (Optimized with voice caps)
+            activeInstrument = new Tone.PolySynth(Tone.Synth, {
+                maxPolyphony: 32,
+                oscillator: { type: "sine" },
+                envelope: { attack: 0.005, decay: 1.5, sustain: 0.15, release: 1.2 }
+            }).connect(volNode);
+        }
+    } else if (type === 'grand') {
+        activeInstrument = new Tone.PolySynth(Tone.Synth, {
+            maxPolyphony: 32,
+            oscillator: { type: "sine" },
+            envelope: { attack: 0.005, decay: 1.5, sustain: 0.15, release: 1.2 }
+        }).connect(volNode);
+    } else if (type === 'rhodes') {
+        activeInstrument = new Tone.PolySynth(Tone.FMSynth, {
+            maxPolyphony: 32,
+            harmonicity: 3.05,
+            modulationIndex: 12,
+            oscillator: { type: "sine" },
+            envelope: { attack: 0.008, decay: 1.8, sustain: 0.1, release: 1.0 },
+            modulation: { type: "triangle" },
+            modulationEnvelope: { attack: 0.01, decay: 0.3, sustain: 0.0, release: 0.3 }
+        }).connect(volNode);
+    } else if (type === 'ambient') {
+        activeInstrument = new Tone.PolySynth(Tone.Synth, {
+            maxPolyphony: 32,
+            oscillator: { type: "triangle" },
+            envelope: { attack: 0.18, decay: 2.5, sustain: 0.6, release: 2.8 }
+        }).connect(volNode);
+    } else if (type === 'chiptune') {
+        activeInstrument = new Tone.PolySynth(Tone.Synth, {
+            maxPolyphony: 32,
+            oscillator: { type: "square" },
+            envelope: { attack: 0.002, decay: 0.4, sustain: 0.2, release: 0.4 }
+        }).connect(volNode);
+    }
+}
+
+// --- Particle System Physics ---
+function spawnParticles(x, y, color) {
+    const numParticles = 8;
+    for (let i = 0; i < numParticles; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 6,
+            vy: -Math.random() * 5 - 2,
+            radius: Math.random() * 3 + 1,
+            alpha: 1,
+            decay: Math.random() * 0.03 + 0.01,
+            color: color
+        });
+    }
+}
+
+// --- Layout Mapping Engine ---
+function calculateLayoutMetrics() {
+    totalWhiteKeys = 0;
+    for (let m = RANGE_START; m <= RANGE_END; m++) {
+        if (!IS_BLACK_KEY[m % 12]) totalWhiteKeys++;
+    }
+    const containerWidth = elCanvas.parentElement.clientWidth;
+    whiteKeyWidth = containerWidth / totalWhiteKeys;
+    blackKeyWidth = whiteKeyWidth * 0.58;
+}
+
+// Compute starting horizontal coordinate based on standard 88-key physical dimensions
+function getNoteX(midi) {
+    let whiteKeyIndex = 0;
+    for (let m = RANGE_START; m < midi; m++) {
+        if (!IS_BLACK_KEY[m % 12]) whiteKeyIndex++;
+    }
+    const baseLeft = whiteKeyIndex * whiteKeyWidth;
+    if (IS_BLACK_KEY[midi % 12]) {
+        return baseLeft - (blackKeyWidth / 2);
+    }
+    return baseLeft;
+}
+
+function createKeyboard() {
+    elKeyboard.innerHTML = '';
+    pianoKeysMap.clear();
+
+    // Render white keys first
+    for (let m = RANGE_START; m <= RANGE_END; m++) {
+        if (!IS_BLACK_KEY[m % 12]) buildKeyElement(m, false);
+    }
+    // Superimpose black keys on top
+    for (let m = RANGE_START; m <= RANGE_END; m++) {
+        if (IS_BLACK_KEY[m % 12]) buildKeyElement(m, true);
+    }
+}
+
+function buildKeyElement(midi, isBlack) {
+    const key = document.createElement('div');
+    key.className = `key ${isBlack ? 'black' : 'white'}`;
+    key.style.width = `${isBlack ? blackKeyWidth : whiteKeyWidth}px`;
+    key.style.left = `${getNoteX(midi)}px`;
+    
+    elKeyboard.appendChild(key);
+    pianoKeysMap.set(midi, key);
+}
+
+function handleResize() {
+    elCanvas.width = elCanvas.parentElement.clientWidth;
+    elCanvas.height = elCanvas.parentElement.clientHeight - 160;
+    calculateLayoutMetrics();
+    createKeyboard();
+}
+
+// --- Advanced Music Analysis Computations ---
+
+// Pearson Correlation Coefficient calculation (Fallback)
+function calculateCorrelation(x, y) {
+    const n = x.length;
+    const meanX = x.reduce((a, b) => a + b, 0) / n;
+    const meanY = y.reduce((a, b) => a + b, 0) / n;
+    let num = 0;
+    let denX = 0;
+    let denY = 0;
+    for (let i = 0; i < n; i++) {
+        const dx = x[i] - meanX;
+        const dy = y[i] - meanY;
+        num += dx * dy;
+        denX += dx * dx;
+        denY += dy * dy;
+    }
+    if (denX === 0 || denY === 0) return 0;
+    return num / Math.sqrt(denX * denY);
+}
+
+// Mathematical Key Detection Fallback (Krumhansl-Schmuckler)
+function analyzeKeySignature(notes) {
+    if (!notes || notes.length === 0) return "Unknown";
+
+    const pitchWeights = new Array(12).fill(0);
+    notes.forEach(note => {
+        const pitchClass = note.midi % 12;
+        pitchWeights[pitchClass] += note.duration * (note.velocity || 0.8);
+    });
+
+    let bestMatchKey = "Undetermined";
+    let highestCorrelation = -1;
+
+    // Iterate major
+    for (let shift = 0; shift < 12; shift++) {
+        const rotatedModel = [];
+        for (let i = 0; i < 12; i++) {
+            rotatedModel.push(K_K_MAJOR[(i - shift + 12) % 12]);
+        }
+        const corr = calculateCorrelation(pitchWeights, rotatedModel);
+        if (corr > highestCorrelation) {
+            highestCorrelation = corr;
+            bestMatchKey = `${PITCH_NAMES[shift]} Major`;
+        }
+    }
+
+    // Iterate minor
+    for (let shift = 0; shift < 12; shift++) {
+        const rotatedModel = [];
+        for (let i = 0; i < 12; i++) {
+            rotatedModel.push(K_K_MINOR[(i - shift + 12) % 12]);
+        }
+        const corr = calculateCorrelation(pitchWeights, rotatedModel);
+        if (corr > highestCorrelation) {
+            highestCorrelation = corr;
+            bestMatchKey = `${PITCH_NAMES[shift]} Minor`;
+        }
+    }
+
+    return bestMatchKey;
+}
+
+// Native MIDI Key Signature Extractor (Primary Source Only)
+function getMidiKeySignature() {
+    if (midiData && midiData.header && midiData.header.keySignatures && midiData.header.keySignatures.length > 0) {
+        const metaKey = midiData.header.keySignatures[0];
+        const keyName = metaKey.key;
+        const scaleType = metaKey.scale ? metaKey.scale.charAt(0).toUpperCase() + metaKey.scale.slice(1) : "Major";
+        return `${keyName} ${scaleType}`;
+    }
+    // Strict system reconfig: Disable key signature auto-guessing
+    return "C Major";
+}
+
+// Real-Time Chord Identification
+function identifyCurrentChord(activeKeys) {
+    if (activeKeys.size === 0) return "-";
+    
+    const pitchClasses = Array.from(new Set(Array.from(activeKeys).map(m => m % 12))).sort((a, b) => a - b);
+    
+    if (pitchClasses.length < 2) {
+        if (pitchClasses.length === 1) return PITCH_NAMES[pitchClasses[0]];
+        return "-";
+    }
+
+    const intervalsList = {
+        "Major Triad": [0, 4, 7],
+        "Minor Triad": [0, 3, 7],
+        "Dominant 7th": [0, 4, 7, 10],
+        "Major 7th": [0, 4, 7, 11],
+        "Minor 7th": [0, 3, 7, 10],
+        "Diminished Triad": [0, 3, 6],
+        "Augmented Triad": [0, 4, 8],
+        "Suspended 4th": [0, 5, 7],
+        "Suspended 2nd": [0, 2, 7],
+        "Perfect 5th": [0, 7]
+    };
+
+    for (let root of pitchClasses) {
+        const calculatedIntervals = pitchClasses.map(p => (p - root + 12) % 12).sort((a, b) => a - b);
+        
+        for (let [name, pattern] of Object.entries(intervalsList)) {
+            const matchesPattern = pattern.every(p => calculatedIntervals.includes(p));
+            if (matchesPattern) {
+                return `${PITCH_NAMES[root]} ${name}`;
+            }
+        }
+    }
+
+    return pitchClasses.map(p => PITCH_NAMES[p]).join("-");
+}
+
+// Algorithmic spelling engine: Converts pitch numbers into properly spelled notes based on current Key Signature
+function midiToAbcPitch(midi, key) {
+    const pitchClass = midi % 12;
+    const octave = Math.floor(midi / 12) - 1; // 4 is Middle C
+    
+    // Retrieve correct spelled diatonic accidental arrays based on current key signature map
+    const keyMap = KEY_MAPS[key] || KEY_MAPS["C"];
+    let baseName = keyMap[pitchClass];
+
+    let abc = "";
+    if (octave === 4) {
+        abc = baseName;
+    } else if (octave > 4) {
+        // If baseName contains accidentals, isolate and format lowercase characters correctly
+        const match = baseName.match(/^([=^^_]*)([A-G])$/);
+        if (match) {
+            abc = match[1] + match[2].toLowerCase();
+        } else {
+            abc = baseName.toLowerCase();
+        }
+        const ticks = octave - 5;
+        abc += "'".repeat(ticks);
+    } else {
+        abc = baseName;
+        const commas = 4 - octave;
+        abc += ",".repeat(commas);
+    }
+    return abc;
+}
+
+// Converts exact float durations into robust simplified fractions for abc notation formatting
+function toAbcFraction(val) {
+    if (val <= 0) return "";
+    const rounded = Math.round(val * 1000) / 1000;
+    if (rounded === 1) return "";
+    
+    const num = Math.round(rounded * 1000);
+    const den = 1000;
+    
+    const gcd = (a, b) => b ? gcd(b, a % b) : a;
+    const d = gcd(num, den);
+    const finalNum = num / d;
+    const finalDen = den / d;
+    
+    if (finalDen === 1) {
+        return finalNum === 1 ? "" : `${finalNum}`;
+    }
+    return `${finalNum}/${finalDen}`;
+}
+
+// Render piano-roll style grand staff notation directly from the raw activeNotesMemory events
+function renderSheetMusic() {
+    if (!midiData || activeNotesMemory.length === 0) return;
+
+    const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
+    const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
+    const svgWidth = totalDurationSecs * pixelsPerSecond + 200; // Offset spacing
+    const svgHeight = 320;
+
+    // RH and LH staff centerline layouts
+    const rhStaffCenterY = 80;
+    const lhStaffCenterY = 220;
+    const dy = 3; // 3px height increment per chromatic semitone
+
+    let svgContent = "";
+
+    // 1. Draw RH Staff lines (E4=64, G4=67, B4=71, D5=74, F5=77)
+    const rhLines = [64, 67, 71, 74, 77];
+    rhLines.forEach(pitch => {
+        const y = rhStaffCenterY - (pitch - 71) * dy;
+        svgContent += `<line x1="0" y1="${y}" x2="${svgWidth}" y2="${y}" stroke="#242432" stroke-width="1.5" />`;
+    });
+
+    // 2. Draw LH Staff lines (G2=43, B2=47, D3=50, F3=53, A3=57)
+    const lhLines = [43, 47, 50, 53, 57];
+    lhLines.forEach(pitch => {
+        const y = lhStaffCenterY - (pitch - 50) * dy;
+        svgContent += `<line x1="0" y1="${y}" x2="${svgWidth}" y2="${y}" stroke="#242432" stroke-width="1.5" />`;
+    });
+
+    // 3. Draw middle system linkages and labels
+    svgContent += `<line x1="20" y1="30" x2="20" y2="270" stroke="#4b5563" stroke-width="2" />`;
+    svgContent += `<text x="30" y="85" fill="#9ca3af" font-size="14" font-weight="bold">RH</text>`;
+    svgContent += `<text x="30" y="225" fill="#9ca3af" font-size="14" font-weight="bold">LH</text>`;
+
+    // 4. Render procedurally-drawn clef symbols
+    // Treble Clef centered on G4 (relative y = 10 from center y = 80)
+    svgContent += `
+    <g transform="translate(60, 80)" stroke="#818cf8" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M 5,-40 L 5,30 C 5,38 0,42 -5,42 C -9,42 -12,38 -12,34 C -12,30 -9,27 -6,27 C -3,27 0,31 0,34" />
+        <circle cx="5" cy="-40" r="3" fill="#818cf8" />
+        <path d="M 5,-15 C 5,-28 15,-32 15,-20 C 15,-10 5,0 5,10" />
+        <path d="M 5,10 C 5,22 -8,22 -8,10 C -8,-2 13,-2 13,10 C 13,20 3,24 0,16" />
+    </g>`;
+
+    // Bass Clef with dots flanking F3 (relative y = -10 from center y = 220)
+    svgContent += `
+    <g transform="translate(60, 220)" stroke="#fbbf24" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M -8,-10 C -2,-18 10,-18 10,-8 C 10,2 -2,10 -8,18 C -10,21 -12,25 -12,28" />
+        <circle cx="-8" cy="-10" r="3.5" fill="#fbbf24" stroke="none" />
+        <circle cx="16" cy="-15" r="2.5" fill="#fbbf24" stroke="none" />
+        <circle cx="16" cy="-5" r="2.5" fill="#fbbf24" stroke="none" />
+    </g>`;
+
+    // 5. Render notes row-by-row strictly matching the raw activeNotesMemory log
+    activeNotesMemory.forEach((note, index) => {
+        const shiftedStart = Math.max(0, note.time - firstNoteTime);
+        const x = shiftedStart * pixelsPerSecond + 100;
+        const w = Math.max(10, note.duration * pixelsPerSecond); // Ensure a minimal width
+        const pitch = note.midi;
+
+        let y = 0;
+        let color = "";
+        let stemDirection = "";
+
+        // Middle C (60) hard split mapping: >= 60 to RH, < 60 to LH
+        if (pitch >= 60) {
+            y = rhStaffCenterY - (pitch - 71) * dy;
+            color = "#818cf8"; // Purple/indigo
+            
+            // Center line (Line 3) of RH Treble clef is B4 (MIDI 71)
+            // Notes above Line 3 (pitch >= 72) stem points down
+            // Notes on or below Line 3 (pitch <= 71) stem points up
+            if (pitch >= 72) {
+                stemDirection = "down";
+            } else {
+                stemDirection = "up";
+            }
+        } else {
+            y = lhStaffCenterY - (pitch - 50) * dy;
+            color = "#fbbf24"; // Amber/gold
+            
+            // Center line (Line 3) of LH Bass clef is D3 (MIDI 50)
+            // Notes above Line 3 (pitch >= 51) stem points down
+            // Notes on or below Line 3 (pitch <= 50) stem points up
+            if (pitch >= 51) {
+                stemDirection = "down";
+            } else {
+                stemDirection = "up";
+            }
+        }
+
+        // Render dynamic ledger lines for notes that are placed off-staff
+        if (pitch >= 60) {
+            // RH (Treble) Ledger Lines
+            if (pitch <= 60) { // Middle C (60)
+                const ly = rhStaffCenterY - (60 - 71) * dy;
+                svgContent += `<line x1="${x - 12}" y1="${ly}" x2="${x + 12}" y2="${ly}" stroke="${color}" stroke-width="1.5" />`;
+            } else if (pitch >= 81) { // High ledger notes
+                const rhLedgerLines = [81, 84, 88, 91, 95, 98, 101, 105, 108];
+                rhLedgerLines.forEach(lp => {
+                    if (lp <= pitch) {
+                        const ly = rhStaffCenterY - (lp - 71) * dy;
+                        svgContent += `<line x1="${x - 12}" y1="${ly}" x2="${x + 12}" y2="${ly}" stroke="${color}" stroke-width="1.5" />`;
+                    }
+                });
+            }
+        } else {
+            // LH (Bass) Ledger Lines
+            if (pitch <= 40) { // Low ledger notes (such as E2 = 40)
+                const lhLedgerLines = [40, 36, 33, 29, 26, 24, 21];
+                lhLedgerLines.forEach(lp => {
+                    if (lp >= pitch) {
+                        const ly = lhStaffCenterY - (lp - 50) * dy;
+                        svgContent += `<line x1="${x - 12}" y1="${ly}" x2="${x + 12}" y2="${ly}" stroke="${color}" stroke-width="1.5" />`;
+                    }
+                });
+            }
+        }
+
+        // Note duration bar
+        svgContent += `<rect x="${x}" y="${y - 4}" width="${w}" height="8" rx="4" fill="${color}" opacity="0.6" id="sheet-note-rect-${index}" />`;
+
+        // Notehead
+        svgContent += `<ellipse cx="${x}" cy="${y}" rx="7" ry="5" fill="${color}" id="sheet-notehead-${index}" transform="rotate(-15, ${x}, ${y})" />`;
+
+        // Stems standard attachment:
+        // Upward stems attach to the right side of the notehead (x + 6) and extend up.
+        // Downward stems attach to the left side of the notehead (x - 6) and extend down.
+        if (stemDirection === "up") {
+            svgContent += `<line x1="${x + 6}" y1="${y}" x2="${x + 6}" y2="${y - 25}" stroke="${color}" stroke-width="1.5" id="sheet-stem-${index}" />`;
+        } else {
+            svgContent += `<line x1="${x - 6}" y1="${y}" x2="${x - 6}" y2="${y + 25}" stroke="${color}" stroke-width="1.5" id="sheet-stem-${index}" />`;
+        }
+    });
+
+    // Playback tracking cursor line
+    svgContent += `<line id="sheet-playback-cursor" x1="100" y1="10" x2="100" y2="290" stroke="#ef4444" stroke-width="2" style="display: none;" />`;
+
+    // Insert vector graphic content inside the display frame
+    const svgString = `<svg width="${svgWidth}" height="${svgHeight}" style="background: #0b0b0f; border-radius: 8px;">${svgContent}</svg>`;
+    elSheetMusicNotation.innerHTML = svgString;
+
+    // Automatically populate the wrapped portrait score inside Section 2
+    renderVerticalSheetMusic('sheet-music-notation-vertical');
+}
+
+// Render the vertically wrapped portrait-layout sheet music with a white page aesthetic
+function renderVerticalSheetMusic(targetContainerId) {
+    if (!midiData || activeNotesMemory.length === 0) return;
+
+    const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
+    const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
+
+    const systemDuration = 10; // 10 seconds of note data per wrapped row system
+    const numSystems = Math.ceil(totalDurationSecs / systemDuration);
+
+    const systemHeight = 220;
+    const rhStaffCenterY = 60;
+    const lhStaffCenterY = 160;
+    const dy = 3;
+
+    const marginLeft = 100;
+    const systemWidth = 800;
+    const marginRight = 50;
+    const svgWidth = marginLeft + systemWidth + marginRight;
+    const svgHeight = numSystems * systemHeight + 100; // Buffered bottom layout space for copyright
+
+    // Check if we should render colorful notes
+    const chkShowColors = document.getElementById('chk-show-colors');
+    const showColors = chkShowColors ? chkShowColors.checked : false;
+
+    let svgContent = "";
+
+    // Copyright marker at top right corner
+    svgContent += `<text x="${svgWidth - 150}" y="25" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">© T1ERA Music Ai</text>`;
+
+    for (let i = 0; i < numSystems; i++) {
+        const yOffset = i * systemHeight + 40;
+
+        // 1. Draw RH staff lines (Treble) - Reduced staff line boldness to stroke-width="0.75" and soft grey stroke
+        const rhLines = [64, 67, 71, 74, 77];
+        rhLines.forEach(pitch => {
+            const y = yOffset + rhStaffCenterY - (pitch - 71) * dy;
+            svgContent += `<line x1="${marginLeft}" y1="${y}" x2="${marginLeft + systemWidth}" y2="${y}" stroke="#9ca3af" stroke-width="0.75" />`;
+        });
+
+        // 2. Draw LH staff lines (Bass) - Reduced staff line boldness to stroke-width="0.75" and soft grey stroke
+        const lhLines = [43, 47, 50, 53, 57];
+        lhLines.forEach(pitch => {
+            const y = yOffset + lhStaffCenterY - (pitch - 50) * dy;
+            svgContent += `<line x1="${marginLeft}" y1="${y}" x2="${marginLeft + systemWidth}" y2="${y}" stroke="#9ca3af" stroke-width="0.75" />`;
+        });
+
+        // 3. Draw system bracket linkages and labels
+        svgContent += `<line x1="${marginLeft - 80}" y1="${yOffset + 20}" x2="${marginLeft - 80}" y2="${yOffset + 200}" stroke="#111115" stroke-width="1.5" />`;
+        svgContent += `<text x="${marginLeft - 60}" y="${yOffset + rhStaffCenterY + 5}" fill="#111115" font-size="14" font-weight="bold" font-family="-apple-system, sans-serif">RH</text>`;
+        svgContent += `<text x="${marginLeft - 60}" y="${yOffset + lhStaffCenterY + 5}" fill="#111115" font-size="14" font-weight="bold" font-family="-apple-system, sans-serif">LH</text>`;
+
+        // 4. Draw Clef symbols aligned with each system row
+        // Treble Clef
+        svgContent += `
+        <g transform="translate(${marginLeft - 30}, ${yOffset + rhStaffCenterY})" stroke="#111115" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M 5,-40 L 5,30 C 5,38 0,42 -5,42 C -9,42 -12,38 -12,34 C -12,30 -9,27 -6,27 C -3,27 0,31 0,34" />
+            <circle cx="5" cy="-40" r="3" fill="#111115" />
+            <path d="M 5,-15 C 5,-28 15,-32 15,-20 C 15,-10 5,0 5,10" />
+            <path d="M 5,10 C 5,22 -8,22 -8,10 C -8,-2 13,-2 13,10 C 13,20 3,24 0,16" />
+        </g>`;
+
+        // Bass Clef
+        svgContent += `
+        <g transform="translate(${marginLeft - 30}, ${yOffset + lhStaffCenterY})" stroke="#111115" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M -8,-10 C -2,-18 10,-18 10,-8 C 10,2 -2,10 -8,18 C -10,21 -12,25 -12,28" />
+            <circle cx="-8" cy="-10" r="3.5" fill="#111115" stroke="none" />
+            <circle cx="16" cy="-15" r="2.5" fill="#111115" stroke="none" />
+            <circle cx="16" cy="-5" r="2.5" fill="#111115" stroke="none" />
+        </g>`;
+    }
+
+    // 5. Draw the notes into their corresponding staff systems
+    activeNotesMemory.forEach((note, index) => {
+        const shiftedStart = Math.max(0, note.time - firstNoteTime);
+        
+        // Determine system row target
+        const systemIdx = Math.floor(shiftedStart / systemDuration);
+        if (systemIdx >= numSystems) return;
+
+        const yOffset = systemIdx * systemHeight + 40;
+        
+        // Math positioning relative to system bounds
+        const systemTimeOffset = shiftedStart - systemIdx * systemDuration;
+        const noteX = systemTimeOffset * pixelsPerSecond + marginLeft;
+        
+        // Prevent horizontal overflow past system bounds (cap note width within margins)
+        const maxAllowedWidth = (marginLeft + systemWidth) - noteX;
+        const noteW = Math.min(Math.max(10, note.duration * pixelsPerSecond), maxAllowedWidth);
+        
+        const pitch = note.midi;
+
+        let y = 0;
+        // High contrast darker colors or traditional monochrome black/dark-charcoal
+        let color = "";
+        let stemDirection = "";
+
+        if (pitch >= 60) {
+            y = yOffset + rhStaffCenterY - (pitch - 71) * dy;
+            color = showColors ? "#4f46e5" : "#111115"; // Deep indigo or standard black
+            
+            if (pitch >= 72) {
+                stemDirection = "down";
+            } else {
+                stemDirection = "up";
+            }
+        } else {
+            y = yOffset + lhStaffCenterY - (pitch - 50) * dy;
+            color = showColors ? "#d97706" : "#111115"; // Deep amber or standard black
+            
+            if (pitch >= 51) {
+                stemDirection = "down";
+            } else {
+                stemDirection = "up";
+            }
+        }
+
+        // Render dynamic ledger lines for notes that are placed off-staff
+        const lineStroke = showColors ? color : "#111115";
+        if (pitch >= 60) {
+            if (pitch <= 60) { // Middle C (60)
+                const ly = yOffset + rhStaffCenterY - (60 - 71) * dy;
+                svgContent += `<line x1="${noteX - 12}" y1="${ly}" x2="${noteX + 12}" y2="${ly}" stroke="${lineStroke}" stroke-width="1.5" />`;
+            } else if (pitch >= 81) { // High ledger notes
+                const rhLedgerLines = [81, 84, 88, 91, 95, 98, 101, 105, 108];
+                rhLedgerLines.forEach(lp => {
+                    if (lp <= pitch) {
+                        const ly = yOffset + rhStaffCenterY - (lp - 71) * dy;
+                        svgContent += `<line x1="${noteX - 12}" y1="${ly}" x2="${noteX + 12}" y2="${ly}" stroke="${lineStroke}" stroke-width="1.5" />`;
+                    }
+                });
+            }
+        } else {
+            if (pitch <= 40) { // Low ledger notes (such as E2 = 40)
+                const lhLedgerLines = [40, 36, 33, 29, 26, 24, 21];
+                lhLedgerLines.forEach(lp => {
+                    if (lp >= pitch) {
+                        const ly = yOffset + lhStaffCenterY - (lp - 50) * dy;
+                        svgContent += `<line x1="${noteX - 12}" y1="${ly}" x2="${noteX + 12}" y2="${ly}" stroke="${lineStroke}" stroke-width="1.5" />`;
+                    }
+                });
+            }
+        }
+
+        // Note duration bar (white page style - render only if colorful mode is enabled)
+        if (showColors) {
+            svgContent += `<rect x="${noteX}" y="${y - 4}" width="${noteW}" height="8" rx="4" fill="${color}" opacity="0.6" id="${targetContainerId}-note-rect-${index}" />`;
+        }
+
+        // Notehead
+        svgContent += `<ellipse cx="${noteX}" cy="${y}" rx="7" ry="5" fill="${color}" id="${targetContainerId}-notehead-${index}" transform="rotate(-15, ${noteX}, ${y})" />`;
+
+        // Stems standard attachment
+        if (stemDirection === "up") {
+            svgContent += `<line x1="${noteX + 6}" y1="${y}" x2="${noteX + 6}" y2="${y - 25}" stroke="${color}" stroke-width="1.5" id="${targetContainerId}-stem-${index}" />`;
+        } else {
+            svgContent += `<line x1="${noteX - 6}" y1="${y}" x2="${noteX - 6}" y2="${y + 25}" stroke="${color}" stroke-width="1.5" id="${targetContainerId}-stem-${index}" />`;
+        }
+    });
+
+    // 6. Draw the vertical playback tracking pointer cursor
+    svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeft}" y1="10" x2="${marginLeft}" y2="${svgHeight - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
+
+    // Draw footer copyright on the bottom center
+    svgContent += `<text x="${svgWidth / 2}" y="${svgHeight - 15}" text-anchor="middle" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">© T1ERA Music Ai</text>`;
+
+    const svgString = `<svg width="${svgWidth}" height="${svgHeight}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">${svgContent}</svg>`;
+    document.getElementById(targetContainerId).innerHTML = svgString;
+}
+
+// Direct playback audio engine: loop through the activeNotesMemory log sequentially (Vertical system)
+function startVerticalPlayback(targetContainerId) {
+    if (isVerticalPlaying) {
+        stopVerticalPlayback();
+    }
+    if (Tone.context.state !== 'running') {
+        Tone.start();
+    }
+
+    isVerticalPlaying = true;
+    verticalPlaybackTime = 0;
+    verticalLastFrameTime = performance.now();
+    activeVerticalContainerId = targetContainerId;
+
+    // Sync play/stop buttons states
+    updateVerticalPlayButtonStates(targetContainerId, true);
+
+    // Stop other play loops to avoid sound overlap
+    if (isPlaying) pausePlayback();
+    if (sheetMusicPlaying) stopSheetPlayback();
+    if (isStudioPlaying) stopStudioPlayback();
+
+    const cursor = document.getElementById(`${targetContainerId}-playback-cursor`);
+    if (cursor) cursor.style.display = "block";
+
+    resetVerticalNoteHighlights(targetContainerId);
+
+    const systemDuration = 10;
+    const systemHeight = 220;
+    const marginLeft = 100;
+
+    const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
+    
+    // Fast seek of starting index
+    verticalPlaybackNoteIndex = 0;
+    while (verticalPlaybackNoteIndex < activeNotesMemory.length && Math.max(0, activeNotesMemory[verticalPlaybackNoteIndex].time - firstNoteTime) < verticalPlaybackTime) {
+        verticalPlaybackNoteIndex++;
+    }
+
+    function updateVerticalFrame(now) {
+        if (!isVerticalPlaying) return;
+
+        const delta = (now - verticalLastFrameTime) / 1000;
+        verticalLastFrameTime = now;
+
+        const prevTime = verticalPlaybackTime;
+        verticalPlaybackTime += delta * playbackSpeed;
+
+        const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
+
+        if (verticalPlaybackTime >= totalDurationSecs) {
+            stopVerticalPlayback();
+            return;
+        }
+
+        // 1. Move pointer cursor vertically and horizontally
+        const currentSystemIdx = Math.floor(verticalPlaybackTime / systemDuration);
+        const systemTimeOffset = verticalPlaybackTime - currentSystemIdx * systemDuration;
+
+        const cursorX = systemTimeOffset * pixelsPerSecond + marginLeft;
+        const yOffset = currentSystemIdx * systemHeight + 40;
+
+        if (cursor) {
+            cursor.setAttribute('x1', cursorX);
+            cursor.setAttribute('x2', cursorX);
+            cursor.setAttribute('y1', yOffset + 10);
+            cursor.setAttribute('y2', yOffset + 210);
+        }
+
+        // 2. Smoothly scroll container vertically to center the active row
+        let scrollContainer = null;
+        if (targetContainerId === 'sheet-music-notation-vertical') {
+            scrollContainer = document.getElementById('sheet-tab-notation-content-vertical');
+        } else if (targetContainerId === 'sheet-music-notation-max') {
+            scrollContainer = document.getElementById('max-modal-scroll-container');
+        }
+
+        if (scrollContainer) {
+            const targetScrollTop = currentSystemIdx * systemHeight - scrollContainer.clientHeight / 2 + systemHeight / 2;
+            scrollContainer.scrollTop = Math.max(0, targetScrollTop);
+        }
+
+        // 3. Audio Dispatcher (Dynamic Cursor-Indexed trigger)
+        while (verticalPlaybackNoteIndex < activeNotesMemory.length) {
+            const note = activeNotesMemory[verticalPlaybackNoteIndex];
+            const shiftedStart = Math.max(0, note.time - firstNoteTime);
+            if (shiftedStart < verticalPlaybackTime) {
+                if (shiftedStart >= prevTime) {
+                    const playDelay = Math.max(0, shiftedStart - prevTime) / playbackSpeed;
+                    const noteName = Tone.Frequency(note.midi, "midi").toNote();
+                    activeInstrument.triggerAttackRelease(noteName, note.duration, Tone.now() + playDelay, note.velocity);
+
+                    // Highlight note on the specific SVG container
+                    const noteHead = document.getElementById(`${targetContainerId}-notehead-${verticalPlaybackNoteIndex}`);
+                    const noteRect = document.getElementById(`${targetContainerId}-note-rect-${verticalPlaybackNoteIndex}`);
+                    if (noteHead) noteHead.setAttribute('fill', '#db2777'); // Magenta active
+                    if (noteRect) noteRect.setAttribute('fill', '#db2777');
+                }
+                verticalPlaybackNoteIndex++;
+            } else {
+                break;
+            }
+        }
+
+        // Visual release handler (analyzes only recent sliding window keys)
+        const checkStart = Math.max(0, verticalPlaybackNoteIndex - 100);
+        for (let i = checkStart; i < verticalPlaybackNoteIndex; i++) {
+            const note = activeNotesMemory[i];
+            const shiftedStart = Math.max(0, note.time - firstNoteTime);
+            const shiftedEnd = shiftedStart + note.duration;
+
+            if (prevTime < shiftedEnd && verticalPlaybackTime >= shiftedEnd) {
+                const noteHead = document.getElementById(`${targetContainerId}-notehead-${i}`);
+                const noteRect = document.getElementById(`${targetContainerId}-note-rect-${i}`);
+                
+                const chkShowColors = document.getElementById('chk-show-colors');
+                const showColors = chkShowColors ? chkShowColors.checked : false;
+                
+                let defaultColor = "";
+                if (note.midi >= 60) {
+                    defaultColor = showColors ? '#4f46e5' : '#111115';
+                } else {
+                    defaultColor = showColors ? '#d97706' : '#111115';
+                }
+                
+                if (noteHead) noteHead.setAttribute('fill', defaultColor);
+                if (noteRect) noteRect.setAttribute('fill', defaultColor);
+            }
+        }
+
+        verticalPlaybackTimer = requestAnimationFrame(updateVerticalFrame);
+    }
+
+    verticalPlaybackTimer = requestAnimationFrame(updateVerticalFrame);
+}
+
+function stopVerticalPlayback() {
+    isVerticalPlaying = false;
+    if (verticalPlaybackTimer) {
+        cancelAnimationFrame(verticalPlaybackTimer);
+        verticalPlaybackTimer = null;
+    }
+    verticalPlaybackTime = 0;
+    activeInstrument.releaseAll();
+
+    if (activeVerticalContainerId) {
+        const cursor = document.getElementById(`${activeVerticalContainerId}-playback-cursor`);
+        if (cursor) {
+            cursor.setAttribute('x1', 100);
+            cursor.setAttribute('x2', 100);
+            cursor.style.display = "none";
+        }
+
+        let scrollContainer = null;
+        if (activeVerticalContainerId === 'sheet-music-notation-vertical') {
+            scrollContainer = document.getElementById('sheet-tab-notation-content-vertical');
+        } else if (activeVerticalContainerId === 'sheet-music-notation-max') {
+            scrollContainer = document.getElementById('max-modal-scroll-container');
+        }
+        if (scrollContainer) scrollContainer.scrollTop = 0;
+
+        resetVerticalNoteHighlights(activeVerticalContainerId);
+        updateVerticalPlayButtonStates(activeVerticalContainerId, false);
+    }
+}
+
+function resetVerticalNoteHighlights(containerId) {
+    const chkShowColors = document.getElementById('chk-show-colors');
+    const showColors = chkShowColors ? chkShowColors.checked : false;
+
+    activeNotesMemory.forEach((note, index) => {
+        const noteHead = document.getElementById(`${containerId}-notehead-${index}`);
+        const noteRect = document.getElementById(`${containerId}-note-rect-${index}`);
+        
+                let defaultColor = "";
+                if (note.midi >= 60) {
+                    defaultColor = showColors ? '#4f46e5' : '#111115';
+                } else {
+                    defaultColor = showColors ? '#d97706' : '#111115';
+                }
+
+                if (noteHead) noteHead.setAttribute('fill', defaultColor);
+                if (noteRect) {
+                    if (showColors) {
+                        noteRect.setAttribute('fill', defaultColor);
+                        noteRect.style.display = 'block';
+                    } else {
+                        noteRect.style.display = 'none';
+                    }
+                }
+            });
+        }
+
+function updateVerticalPlayButtonStates(containerId, isPlayingState) {
+    if (containerId === 'sheet-music-notation-vertical') {
+        const btnPlay = document.getElementById('btn-play-second');
+        const btnStop = document.getElementById('btn-stop-second');
+        if (isPlayingState) {
+            btnPlay.textContent = "Pause Score";
+            btnPlay.style.backgroundColor = "#fbbf24";
+            btnStop.disabled = false;
+        } else {
+            btnPlay.textContent = "Play Vert. Score";
+            btnPlay.style.backgroundColor = "#10b981";
+            btnStop.disabled = true;
+        }
+    } else if (containerId === 'sheet-music-notation-max') {
+        const btnPlay = document.getElementById('btn-play-max');
+        const btnStop = document.getElementById('btn-stop-max');
+        if (isPlayingState) {
+            btnPlay.textContent = "Pause Score";
+            btnPlay.style.backgroundColor = "#fbbf24";
+            btnStop.disabled = false;
+        } else {
+            btnPlay.textContent = "Play Score";
+            btnPlay.style.backgroundColor = "#10b981";
+            btnStop.disabled = true;
+        }
+    }
+}
+
+// Export vector SVG directly to browser download queue
+function downloadVerticalSVG(containerId) {
+    const svgElement = document.querySelector(`#${containerId} svg`);
+    if (!svgElement) return;
+    const svgString = new XMLSerializer().serializeToString(svgElement);
+    const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const downloadLink = document.createElement('a');
+    downloadLink.href = url;
+    downloadLink.download = (midiData ? midiData.name || 'Untitled' : 'sheet_music') + '_wrapped.svg';
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(url);
+}
+
+// Dump raw MIDI structural data chronologically and in raw JSON payload formats
+function populateRawMidiData() {
+    if (!midiData) return;
+
+    // 1. Populate Raw JSON View
+    const rawJsonView = document.getElementById('raw-midi-json-view');
+    const jsonSummary = {
+        header: midiData.header,
+        durationSeconds: midiData.duration,
+        totalNotesTracked: activeNotesMemory.length,
+        tracksSummary: midiData.tracks.map((track, i) => ({
+            trackIndex: i,
+            name: track.name,
+            instrument: track.instrument?.name || "Default",
+            notesCount: track.notes.length
+        }))
+    };
+    rawJsonView.value = JSON.stringify(jsonSummary, null, 2);
+
+    // 2. Populate Chronological Table
+    const tableBody = document.getElementById('raw-event-table-body');
+    tableBody.innerHTML = '';
+
+    activeNotesMemory.forEach((note, index) => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid var(--panel-border)';
+        
+        if (index % 2 === 1) {
+            tr.style.background = '#20202c';
+        }
+
+        const staffMap = note.midi >= 60 ? "RH (Top Staff)" : "LH (Bottom Staff)";
+
+        tr.innerHTML = `
+            <td style="padding: 10px 12px; color: var(--text-muted);">${index + 1}</td>
+            <td style="padding: 10px 12px; font-weight: 500; color: var(--text-color);">${note.time.toFixed(4)}</td>
+            <td style="padding: 10px 12px; color: var(--text-color);">${note.midi}</td>
+            <td style="padding: 10px 12px; font-weight: 600; color: var(--accent-color);">${note.name}</td>
+            <td style="padding: 10px 12px; color: var(--text-muted);">${note.duration.toFixed(4)}</td>
+            <td style="padding: 10px 12px; color: var(--text-muted);">${(note.velocity || 0.8).toFixed(2)}</td>
+            <td style="padding: 10px 12px; font-weight: 500; color: ${note.midi >= 60 ? '#10b981' : '#f59e0b'};">${staffMap}</td>
+        `;
+        tableBody.appendChild(tr);
+    });
+}
+
+// Direct playback audio engine: loop through the activeNotesMemory log sequentially
+function startSheetPlayback() {
+    if (sheetMusicPlaying) {
+        pauseSheetPlayback();
+        return;
+    }
+    if (Tone.context.state !== 'running') {
+        Tone.start();
+    }
+
+    sheetMusicPlaying = true;
+    sheetMusicPlaybackTime = 0;
+    sheetMusicLastFrameTime = performance.now();
+    lastTriggeredTime = 0;
+
+    document.getElementById('btn-play-sheet').textContent = "Pause Score";
+    document.getElementById('btn-play-sheet').style.backgroundColor = "#fbbf24";
+    document.getElementById('btn-stop-sheet').disabled = false;
+
+    // Pause visualizer loops to avoid sound overlays
+    if (isPlaying) {
+        pausePlayback();
+    }
+    if (isStudioPlaying) stopStudioPlayback();
+
+    const cursor = document.getElementById('sheet-playback-cursor');
+    if (cursor) cursor.style.display = "block";
+
+    resetSheetNoteHighlights();
+
+    // Setup optimized index seek head
+    sheetPlaybackNoteIndex = 0;
+    const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
+    while (sheetPlaybackNoteIndex < activeNotesMemory.length && Math.max(0, activeNotesMemory[sheetPlaybackNoteIndex].time - firstNoteTime) < sheetMusicPlaybackTime) {
+        sheetPlaybackNoteIndex++;
+    }
+
+    // Frame scheduler to drive audio events and follow pointer visual states
+    function updateSheetFrame(now) {
+        if (!sheetMusicPlaying) return;
+
+        const delta = (now - sheetMusicLastFrameTime) / 1000;
+        sheetMusicLastFrameTime = now;
+
+        const prevTime = sheetMusicPlaybackTime;
+        sheetMusicPlaybackTime += delta * playbackSpeed;
+
+        const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
+
+        if (sheetMusicPlaybackTime >= totalDurationSecs) {
+            stopSheetPlayback();
+            return;
+        }
+
+        // 1. Move pointer line
+        const cursorX = sheetMusicPlaybackTime * pixelsPerSecond + 100;
+        if (cursor) {
+            cursor.setAttribute('x1', cursorX);
+            cursor.setAttribute('x2', cursorX);
+        }
+
+        // 2. Smoothly scroll container horizontally to follow cursor
+        const contentContainer = document.getElementById('sheet-music-notation');
+        if (contentContainer) {
+            const targetScroll = cursorX - contentContainer.clientWidth / 2;
+            contentContainer.scrollLeft = targetScroll;
+        }
+
+        // 3. Audio Triggering Scheduler (Highly Optimized Pointer check)
+        while (sheetPlaybackNoteIndex < activeNotesMemory.length) {
+            const note = activeNotesMemory[sheetPlaybackNoteIndex];
+            const shiftedStart = Math.max(0, note.time - firstNoteTime);
+            if (shiftedStart < sheetMusicPlaybackTime) {
+                if (shiftedStart >= prevTime) {
+                    const playDelay = Math.max(0, shiftedStart - prevTime) / playbackSpeed;
+                    const noteName = Tone.Frequency(note.midi, "midi").toNote();
+                    activeInstrument.triggerAttackRelease(noteName, note.duration, Tone.now() + playDelay, note.velocity);
+
+                    // Visual highlight
+                    const noteHead = document.getElementById(`sheet-notehead-${sheetPlaybackNoteIndex}`);
+                    const noteRect = document.getElementById(`sheet-note-rect-${sheetPlaybackNoteIndex}`);
+                    if (noteHead) noteHead.setAttribute('fill', '#e879f9');
+                    if (noteRect) noteRect.setAttribute('fill', '#e879f9');
+                }
+                sheetPlaybackNoteIndex++;
+            } else {
+                break;
+            }
+        }
+
+        // Visual release sweep on local active notes sliding window
+        const checkStart = Math.max(0, sheetPlaybackNoteIndex - 100);
+        for (let i = checkStart; i < sheetPlaybackNoteIndex; i++) {
+            const note = activeNotesMemory[i];
+            const shiftedStart = Math.max(0, note.time - firstNoteTime);
+            const shiftedEnd = shiftedStart + note.duration;
+            if (prevTime < shiftedEnd && sheetMusicPlaybackTime >= shiftedEnd) {
+                const noteHead = document.getElementById(`sheet-notehead-${i}`);
+                const noteRect = document.getElementById(`sheet-note-rect-${i}`);
+                if (noteHead) noteHead.setAttribute('fill', note.midi >= 60 ? '#818cf8' : '#fbbf24');
+                if (noteRect) noteRect.setAttribute('fill', note.midi >= 60 ? '#818cf8' : '#fbbf24');
+            }
+        }
+
+        sheetMusicPlaybackTimer = requestAnimationFrame(updateSheetFrame);
+    }
+
+    sheetMusicPlaybackTimer = requestAnimationFrame(updateSheetFrame);
+}
+
+function pauseSheetPlayback() {
+    sheetMusicPlaying = false;
+    if (sheetMusicPlaybackTimer) {
+        cancelAnimationFrame(sheetMusicPlaybackTimer);
+        sheetMusicPlaybackTimer = null;
+    }
+    activeInstrument.releaseAll();
+    document.getElementById('btn-play-sheet').textContent = "Resume Score";
+    document.getElementById('btn-play-sheet').style.backgroundColor = "#10b981";
+}
+
+function stopSheetPlayback() {
+    sheetMusicPlaying = false;
+    if (sheetMusicPlaybackTimer) {
+        cancelAnimationFrame(sheetMusicPlaybackTimer);
+        sheetMusicPlaybackTimer = null;
+    }
+    sheetMusicPlaybackTime = 0;
+    activeInstrument.releaseAll();
+
+    const cursor = document.getElementById('sheet-playback-cursor');
+    if (cursor) {
+        cursor.setAttribute('x1', 100);
+        cursor.setAttribute('x2', 100);
+        cursor.style.display = "none";
+    }
+
+    const contentContainer = document.getElementById('sheet-music-notation');
+    if (contentContainer) contentContainer.scrollLeft = 0;
+
+    resetSheetNoteHighlights();
+
+    document.getElementById('btn-play-sheet').textContent = "Play Score";
+    document.getElementById('btn-play-sheet').style.backgroundColor = "#10b981";
+    document.getElementById('btn-stop-sheet').disabled = true;
+}
+
+function resetSheetNoteHighlights() {
+    activeNotesMemory.forEach((note, index) => {
+        const noteHead = document.getElementById(`sheet-notehead-${index}`);
+        const noteRect = document.getElementById(`sheet-note-rect-${index}`);
+        if (noteHead) noteHead.setAttribute('fill', note.midi >= 60 ? '#818cf8' : '#fbbf24');
+        if (noteRect) noteRect.setAttribute('fill', note.midi >= 60 ? '#818cf8' : '#fbbf24');
+    });
+}
+
+// --- Optimized Visualizer Clipping binary bounds search ---
+function getVisibleNotesSlice() {
+    if (!activeNotesMemory || activeNotesMemory.length === 0) return [];
+    
+    const tMin = currentPlaybackTime - maxNoteDuration;
+    const tMax = currentPlaybackTime + (elCanvas.height / noteSpeed) + 1;
+    
+    // Lower-bound search
+    let start = 0;
+    let low = 0, high = activeNotesMemory.length - 1;
+    while (low <= high) {
+        let mid = Math.floor((low + high) / 2);
+        if (activeNotesMemory[mid].time >= tMin) {
+            start = mid;
+            high = mid - 1;
+        } else {
+            low = mid + 1;
+        }
+    }
+    
+    // Upper-bound search
+    let end = activeNotesMemory.length - 1;
+    low = 0; high = activeNotesMemory.length - 1;
+    while (low <= high) {
+        let mid = Math.floor((low + high) / 2);
+        if (activeNotesMemory[mid].time <= tMax) {
+            end = mid;
+            low = mid + 1;
+        } else {
+            high = mid - 1;
+        }
+    }
+    
+    return activeNotesMemory.slice(start, end + 1);
+}
+
+// --- Parsing Management Engine ---
+function loadMidi(buffer) {
+    stopPlayback();
+    
+    midiData = new Midi(buffer);
+    activeNotesMemory = [];
+
+    // Rebuild Graphics & Keys matching 88 standard keys
+    calculateLayoutMetrics();
+    createKeyboard();
+
+    // Populate active playback buffer
+    let noteCount = 0;
+    midiData.tracks.forEach(track => {
+        track.notes.forEach(note => {
+            if (note.midi >= RANGE_START && note.midi <= RANGE_END) {
+                activeNotesMemory.push({
+                    midi: note.midi,
+                    time: note.time,
+                    duration: note.duration,
+                    name: note.name,
+                    velocity: note.velocity,
+                });
+                noteCount++;
+            }
+        });
+    });
+
+    activeNotesMemory.sort((a, b) => a.time - b.time);
+
+    totalDuration = midiData.duration;
+    lastTriggeredTime = 0;
+
+    // Extract maximum length parameters to dynamically calculate visual canvas boundaries
+    maxNoteDuration = activeNotesMemory.reduce((max, n) => Math.max(max, n.duration), 2);
+    if (maxNoteDuration > 15) maxNoteDuration = 15; // Cap to keep render checks small
+
+    // Seeding dynamic non-destructive studio database immediately
+    initStudioData();
+
+    // KEY SIGNATURE RESOLUTION: Extract native metadata directly from file
+    const detectedKeyName = getMidiKeySignature();
+
+    // Populate DOM elements instantly
+    document.getElementById('stat-name').textContent = midiData.name || "Untitled";
+    document.getElementById('stat-duration').textContent = Math.round(totalDuration) + "s";
+    document.getElementById('stat-tempo').textContent = Math.round(midiData.header.tempos[0]?.bpm || 120) + " BPM";
+    document.getElementById('stat-tracks').textContent = midiData.tracks.length;
+    document.getElementById('stat-notes').textContent = noteCount;
+    document.getElementById('stat-key').textContent = detectedKeyName;
+
+    // Timeline ranges update
+    elTimeline.max = totalDuration;
+    elTimeline.value = 0;
+    currentPlaybackTime = 0;
+    updateTimeDisplay();
+
+    // Enable Interactive states
+    btnPlay.disabled = false;
+    btnStop.disabled = false;
+    btnRestart.disabled = false;
+    btnSheet.disabled = false;
+    elTimeline.disabled = false;
+    
+    playbackNoteIndex = 0;
+    updatePlaybackNoteIndex();
+}
+
+// --- Audio & Playback Control Operations ---
+function startPlayback() {
+    if (isPlaying) return;
+    if (Tone.context.state !== 'running') {
+        Tone.start();
+    }
+    isPlaying = true;
+    lastFrameTime = performance.now();
+    btnPlay.disabled = true;
+    btnPause.disabled = false;
+    updatePlaybackNoteIndex();
+}
+
+function pausePlayback() {
+    isPlaying = false;
+    btnPlay.disabled = false;
+    btnPause.disabled = true;
+    activeInstrument.releaseAll();
+}
+
+// --- Studio Initialization and Rendering Handlers ---
+function initStudioData() {
+    if (!activeNotesMemory) return;
+    // Create a local deep copy of notes to avoid mutating live data before save
+    studioNotesMemory = activeNotesMemory.map(note => ({ ...note }));
+    isStudioUnlocked = false;
+
+    // Hide/Lock filter controls by default
+    document.getElementById('studio-filter-controls').style.display = 'none';
+    document.getElementById('studio-removal-preview-container').style.display = 'none';
+    
+    const unlockBtn = document.getElementById('btn-studio-unlock');
+    if (unlockBtn) {
+        unlockBtn.textContent = "Unlock Edit";
+        unlockBtn.style.backgroundColor = "#fbbf24";
+        unlockBtn.style.color = "#111115";
+    }
+
+    updateStudioTable();
+    updateStudioPreview();
+    renderStudioSheetMusic('sheet-music-notation-studio');
+}
+
+function updateStudioPreview() {
+    const thresholdInput = document.getElementById('input-studio-cut-velo');
+    const threshold = parseFloat(thresholdInput.value) || 0.48;
+    document.getElementById('lbl-studio-current-threshold').textContent = threshold.toFixed(2);
+
+    const previewContainer = document.getElementById('studio-removal-preview-container');
+    const previewList = document.getElementById('studio-removal-preview-list');
+
+    // Find all elements configured to be removed (velocity <= threshold value)
+    const toRemove = studioNotesMemory.filter(note => (note.velocity || 0.8) <= threshold);
+
+    if (toRemove.length > 0 && isStudioUnlocked) {
+        previewContainer.style.display = 'flex';
+        previewList.innerHTML = toRemove.map(note => {
+            return `<span style="background: #3b0712; border: 1px solid #991b1b; padding: 4px 8px; border-radius: 4px; display: inline-block; font-size: 0.8rem; color: #fecaca;">
+                Key: <strong>${note.name}</strong>, Time: ${note.time.toFixed(2)}s, Velo: <strong>${(note.velocity || 0.8).toFixed(2)}</strong>
+            </span>`;
+        }).join('');
+    } else {
+        previewContainer.style.display = 'none';
+        previewList.innerHTML = '';
+    }
+}
+
+function updateStudioTable() {
+    const tableBody = document.getElementById('studio-event-table-body');
+    tableBody.innerHTML = '';
+
+    studioNotesMemory.forEach((note, index) => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid var(--panel-border)';
+        if (index % 2 === 1) {
+            tr.style.background = '#20202c';
+        }
+
+        const inputStyle = "background: transparent; border: none; color: inherit; font-family: inherit; font-size: inherit; width: 60px; outline: none; padding: 2px;";
+        const editableInputStyle = "background: #20202c; border: 1px solid var(--panel-border); color: #fff; font-family: inherit; font-size: inherit; width: 65px; border-radius: 4px; padding: 2px;";
+
+        // # Index
+        const tdIndex = document.createElement('td');
+        tdIndex.style.padding = '10px 12px';
+        tdIndex.style.color = 'var(--text-muted)';
+        tdIndex.textContent = index + 1;
+        tr.appendChild(tdIndex);
+
+        // Time (s)
+        const tdTime = document.createElement('td');
+        tdTime.style.padding = '10px 12px';
+        const inputTime = document.createElement('input');
+        inputTime.type = 'number';
+        inputTime.step = '0.001';
+        inputTime.value = note.time.toFixed(4);
+        inputTime.disabled = !isStudioUnlocked;
+        inputTime.style.cssText = isStudioUnlocked ? editableInputStyle : inputStyle;
+        inputTime.addEventListener('change', (e) => {
+            note.time = parseFloat(e.target.value) || 0;
+            studioNotesMemory.sort((a, b) => a.time - b.time);
+            updateStudioTable();
+            renderStudioSheetMusic('sheet-music-notation-studio');
+        });
+        tdTime.appendChild(inputTime);
+        tr.appendChild(tdTime);
+
+        // Pitch (MIDI)
+        const tdPitch = document.createElement('td');
+        tdPitch.style.padding = '10px 12px';
+        const inputPitch = document.createElement('input');
+        inputPitch.type = 'number';
+        inputPitch.min = RANGE_START;
+        inputPitch.max = RANGE_END;
+        inputPitch.value = note.midi;
+        inputPitch.disabled = !isStudioUnlocked;
+        inputPitch.style.cssText = isStudioUnlocked ? editableInputStyle : inputStyle;
+        inputPitch.addEventListener('change', (e) => {
+            const newMidi = parseInt(e.target.value) || 60;
+            note.midi = Math.max(RANGE_START, Math.min(newMidi, RANGE_END));
+            note.name = Tone.Frequency(note.midi, "midi").toNote();
+            updateStudioTable();
+            renderStudioSheetMusic('sheet-music-notation-studio');
+        });
+        tdPitch.appendChild(inputPitch);
+        tr.appendChild(tdPitch);
+
+        // Name
+        const tdName = document.createElement('td');
+        tdName.style.padding = '10px 12px';
+        tdName.style.fontWeight = '600';
+        tdName.style.color = 'var(--accent-color)';
+        tdName.textContent = note.name;
+        tr.appendChild(tdName);
+
+        // Duration (s)
+        const tdDuration = document.createElement('td');
+        tdDuration.style.padding = '10px 12px';
+        const inputDuration = document.createElement('input');
+        inputDuration.type = 'number';
+        inputDuration.step = '0.001';
+        inputDuration.value = note.duration.toFixed(4);
+        inputDuration.disabled = !isStudioUnlocked;
+        inputDuration.style.cssText = isStudioUnlocked ? editableInputStyle : inputStyle;
+        inputDuration.addEventListener('change', (e) => {
+            note.duration = Math.max(0.001, parseFloat(e.target.value) || 0.1);
+            renderStudioSheetMusic('sheet-music-notation-studio');
+        });
+        tdDuration.appendChild(inputDuration);
+        tr.appendChild(tdDuration);
+
+        // Velocity
+        const tdVelocity = document.createElement('td');
+        tdVelocity.style.padding = '10px 12px';
+        const inputVelocity = document.createElement('input');
+        inputVelocity.type = 'number';
+        inputVelocity.step = '0.01';
+        inputVelocity.min = '0';
+        inputVelocity.max = '1';
+        inputVelocity.value = (note.velocity || 0.8).toFixed(2);
+        inputVelocity.disabled = !isStudioUnlocked;
+        inputVelocity.style.cssText = isStudioUnlocked ? editableInputStyle : inputStyle;
+        inputVelocity.addEventListener('change', (e) => {
+            note.velocity = Math.max(0, Math.min(parseFloat(e.target.value) || 0.8, 1));
+            updateStudioPreview();
+        });
+        tdVelocity.appendChild(inputVelocity);
+        tr.appendChild(tdVelocity);
+
+        // Actions (Single manual delete column)
+        const tdActions = document.createElement('td');
+        tdActions.style.padding = '10px 12px';
+        const btnDelete = document.createElement('button');
+        btnDelete.textContent = "Delete";
+        btnDelete.style.cssText = "background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: 600;";
+        btnDelete.disabled = !isStudioUnlocked;
+        if (!isStudioUnlocked) btnDelete.style.opacity = '0.3';
+        btnDelete.addEventListener('click', () => {
+            studioNotesMemory.splice(index, 1);
+            updateStudioTable();
+            updateStudioPreview();
+            renderStudioSheetMusic('sheet-music-notation-studio');
+        });
+        tdActions.appendChild(btnDelete);
+        tr.appendChild(tdActions);
+
+        tableBody.appendChild(tr);
+    });
+}
+
+function renderStudioSheetMusic(targetContainerId) {
+    if (!midiData || studioNotesMemory.length === 0) {
+        document.getElementById(targetContainerId).innerHTML = "<div style='color: #9ca3af; padding: 20px; text-align: center;'>No notes in studio buffer. Apply a filter or load a MIDI file.</div>";
+        return;
+    }
+
+    const firstNoteTime = studioNotesMemory.length > 0 ? studioNotesMemory[0].time : 0;
+    const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
+
+    const systemDuration = 10; 
+    const numSystems = Math.ceil(totalDurationSecs / systemDuration) || 1;
+
+    const systemHeight = 220;
+    const rhStaffCenterY = 60;
+    const lhStaffCenterY = 160;
+    const dy = 3;
+
+    const marginLeft = 100;
+    const systemWidth = 800;
+    const marginRight = 50;
+    const svgWidth = marginLeft + systemWidth + marginRight;
+    const svgHeight = numSystems * systemHeight + 100;
+
+    const chkShowColors = document.getElementById('chk-show-colors');
+    const showColors = chkShowColors ? chkShowColors.checked : false;
+
+    let svgContent = "";
+
+    svgContent += `<text x="${svgWidth - 150}" y="25" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">© T1ERA Studio Ai</text>`;
+
+    for (let i = 0; i < numSystems; i++) {
+        const yOffset = i * systemHeight + 40;
+
+        // Draw Treble (RH) Staves
+        const rhLines = [64, 67, 71, 74, 77];
+        rhLines.forEach(pitch => {
+            const y = yOffset + rhStaffCenterY - (pitch - 71) * dy;
+            svgContent += `<line x1="${marginLeft}" y1="${y}" x2="${marginLeft + systemWidth}" y2="${y}" stroke="#9ca3af" stroke-width="0.75" />`;
+        });
+
+        // Draw Bass (LH) Staves
+        const lhLines = [43, 47, 50, 53, 57];
+        lhLines.forEach(pitch => {
+            const y = yOffset + lhStaffCenterY - (pitch - 50) * dy;
+            svgContent += `<line x1="${marginLeft}" y1="${y}" x2="${marginLeft + systemWidth}" y2="${y}" stroke="#9ca3af" stroke-width="0.75" />`;
+        });
+
+        // Labels & System link bars
+        svgContent += `<line x1="${marginLeft - 80}" y1="${yOffset + 20}" x2="${marginLeft - 80}" y2="${yOffset + 200}" stroke="#111115" stroke-width="1.5" />`;
+        svgContent += `<text x="${marginLeft - 60}" y="${yOffset + rhStaffCenterY + 5}" fill="#111115" font-size="14" font-weight="bold" font-family="-apple-system, sans-serif">RH</text>`;
+        svgContent += `<text x="${marginLeft - 60}" y="${yOffset + lhStaffCenterY + 5}" fill="#111115" font-size="14" font-weight="bold" font-family="-apple-system, sans-serif">LH</text>`;
+
+        // Treble Clef
+        svgContent += `
+        <g transform="translate(${marginLeft - 30}, ${yOffset + rhStaffCenterY})" stroke="#111115" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M 5,-40 L 5,30 C 5,38 0,42 -5,42 C -9,42 -12,38 -12,34 C -12,30 -9,27 -6,27 C -3,27 0,31 0,34" />
+            <circle cx="5" cy="-40" r="3" fill="#111115" />
+            <path d="M 5,-15 C 5,-28 15,-32 15,-20 C 15,-10 5,0 5,10" />
+            <path d="M 5,10 C 5,22 -8,22 -8,10 C -8,-2 13,-2 13,10 C 13,20 3,24 0,16" />
+        </g>`;
+
+        // Bass Clef
+        svgContent += `
+        <g transform="translate(${marginLeft - 30}, ${yOffset + lhStaffCenterY})" stroke="#111115" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M -8,-10 C -2,-18 10,-18 10,-8 C 10,2 -2,10 -8,18 C -10,21 -12,25 -12,28" />
+            <circle cx="-8" cy="-10" r="3.5" fill="#111115" stroke="none" />
+            <circle cx="16" cy="-15" r="2.5" fill="#111115" stroke="none" />
+            <circle cx="16" cy="-5" r="2.5" fill="#111115" stroke="none" />
+        </g>`;
+    }
+
+    studioNotesMemory.forEach((note, index) => {
+        const shiftedStart = Math.max(0, note.time - firstNoteTime);
+        const systemIdx = Math.floor(shiftedStart / systemDuration);
+        if (systemIdx >= numSystems) return;
+
+        const yOffset = systemIdx * systemHeight + 40;
+        const systemTimeOffset = shiftedStart - systemIdx * systemDuration;
+        const noteX = systemTimeOffset * pixelsPerSecond + marginLeft;
+        
+        const maxAllowedWidth = (marginLeft + systemWidth) - noteX;
+        const noteW = Math.min(Math.max(10, note.duration * pixelsPerSecond), maxAllowedWidth);
+        const pitch = note.midi;
+
+        let y = 0;
+        let color = "";
+        let stemDirection = "";
+
+        if (pitch >= 60) {
+            y = yOffset + rhStaffCenterY - (pitch - 71) * dy;
+            color = showColors ? "#4f46e5" : "#111115";
+            stemDirection = (pitch >= 72) ? "down" : "up";
+        } else {
+            y = yOffset + lhStaffCenterY - (pitch - 50) * dy;
+            color = showColors ? "#d97706" : "#111115";
+            stemDirection = (pitch >= 51) ? "down" : "up";
+        }
+
+        // Ledger Line Render Engine
+        const lineStroke = showColors ? color : "#111115";
+        if (pitch >= 60) {
+            if (pitch <= 60) {
+                const ly = yOffset + rhStaffCenterY - (60 - 71) * dy;
+                svgContent += `<line x1="${noteX - 12}" y1="${ly}" x2="${noteX + 12}" y2="${ly}" stroke="${lineStroke}" stroke-width="1.5" />`;
+            } else if (pitch >= 81) {
+                const rhLedgerLines = [81, 84, 88, 91, 95, 98, 101, 105, 108];
+                rhLedgerLines.forEach(lp => {
+                    if (lp <= pitch) {
+                        const ly = yOffset + rhStaffCenterY - (lp - 71) * dy;
+                        svgContent += `<line x1="${noteX - 12}" y1="${ly}" x2="${noteX + 12}" y2="${ly}" stroke="${lineStroke}" stroke-width="1.5" />`;
+                    }
+                });
+            }
+        } else {
+            if (pitch <= 40) {
+                const lhLedgerLines = [40, 36, 33, 29, 26, 24, 21];
+                lhLedgerLines.forEach(lp => {
+                    if (lp >= pitch) {
+                        const ly = yOffset + lhStaffCenterY - (lp - 50) * dy;
+                        svgContent += `<line x1="${noteX - 12}" y1="${ly}" x2="${noteX + 12}" y2="${ly}" stroke="${lineStroke}" stroke-width="1.5" />`;
+                    }
+                });
+            }
+        }
+
+        if (showColors) {
+            svgContent += `<rect x="${noteX}" y="${y - 4}" width="${noteW}" height="8" rx="4" fill="${color}" opacity="0.6" id="${targetContainerId}-note-rect-${index}" />`;
+        }
+
+        svgContent += `<ellipse cx="${noteX}" cy="${y}" rx="7" ry="5" fill="${color}" id="${targetContainerId}-notehead-${index}" transform="rotate(-15, ${noteX}, ${y})" />`;
+
+        if (stemDirection === "up") {
+            svgContent += `<line x1="${noteX + 6}" y1="${y}" x2="${noteX + 6}" y2="${y - 25}" stroke="${color}" stroke-width="1.5" id="${targetContainerId}-stem-${index}" />`;
+        } else {
+            svgContent += `<line x1="${noteX - 6}" y1="${y}" x2="${noteX - 6}" y2="${y + 25}" stroke="${color}" stroke-width="1.5" id="${targetContainerId}-stem-${index}" />`;
+        }
+    });
+
+    // Tracking pointer
+    svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeft}" y1="10" x2="${marginLeft}" y2="${svgHeight - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
+
+    const svgString = `<svg width="${svgWidth}" height="${svgHeight}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">${svgContent}</svg>`;
+    document.getElementById(targetContainerId).innerHTML = svgString;
+}
+
+// Dedicated playback loops for Studio scores
+function startStudioPlayback() {
+    if (isStudioPlaying) {
+        stopStudioPlayback();
+        return;
+    }
+    if (Tone.context.state !== 'running') {
+        Tone.start();
+    }
+
+    isStudioPlaying = true;
+    studioPlaybackTime = 0;
+    studioLastFrameTime = performance.now();
+
+    const btnPlay = document.getElementById('btn-studio-play-score');
+    const btnStop = document.getElementById('btn-studio-stop-score');
+    btnPlay.textContent = "Pause Studio Score";
+    btnPlay.style.backgroundColor = "#fbbf24";
+    btnStop.disabled = false;
+
+    if (isPlaying) pausePlayback();
+    if (sheetMusicPlaying) stopSheetPlayback();
+    if (isVerticalPlaying) stopVerticalPlayback();
+
+    const cursor = document.getElementById('sheet-music-notation-studio-playback-cursor');
+    if (cursor) cursor.style.display = "block";
+
+    resetStudioNoteHighlights();
+
+    const systemDuration = 10;
+    const systemHeight = 220;
+    const marginLeft = 100;
+
+    const firstNoteTime = studioNotesMemory.length > 0 ? studioNotesMemory[0].time : 0;
+    
+    // Fast seek of starting studio index
+    studioPlaybackNoteIndex = 0;
+    while (studioPlaybackNoteIndex < studioNotesMemory.length && Math.max(0, studioNotesMemory[studioPlaybackNoteIndex].time - firstNoteTime) < studioPlaybackTime) {
+        studioPlaybackNoteIndex++;
+    }
+
+    function updateStudioFrame(now) {
+        if (!isStudioPlaying) return;
+
+        const delta = (now - studioLastFrameTime) / 1000;
+        studioLastFrameTime = now;
+
+        const prevTime = studioPlaybackTime;
+        studioPlaybackTime += delta * playbackSpeed;
+
+        const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
+
+        if (studioPlaybackTime >= totalDurationSecs) {
+            stopStudioPlayback();
+            return;
+        }
+
+        const currentSystemIdx = Math.floor(studioPlaybackTime / systemDuration);
+        const systemTimeOffset = studioPlaybackTime - currentSystemIdx * systemDuration;
+
+        const cursorX = systemTimeOffset * pixelsPerSecond + marginLeft;
+        const yOffset = currentSystemIdx * systemHeight + 40;
+
+        if (cursor) {
+            cursor.setAttribute('x1', cursorX);
+            cursor.setAttribute('x2', cursorX);
+            cursor.setAttribute('y1', yOffset + 10);
+            cursor.setAttribute('y2', yOffset + 210);
+        }
+
+        const scrollContainer = document.getElementById('sheet-tab-studio-content-vertical');
+        if (scrollContainer) {
+            const targetScrollTop = currentSystemIdx * systemHeight - scrollContainer.clientHeight / 2 + systemHeight / 2;
+            scrollContainer.scrollTop = Math.max(0, targetScrollTop);
+        }
+
+        // Audio Dispatcher (Dynamic Cursor-Indexed Trigger)
+        while (studioPlaybackNoteIndex < studioNotesMemory.length) {
+            const note = studioNotesMemory[studioPlaybackNoteIndex];
+            const shiftedStart = Math.max(0, note.time - firstNoteTime);
+            if (shiftedStart < studioPlaybackTime) {
+                if (shiftedStart >= prevTime) {
+                    const playDelay = Math.max(0, shiftedStart - prevTime) / playbackSpeed;
+                    const noteName = Tone.Frequency(note.midi, "midi").toNote();
+                    activeInstrument.triggerAttackRelease(noteName, note.duration, Tone.now() + playDelay, note.velocity);
+
+                    const noteHead = document.getElementById(`sheet-music-notation-studio-notehead-${studioPlaybackNoteIndex}`);
+                    const noteRect = document.getElementById(`sheet-music-notation-studio-note-rect-${studioPlaybackNoteIndex}`);
+                    if (noteHead) noteHead.setAttribute('fill', '#db2777');
+                    if (noteRect) noteRect.setAttribute('fill', '#db2777');
+                }
+                studioPlaybackNoteIndex++;
+            } else {
+                break;
+            }
+        }
+
+        // Visual release handler (analyzes only recent sliding window keys)
+        const checkStart = Math.max(0, studioPlaybackNoteIndex - 100);
+        for (let i = checkStart; i < studioPlaybackNoteIndex; i++) {
+            const note = studioNotesMemory[i];
+            const shiftedStart = Math.max(0, note.time - firstNoteTime);
+            const shiftedEnd = shiftedStart + note.duration;
+            if (prevTime < shiftedEnd && studioPlaybackTime >= shiftedEnd) {
+                const noteHead = document.getElementById(`sheet-music-notation-studio-notehead-${i}`);
+                const noteRect = document.getElementById(`sheet-music-notation-studio-note-rect-${i}`);
+                
+                const chkShowColors = document.getElementById('chk-show-colors');
+                const showColors = chkShowColors ? chkShowColors.checked : false;
+
+                let defaultColor = "";
+                if (note.midi >= 60) {
+                    defaultColor = showColors ? '#4f46e5' : '#111115';
+                } else {
+                    defaultColor = showColors ? '#d97706' : '#111115';
+                }
+
+                if (noteHead) noteHead.setAttribute('fill', defaultColor);
+                if (noteRect) noteRect.setAttribute('fill', defaultColor);
+            }
+        }
+
+        studioPlaybackTimer = requestAnimationFrame(updateStudioFrame);
+    }
+
+    studioPlaybackTimer = requestAnimationFrame(updateStudioFrame);
+}
+
+function stopStudioPlayback() {
+    isStudioPlaying = false;
+    if (studioPlaybackTimer) {
+        cancelAnimationFrame(studioPlaybackTimer);
+        studioPlaybackTimer = null;
+    }
+    studioPlaybackTime = 0;
+    activeInstrument.releaseAll();
+
+    const btnPlay = document.getElementById('btn-studio-play-score');
+    const btnStop = document.getElementById('btn-studio-stop-score');
+    if (btnPlay) {
+        btnPlay.textContent = "Play Studio Score";
+        btnPlay.style.backgroundColor = "#10b981";
+    }
+    if (btnStop) {
+        btnStop.disabled = true;
+    }
+
+    const cursor = document.getElementById('sheet-music-notation-studio-playback-cursor');
+    if (cursor) {
+        cursor.setAttribute('x1', 100);
+        cursor.setAttribute('x2', 100);
+        cursor.style.display = "none";
+    }
+
+    const scrollContainer = document.getElementById('sheet-tab-studio-content-vertical');
+    if (scrollContainer) scrollContainer.scrollTop = 0;
+
+    resetStudioNoteHighlights();
+}
+
+function resetStudioNoteHighlights() {
+    const chkShowColors = document.getElementById('chk-show-colors');
+    const showColors = chkShowColors ? chkShowColors.checked : false;
+
+    studioNotesMemory.forEach((note, index) => {
+        const noteHead = document.getElementById(`sheet-music-notation-studio-notehead-${index}`);
+        const noteRect = document.getElementById(`sheet-music-notation-studio-note-rect-${index}`);
+        
+        let defaultColor = "";
+        if (note.midi >= 60) {
+            defaultColor = showColors ? '#4f46e5' : '#111115';
+        } else {
+            defaultColor = showColors ? '#d97706' : '#111115';
+        }
+
+        if (noteHead) noteHead.setAttribute('fill', defaultColor);
+        if (noteRect) {
+            if (showColors) {
+                noteRect.setAttribute('fill', defaultColor);
+                noteRect.style.display = 'block';
+            } else {
+                noteRect.style.display = 'none';
+            }
+        }
+    });
+}
+
+// --- Event Listener Mapping ---
+function setupEventListeners() {
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => loadMidi(event.target.result);
+        reader.readAsArrayBuffer(file);
+    });
+
+    btnPlay.addEventListener('click', startPlayback);
+    btnPause.addEventListener('click', pausePlayback);
+    btnStop.addEventListener('click', stopPlayback);
+    btnRestart.addEventListener('click', () => { seekTo(0); startPlayback(); });
+
+    // Tab interface handlers inside the Sheet Music Modal
+    const btnTabNotation = document.getElementById('btn-tab-notation');
+    const btnTabRaw = document.getElementById('btn-tab-raw');
+    const btnTabStudio = document.getElementById('btn-tab-studio');
+
+    const contentNotation = document.getElementById('sheet-tab-notation-content');
+    const contentRaw = document.getElementById('sheet-tab-raw-content');
+    const contentStudio = document.getElementById('sheet-tab-studio-content');
+
+    // Sheet Playback Controls
+    const btnPlaySheet = document.getElementById('btn-play-sheet');
+    const btnStopSheet = document.getElementById('btn-stop-sheet');
+
+    // Embedded Section 2 Controls
+    const btnPlaySecond = document.getElementById('btn-play-second');
+    const btnStopSecond = document.getElementById('btn-stop-second');
+    const btnMaximizeSecond = document.getElementById('btn-maximize-second');
+    const btnDownloadSecond = document.getElementById('btn-download-second');
+    const chkShowColors = document.getElementById('chk-show-colors');
+
+    // Maximized Popup Modal Elements
+    const secondSheetMaxModal = document.getElementById('second-sheet-max-modal');
+    const btnPlayMax = document.getElementById('btn-play-max');
+    const btnStopMax = document.getElementById('btn-stop-max');
+    const btnDownloadMax = document.getElementById('btn-download-max');
+    const btnCloseMax = document.getElementById('btn-close-max');
+
+    // Custom studio nodes
+    const btnStudioUnlock = document.getElementById('btn-studio-unlock');
+    const studioFilterControls = document.getElementById('studio-filter-controls');
+    const btnStudioApplyFilter = document.getElementById('btn-studio-apply-filter');
+    const inputStudioCutVelo = document.getElementById('input-studio-cut-velo');
+    const btnStudioSave = document.getElementById('btn-studio-save');
+    const btnStudioPlayScore = document.getElementById('btn-studio-play-score');
+    const btnStudioStopScore = document.getElementById('btn-studio-stop-score');
+
+    btnTabNotation.addEventListener('click', () => {
+        stopSheetPlayback();
+        stopVerticalPlayback();
+        stopStudioPlayback();
+        btnTabNotation.style.backgroundColor = 'var(--accent-color)';
+        btnTabNotation.style.color = 'var(--text-color)';
+        btnTabRaw.style.backgroundColor = '#20202c';
+        btnTabRaw.style.color = 'var(--text-muted)';
+        btnTabStudio.style.backgroundColor = '#20202c';
+        btnTabStudio.style.color = 'var(--text-muted)';
+        contentNotation.style.display = 'block';
+        contentRaw.style.display = 'none';
+        contentStudio.style.display = 'none';
+
+        btnPlaySheet.style.display = 'inline-block';
+        btnStopSheet.style.display = 'inline-block';
+    });
+
+    btnTabRaw.addEventListener('click', () => {
+        stopSheetPlayback();
+        stopVerticalPlayback();
+        stopStudioPlayback();
+        btnTabRaw.style.backgroundColor = 'var(--accent-color)';
+        btnTabRaw.style.color = 'var(--text-color)';
+        btnTabNotation.style.backgroundColor = '#20202c';
+        btnTabNotation.style.color = 'var(--text-muted)';
+        btnTabStudio.style.backgroundColor = '#20202c';
+        btnTabStudio.style.color = 'var(--text-muted)';
+        contentNotation.style.display = 'none';
+        contentRaw.style.display = 'flex';
+        contentStudio.style.display = 'none';
+        populateRawMidiData();
+
+        btnPlaySheet.style.display = 'none';
+        btnStopSheet.style.display = 'none';
+    });
+
+    btnTabStudio.addEventListener('click', () => {
+        stopSheetPlayback();
+        stopVerticalPlayback();
+        stopStudioPlayback();
+        btnTabStudio.style.backgroundColor = 'var(--accent-color)';
+        btnTabStudio.style.color = 'var(--text-color)';
+        btnTabNotation.style.backgroundColor = '#20202c';
+        btnTabNotation.style.color = 'var(--text-muted)';
+        btnTabRaw.style.backgroundColor = '#20202c';
+        btnTabRaw.style.color = 'var(--text-muted)';
+        contentNotation.style.display = 'none';
+        contentRaw.style.display = 'none';
+        contentStudio.style.display = 'flex';
+        
+        updateStudioTable();
+        updateStudioPreview();
+        renderStudioSheetMusic('sheet-music-notation-studio');
+
+        btnPlaySheet.style.display = 'none';
+        btnStopSheet.style.display = 'none';
+    });
+
+    btnPlaySheet.addEventListener('click', () => {
+        startSheetPlayback();
+    });
+
+    btnStopSheet.addEventListener('click', stopSheetPlayback);
+
+    // Embedded Section 2 Control bindings
+    btnPlaySecond.addEventListener('click', () => {
+        if (isVerticalPlaying && activeVerticalContainerId === 'sheet-music-notation-vertical') {
+            stopVerticalPlayback();
+        } else {
+            startVerticalPlayback('sheet-music-notation-vertical');
+        }
+    });
+    btnStopSecond.addEventListener('click', stopVerticalPlayback);
+    btnDownloadSecond.addEventListener('click', () => downloadVerticalSVG('sheet-music-notation-vertical'));
+
+    // Toggle show colors
+    chkShowColors.addEventListener('change', () => {
+        renderVerticalSheetMusic('sheet-music-notation-vertical');
+        renderStudioSheetMusic('sheet-music-notation-studio');
+        if (secondSheetMaxModal.style.display === "flex") {
+            renderVerticalSheetMusic('sheet-music-notation-max');
+        }
+    });
+
+    // Maximized Score Modal controls and triggers
+    btnMaximizeSecond.addEventListener('click', () => {
+        stopSheetPlayback();
+        stopVerticalPlayback();
+        stopStudioPlayback();
+        secondSheetMaxModal.style.display = "flex";
+        renderVerticalSheetMusic('sheet-music-notation-max');
+    });
+
+    btnCloseMax.addEventListener('click', () => {
+        stopVerticalPlayback();
+        stopStudioPlayback();
+        secondSheetMaxModal.style.display = "none";
+    });
+
+    btnPlayMax.addEventListener('click', () => {
+        if (isVerticalPlaying && activeVerticalContainerId === 'sheet-music-notation-max') {
+            stopVerticalPlayback();
+        } else {
+            startVerticalPlayback('sheet-music-notation-max');
+        }
+    });
+    btnStopMax.addEventListener('click', stopVerticalPlayback);
+    btnDownloadMax.addEventListener('click', () => downloadVerticalSVG('sheet-music-notation-max'));
+
+    // Studio editing and saving systems listeners
+    btnStudioUnlock.addEventListener('click', () => {
+        isStudioUnlocked = !isStudioUnlocked;
+        if (isStudioUnlocked) {
+            btnStudioUnlock.textContent = "Lock Edit";
+            btnStudioUnlock.style.backgroundColor = "#ef4444";
+            btnStudioUnlock.style.color = "#ffffff";
+            studioFilterControls.style.display = 'flex';
+        } else {
+            btnStudioUnlock.textContent = "Unlock Edit";
+            btnStudioUnlock.style.backgroundColor = "#fbbf24";
+            btnStudioUnlock.style.color = "#111115";
+            studioFilterControls.style.display = 'none';
+        }
+        updateStudioTable();
+        updateStudioPreview();
+    });
+
+    inputStudioCutVelo.addEventListener('input', () => {
+        updateStudioPreview();
+    });
+
+    btnStudioApplyFilter.addEventListener('click', () => {
+        const threshold = parseFloat(inputStudioCutVelo.value) || 0.48;
+        // Keep only notes that have velocity strictly greater than the threshold value
+        studioNotesMemory = studioNotesMemory.filter(note => (note.velocity || 0.8) > threshold);
+        
+        updateStudioTable();
+        updateStudioPreview();
+        renderStudioSheetMusic('sheet-music-notation-studio');
+    });
+
+    btnStudioSave.addEventListener('click', () => {
+        if (!confirm("Overwrite the original sequencer notes with your Studio workspace changes?")) {
+            return;
+        }
+        // Overwrite master notes database array with modified sequence
+        activeNotesMemory = studioNotesMemory.map(note => ({ ...note }));
+        
+        // Update note counts on master stats bar
+        document.getElementById('stat-notes').textContent = activeNotesMemory.length;
+
+        // Re-render master sheet notation displays
+        renderSheetMusic();
+        alert("Changes successfully saved and applied to the main sequencer and staves.");
+    });
+
+    btnStudioPlayScore.addEventListener('click', startStudioPlayback);
+    btnStudioStopScore.addEventListener('click', stopStudioPlayback);
+
+    // Popup Sheet Music Event Handlers
+    btnSheet.addEventListener('click', () => {
+        if (!midiData) return;
+        pausePlayback();
+        elSheetModal.style.display = "flex";
+        renderSheetMusic();
+    });
+
+    btnCloseSheet.addEventListener('click', () => {
+        stopSheetPlayback();
+        stopVerticalPlayback();
+        stopStudioPlayback();
+        elSheetModal.style.display = "none";
+    });
+
+    btnLoop.addEventListener('click', () => {
+        isLooping = !isLooping;
+        btnLoop.textContent = `Loop: ${isLooping ? 'On' : 'Off'}`;
+        btnLoop.style.backgroundColor = isLooping ? 'var(--accent-color)' : '#20202c';
+    });
+
+    selectSpeed.addEventListener('change', (e) => {
+        playbackSpeed = parseFloat(e.target.value);
+    });
+
+    sliderZoom.addEventListener('input', (e) => {
+        noteSpeed = parseFloat(e.target.value);
+    });
+
+    selectInstrument.addEventListener('change', (e) => {
+        setInstrument(e.target.value);
+    });
+
+    sliderVolume.addEventListener('input', (e) => {
+        volNode.volume.value = parseFloat(e.target.value);
+    });
+
+    sliderReverb.addEventListener('input', (e) => {
+        reverbNode.wet.value = parseFloat(e.target.value);
+    });
+
+    elTimeline.addEventListener('input', (e) => {
+        seekTo(parseFloat(e.target.value));
+    });
+}
+
+function stopPlayback() {
+    isPlaying = false;
+    currentPlaybackTime = 0;
+    lastTriggeredTime = 0;
+    playbackNoteIndex = 0;
+    elTimeline.value = 0;
+    updateTimeDisplay();
+    btnPlay.disabled = (midiData === null);
+    btnPause.disabled = true;
+    activeInstrument.releaseAll();
+}
+
+function updatePlaybackNoteIndex() {
+    if (!activeNotesMemory || activeNotesMemory.length === 0) return;
+    let low = 0;
+    let high = activeNotesMemory.length - 1;
+    let ans = activeNotesMemory.length;
+    while (low <= high) {
+        let mid = Math.floor((low + high) / 2);
+        if (activeNotesMemory[mid].time >= currentPlaybackTime) {
+            ans = mid;
+            high = mid - 1;
+        } else {
+            low = mid + 1;
+        }
+    }
+    playbackNoteIndex = ans;
+}
+
+function seekTo(time) {
+    currentPlaybackTime = Math.max(0, Math.min(time, totalDuration));
+    lastTriggeredTime = currentPlaybackTime;
+    updatePlaybackNoteIndex();
+    updateTimeDisplay();
+    activeInstrument.releaseAll();
+}
+
+function updateTimeDisplay() {
+    const format = (t) => {
+        const m = Math.floor(t / 60).toString().padStart(2, '0');
+        const s = Math.floor(t % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+    };
+    elTimeDisplay.textContent = `${format(currentPlaybackTime)} / ${format(totalDuration)}`;
+}
+
+// --- Real-Time Execution Tick & Canvas Render Loop ---
+function renderFrame(now) {
+    requestAnimationFrame(renderFrame);
+
+    const delta = (now - lastFrameTime) / 1000;
+    lastFrameTime = now;
+
+    if (isPlaying && midiData) {
+        const prevTime = currentPlaybackTime;
+        currentPlaybackTime += delta * playbackSpeed;
+        
+        if (currentPlaybackTime >= totalDuration) {
+            if (isLooping) {
+                seekTo(0);
+            } else {
+                stopPlayback();
+            }
+        }
+
+        elTimeline.value = currentPlaybackTime;
+        updateTimeDisplay();
+
+        // Audio Note Trigger Scheduler (Highly Optimized Pointer check)
+        while (playbackNoteIndex < activeNotesMemory.length) {
+            const note = activeNotesMemory[playbackNoteIndex];
+            if (note.time < currentPlaybackTime) {
+                if (note.time >= prevTime) {
+                    const playDelay = Math.max(0, note.time - prevTime) / playbackSpeed;
+                    activeInstrument.triggerAttackRelease(note.name, note.duration, Tone.now() + playDelay, note.velocity);
+                }
+                playbackNoteIndex++;
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Draw Process
+    ctx.clearRect(0, 0, elCanvas.width, elCanvas.height);
+
+    const currentlyActiveMidiKeys = new Set();
+
+    if (midiData) {
+        // Fetch the clipped visible notes slice instead of scanning all notes
+        const visibleSlice = getVisibleNotesSlice();
+        
+        visibleSlice.forEach(note => {
+            // Compute visual spatial layout bounds
+            const noteVisualYStart = elCanvas.height - ((note.time - currentPlaybackTime) * noteSpeed);
+            const noteVisualHeight = note.duration * noteSpeed;
+            const noteVisualYEnd = noteVisualYStart - noteVisualHeight;
+
+            // Skip processing if rendering outside visible screen bounds
+            if (noteVisualYStart < 0 || noteVisualYEnd > elCanvas.height) return;
+
+            const isNoteActiveNow = (currentPlaybackTime >= note.time && currentPlaybackTime <= note.time + note.duration);
+            if (isNoteActiveNow) {
+                currentlyActiveMidiKeys.add(note.midi);
+                
+                // Particle collision generation
+                if (Math.random() < 0.25) {
+                    const isBlack = IS_BLACK_KEY[note.midi % 12];
+                    const noteX = getNoteX(note.midi) + (isBlack ? blackKeyWidth : whiteKeyWidth) / 2;
+                    spawnParticles(noteX, elCanvas.height, isBlack ? '#a855f7' : '#818cf8');
+                }
+            }
+
+            // Render dynamic linear-gradient visual paths
+            const isBlack = IS_BLACK_KEY[note.midi % 12];
+            const x = getNoteX(note.midi);
+            const w = isBlack ? blackKeyWidth : whiteKeyWidth;
+
+            const noteGrad = ctx.createLinearGradient(x, noteVisualYEnd, x + w, noteVisualYStart);
+            if (isNoteActiveNow) {
+                noteGrad.addColorStop(0, '#e879f9');
+                noteGrad.addColorStop(1, '#a855f7');
+            } else {
+                noteGrad.addColorStop(0, isBlack ? '#4f46e5' : '#6366f1');
+                noteGrad.addColorStop(1, isBlack ? '#1e1b4b' : '#312e81');
+            }
+
+            ctx.fillStyle = noteGrad;
+            ctx.beginPath();
+            ctx.roundRect(x + 2, noteVisualYEnd, w - 4, noteVisualHeight, 6);
+            ctx.fill();
+
+            // Active glow trace element
+            if (isNoteActiveNow) {
+                ctx.shadowColor = '#c084fc';
+                ctx.shadowBlur = 10;
+                ctx.fillStyle = '#f3e8ff';
+                ctx.fillRect(x + 2, elCanvas.height - 4, w - 4, 4);
+                ctx.shadowBlur = 0; // Reset canvas shadow context
+            }
+        });
+    }
+
+    // Real-time Live Chord computational readout
+    document.getElementById('stat-chord').textContent = identifyCurrentChord(currentlyActiveMidiKeys);
+
+    // Update Physical DOM Keyboard Key highlights
+    pianoKeysMap.forEach((elKey, midi) => {
+        if (currentlyActiveMidiKeys.has(midi)) {
+            elKey.classList.add('active');
+        } else {
+            elKey.classList.remove('active');
+        }
+    });
+
+    // Animate kinetic particle physics
+    particles.forEach((p, idx) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.12; // simulated grav force
+        p.alpha -= p.decay;
+        
+        if (p.alpha <= 0) {
+            particles.splice(idx, 1);
+        } else {
+            ctx.save();
+            ctx.globalAlpha = p.alpha;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    });
+}
+
+// Letakkan skrip ini di bahagian bawah fail midiano.html sebelum tag penutup </body>
+window.addEventListener("DOMContentLoaded", () => {
+  // 1. Ekstrak URL fail MIDI daripada parameter URL (?midi=...) atau Storage tempatan
+  const urlParams = new URLSearchParams(window.location.search);
+  const midiUrl = urlParams.get("midi") || localStorage.getItem("t1era_current_midi");
+
+  if (midiUrl) {
+    console.log("[T1ERA AUTO-LOAD] Aliran fail MIDI dikesan:", midiUrl);
+    
+    // 2. Muat turun fail MIDI asal sebagai data binari (ArrayBuffer)
+    fetch(midiUrl)
+      .then(res => {
+        if (!res.ok) throw new Error("Gagal mengambil fail MIDI dari Firebase Storage.");
+        return res.arrayBuffer();
+      })
+      .then(arrayBuffer => {
+        // 3. Masukkan data binari fail ke dalam sistem pemain Midiano anda
+        
+        // KES A: Jika Midiano sedia ada anda mendedahkan fungsi pemuatan ArrayBuffer global
+        if (window.midiano && typeof window.midiano.loadArrayBuffer === "function") {
+          window.midiano.loadArrayBuffer(arrayBuffer, "t1era_score.mid");
+          console.log("[T1ERA AUTO-LOAD] Fail MIDI berjaya disuap ke objek midiano.");
+        } 
+        // KES B: Jika menggunakan fungsi tersuai
+        else if (typeof window.loadMidiArrayBuffer === "function") {
+          window.loadMidiArrayBuffer(arrayBuffer);
+          console.log("[T1ERA AUTO-LOAD] Fail MIDI berjaya disuap ke fungsi global.");
+        } 
+        // KES C (Fail-Safe): Mensimulasikan kemasukan fail terus ke dalam kotak input fail <input type="file">
+        // yang biasa digunakan oleh pelantar asal Midiano untuk memuat turun fail
+        else {
+          const file = new File([arrayBuffer], "t1era_score.mid", { type: "audio/midi" });
+          const container = new DataTransfer();
+          container.items.add(file);
+          
+          // Cari input fail asli di halaman midiano.html anda
+          const fileInput = document.querySelector("input[type='file']");
+          if (fileInput) {
+            fileInput.files = container.files;
+            // Cetuskan acara tukar (change event) supaya Midiano sedar fail baru telah dimasukkan
+            fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+            console.log("[T1ERA AUTO-LOAD] Fail MIDI disimulasikan ke input fail Midiano.");
+          } else {
+            console.warn("[T1ERA AUTO-LOAD] Tiada input fail atau fungsi pemuatan dikesan di midiano.html.");
+          }
+        }
+      })
+      .catch(err => {
+        console.error("[T1ERA AUTO-LOAD ERROR] Gagal memuatkan fail MIDI secara automatik:", err);
+      });
+  }
+})
