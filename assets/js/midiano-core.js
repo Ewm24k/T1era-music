@@ -54,6 +54,10 @@ let samplerLoaded = false;
 let reverbNode = null;
 let volNode = null;
 
+// Audio Optimization DSP Nodes
+let masterCompressor = null;
+let masterLimiter = null;
+
 // Setup a global variable for splendid piano
 let splendidPiano = null;
 let splendidLoaded = false;
@@ -143,14 +147,25 @@ class SmplrToneWrapper {
 
 // --- Audio Synthesizer Construction ---
 function setupAudioEngine() {
-    // Master Reverb Unit
-    reverbNode = new Tone.Reverb({
-        roomSize: 0.85,
-        wet: 0.3
-    }).toDestination();
+    // 1. Create a Master Limiter to physically clamp clipping spikes above -1dB
+    masterLimiter = new Tone.Limiter(-1).toDestination();
 
-    // Master Volume Node
-    volNode = new Tone.Volume(-6).connect(reverbNode);
+    // 2. Create a Master Compressor to dynamically smooth heavy chords
+    masterCompressor = new Tone.Compressor({
+        threshold: -12, // dB offset threshold
+        ratio: 4,       // dynamic squeeze ratio
+        attack: 0.02,   // fast attack to instantly catch peaks
+        release: 0.1    // quick release
+    }).connect(masterLimiter);
+
+    // 3. Connect Reverb Unit to Compressor
+    reverbNode = new Tone.Reverb({
+        roomSize: 0.8,  // Slightly reduced from 0.85 to prevent infinite muddy echo accumulation
+        wet: 0.25       // Lower wet mix slightly to preserve crisp attack transients
+    }).connect(masterCompressor);
+
+    // 4. Connect Master Volume to Reverb
+    volNode = new Tone.Volume(-8).connect(reverbNode);
 
     // Initiate loading of sampled piano assets asynchronously immediately
     loadSampledPiano();
@@ -177,7 +192,7 @@ function loadSampledPiano() {
             "A6": "A6.mp3", "C7": "C7.mp3", "D#7": "Ds7.mp3", "F#7": "Fs7.mp3",
             "A7": "A7.mp3", "C8": "C8.mp3"
         },
-        release: 1.5,
+        release: 1.1, // Gently optimized down from 1.5 to prevent voice build-up under heavy notes load
         baseUrl: "https://tonejs.github.io/audio/salamander/",
         onload: () => {
             samplerLoaded = true;
@@ -254,38 +269,38 @@ async function setInstrument(type) {
         } else {
             // Temporary warm synth fallback while downloading (Optimized with voice caps)
             activeInstrument = new Tone.PolySynth(Tone.Synth, {
-                maxPolyphony: 32,
+                maxPolyphony: 24, // Safety limit to prevent audio engine choking
                 oscillator: { type: "sine" },
-                envelope: { attack: 0.005, decay: 1.5, sustain: 0.15, release: 1.2 }
+                envelope: { attack: 0.005, decay: 1.2, sustain: 0.1, release: 0.8 }
             }).connect(volNode);
         }
     } else if (type === 'grand') {
         activeInstrument = new Tone.PolySynth(Tone.Synth, {
-            maxPolyphony: 32,
+            maxPolyphony: 24, // Optimized limit down from 32
             oscillator: { type: "sine" },
-            envelope: { attack: 0.005, decay: 1.5, sustain: 0.15, release: 1.2 }
+            envelope: { attack: 0.005, decay: 1.2, sustain: 0.1, release: 0.8 }
         }).connect(volNode);
     } else if (type === 'rhodes') {
         activeInstrument = new Tone.PolySynth(Tone.FMSynth, {
-            maxPolyphony: 32,
+            maxPolyphony: 24, // Optimized limit down from 32
             harmonicity: 3.05,
-            modulationIndex: 12,
+            modulationIndex: 10,
             oscillator: { type: "sine" },
-            envelope: { attack: 0.008, decay: 1.8, sustain: 0.1, release: 1.0 },
+            envelope: { attack: 0.008, decay: 1.5, sustain: 0.1, release: 0.8 },
             modulation: { type: "triangle" },
-            modulationEnvelope: { attack: 0.01, decay: 0.3, sustain: 0.0, release: 0.3 }
+            modulationEnvelope: { attack: 0.01, decay: 0.25, sustain: 0.0, release: 0.25 }
         }).connect(volNode);
     } else if (type === 'ambient') {
         activeInstrument = new Tone.PolySynth(Tone.Synth, {
-            maxPolyphony: 32,
+            maxPolyphony: 16, // Ambient pads use extremely long decays, capped lower to prevent CPU buffer underruns
             oscillator: { type: "triangle" },
-            envelope: { attack: 0.18, decay: 2.5, sustain: 0.6, release: 2.8 }
+            envelope: { attack: 0.15, decay: 2.0, sustain: 0.5, release: 2.0 }
         }).connect(volNode);
     } else if (type === 'chiptune') {
         activeInstrument = new Tone.PolySynth(Tone.Synth, {
-            maxPolyphony: 32,
+            maxPolyphony: 24, // Optimized limit down from 32
             oscillator: { type: "square" },
-            envelope: { attack: 0.002, decay: 0.4, sustain: 0.2, release: 0.4 }
+            envelope: { attack: 0.002, decay: 0.3, sustain: 0.15, release: 0.3 }
         }).connect(volNode);
     }
 }
@@ -371,6 +386,7 @@ function startPlayback() {
     updatePlaybackNoteIndex();
 }
 
+// Pause operation
 function pausePlayback() {
     isPlaying = false;
     btnPlay.disabled = false;
