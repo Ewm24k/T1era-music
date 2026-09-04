@@ -193,7 +193,7 @@ function renderSheetMusic() {
     renderVerticalSheetMusic('sheet-music-notation-vertical');
 }
 
-// Render the vertically wrapped portrait-layout sheet music with a white page aesthetic
+// Render the vertically wrapped portrait-layout sheet music with a white page aesthetic (Optimized for Mobile Portrait viewports)
 function renderVerticalSheetMusic(targetContainerId) {
     if (!midiData || activeNotesMemory.length === 0) return;
 
@@ -208,21 +208,34 @@ function renderVerticalSheetMusic(targetContainerId) {
     const lhStaffCenterY = 160;
     const dy = 3;
 
-    const marginLeft = 100;
-
-    // 1. Dynamic Width Calculation based on Maximize View viewport parent width
-    let containerWidth = 950; // default for embedded section 2
+    // 1. Responsive Dynamic Width Scaling for both regular mobile container and fullscreen maximized viewports
+    let containerWidth = 950; // default for embedded desktop
+    const parentWidth = document.getElementById(targetContainerId)?.parentElement?.clientWidth || window.innerWidth;
+    
     if (targetContainerId === 'sheet-music-notation-max') {
         const container = document.getElementById('max-modal-scroll-container');
         if (container && container.clientWidth) {
-            containerWidth = Math.max(950, container.clientWidth - 60); // Cushioned cushion padding buffer
+            containerWidth = Math.max(320, container.clientWidth - 40); // Cushion border buffer
         } else {
             containerWidth = Math.max(1200, window.innerWidth * 0.88);
+        }
+    } else {
+        // Scales embedded portrait view directly to fit mobile screen widths (320px minimum)
+        if (parentWidth < 950) {
+            containerWidth = Math.max(320, parentWidth - 20);
         }
     }
     
     const svgWidth = containerWidth;
-    const marginRight = 50;
+    let marginLeft = 100;
+    let marginRight = 50;
+    
+    // Narrow down margins to save space on mobile devices
+    if (containerWidth < 600) {
+        marginLeft = 40;
+        marginRight = 15;
+    }
+    
     const systemWidth = svgWidth - marginLeft - marginRight;
     const svgHeight = numSystems * systemHeight + 100; // Buffered bottom layout space for copyright
 
@@ -230,7 +243,7 @@ function renderVerticalSheetMusic(targetContainerId) {
     const chkShowColors = document.getElementById('chk-show-colors');
     const showColors = chkShowColors ? chkShowColors.checked : false;
 
-    // 2. Proportional Scaling so notes perfectly stretch across full maximized staves
+    // 2. Proportional Scaling so notes perfectly stretch across dynamically sized staves
     const localPixelsPerSecond = systemWidth / systemDuration;
 
     let svgContent = "";
@@ -394,15 +407,29 @@ function startVerticalPlayback(targetContainerId) {
 
     // Dynamic width calculation matched exactly with renderVerticalSheetMusic
     let containerWidth = 950;
+    const parentWidth = document.getElementById(targetContainerId)?.parentElement?.clientWidth || window.innerWidth;
+    
     if (targetContainerId === 'sheet-music-notation-max') {
         const container = document.getElementById('max-modal-scroll-container');
         if (container && container.clientWidth) {
-            containerWidth = Math.max(950, container.clientWidth - 60);
+            containerWidth = Math.max(320, container.clientWidth - 60);
         } else {
             containerWidth = Math.max(1200, window.innerWidth * 0.88);
         }
+    } else {
+        if (parentWidth < 950) {
+            containerWidth = Math.max(320, parentWidth - 20);
+        }
     }
-    const systemWidth = containerWidth - marginLeft - 50;
+    
+    let localMarginLeft = marginLeft;
+    let localMarginRight = 50;
+    if (containerWidth < 600) {
+        localMarginLeft = 40;
+        localMarginRight = 15;
+    }
+    
+    const systemWidth = containerWidth - localMarginLeft - localMarginRight;
     const localPixelsPerSecond = systemWidth / systemDuration;
 
     const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
@@ -436,7 +463,7 @@ function startVerticalPlayback(targetContainerId) {
         const currentSystemIdx = Math.floor(verticalPlaybackTime / systemDuration);
         const systemTimeOffset = verticalPlaybackTime - currentSystemIdx * systemDuration;
 
-        const cursorX = systemTimeOffset * localPixelsPerSecond + marginLeft;
+        const cursorX = systemTimeOffset * localPixelsPerSecond + localMarginLeft;
         const yOffset = currentSystemIdx * systemHeight + 40;
 
         if (cursor) {
@@ -878,9 +905,17 @@ function renderStudioSheetMusic(targetContainerId) {
     const dy = 3;
 
     const marginLeft = 100;
-    const systemWidth = 800;
+
+    // 1. Dynamic Width Calculation for Studio layout viewports on mobile
+    let containerWidth = 950;
+    const parentWidth = document.getElementById(targetContainerId)?.parentElement?.clientWidth || window.innerWidth;
+    if (parentWidth < 950) {
+        containerWidth = Math.max(320, parentWidth - 20);
+    }
+
     const marginRight = 50;
-    const svgWidth = marginLeft + systemWidth + marginRight;
+    const systemWidth = containerWidth - marginLeft - marginRight;
+    const svgWidth = containerWidth;
     const svgHeight = numSystems * systemHeight + 100;
 
     const chkShowColors = document.getElementById('chk-show-colors');
@@ -1163,6 +1198,7 @@ function startStudioPlayback() {
     studioPlaybackTimer = requestAnimationFrame(updateStudioFrame);
 }
 
+// Stop studio playback
 function stopStudioPlayback() {
     isStudioPlaying = false;
     if (studioPlaybackTimer) {
