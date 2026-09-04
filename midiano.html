@@ -70,6 +70,9 @@
                 </div>
 
                 <button id="btn-loop">Loop: Off</button>
+                
+                <!-- Added Settings Gear Button -->
+                <button id="btn-settings" style="margin-left: 10px; min-width: 40px; padding: 8px 10px;" title="Settings">⚙️</button>
             </div>
         </div>
 
@@ -257,7 +260,7 @@
                 <div style="display: flex; gap: 12px; align-items: center;">
                     <h2 style="color: #111827; font-size: 1.3rem; font-weight: 700; margin: 0;">Full Sheet Music (Portrait Wrapped)</h2>
                     <button id="btn-play-max" style="background-color: #10b981; color: white; border: 1px solid #d1d5db; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Play Score</button>
-                    <button id="btn-stop-max" disabled style="background-color: #ef4444; color: white; border: 1px solid #d1d5db; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Stop Score</button>
+                    <button id="btn-stop-max" disabled style="background-color: #ef4444; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Stop Score</button>
                     <button id="btn-download-max" style="background-color: #4b5563; color: white; border: 1px solid #d1d5db; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Download SVG</button>
                 </div>
                 <button id="btn-close-max" style="background: #ef4444; color: white; border: none; border-radius: 6px; padding: 8px 16px; cursor: pointer; font-weight: 600; font-size: 0.9rem;">Close Fullscreen</button>
@@ -269,8 +272,32 @@
         </div>
     </div>
 
+    <!-- Added Modular Settings Overlay Panel Modal -->
+    <div id="settings-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.75); z-index: 1200; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div style="background: var(--panel-color); border: 1px solid var(--panel-border); border-radius: 12px; width: 320px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); position: relative; color: var(--text-color);">
+            <h3 style="margin-bottom: 20px; font-size: 1.1rem; border-bottom: 1px solid var(--panel-border); padding-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.51 1z"></path>
+                </svg>
+                Settings
+            </h3>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <span>Splash Particles Effect</span>
+                <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 22px;">
+                    <input type="checkbox" id="chk-toggle-splash" checked style="opacity: 0; width: 0; height: 0;">
+                    <span class="slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #20202c; transition: .3s; border-radius: 22px; border: 1px solid var(--panel-border);"></span>
+                </label>
+            </div>
+            
+            <button id="btn-close-settings" style="width: 100%; background: var(--accent-color); border: none; padding: 10px; border-radius: 6px; font-weight: 600; cursor: pointer; box-shadow: 0 0 10px var(--accent-glow); color: white;">Close</button>
+        </div>
+    </div>
+
     <!-- Separated JavaScript External Links in Exact Execution Order -->
     <script src="assets/js/midiano-core.js"></script>
+    <script src="assets/js/midiano-settings.js"></script>
     <script src="assets/js/midiano-visualizer.js"></script>
     <script src="assets/js/midiano-sheet.js"></script>
 </body>
