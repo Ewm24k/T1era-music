@@ -6,7 +6,7 @@ mengaktifkan sekatan CORS, dan berjalan menggunakan pelayan produksi WSGI Gunico
 
 NOTA PERUBAHAN:
 Sokongan YouTube diaktifkan secara asli menggunakan API youtube-mp36 yang munasabah & pantas.
-Ditukar kepada set(merge=True) dalam Firestore dan fail audio dimuat naik ke Storage 
+Ditukur kepada set(merge=True) dalam Firestore dan fail audio dimuat naik ke Storage 
 terlebih dahulu bagi menyelaraskan proses dengan mod muat naik biasa.
 
 [KEMASKINI BARU]
@@ -190,14 +190,25 @@ class CentralOrchestrator:
         print(f"[PROGRESS] {progress}% | Status: {status}")
 
     def upload_to_storage(self, local_path: Path, remote_path: str, bucket_name: str = None) -> str:
-        """Memuat naik sebarang fail (Audio / MIDI) ke Firebase Storage"""
+        """Memuat naik sebarang fail (Audio / MIDI) ke Firebase Storage dengan URL Firebase rasmi dan Token"""
         self._ensure_firebase()
         if self.firebase_active:
+            import uuid
+            from urllib.parse import quote
             target_bucket = storage.bucket(bucket_name) if bucket_name else self.bucket
             blob = target_bucket.blob(remote_path)
+            
+            # Generate secure Firebase Download Token
+            token = str(uuid.uuid4())
+            blob.metadata = {"firebaseStorageDownloadTokens": token}
+            
             blob.upload_from_filename(str(local_path))
-            blob.make_public()
-            return blob.public_url
+            blob.make_public()  # Keep direct GCS access working if needed
+            
+            # Construct the working Firebase Storage API URL with token
+            encoded_path = quote(remote_path, safe='')
+            firebase_url = f"https://firebasestorage.googleapis.com/v0/b/{target_bucket.name}/o/{encoded_path}?alt=media&token={token}"
+            return firebase_url
         return ""
 
     def run_pipeline(self, input_audio_path: Path, temp_work_dir: Path, is_cloud: bool, user_id: str = None, job_id: str = None, bucket_name: str = None, raw_audio_storage_path: str = None, track_title: str = None):
