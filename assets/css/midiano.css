@@ -402,6 +402,7 @@ select {
 .active-note-highlight text {
     fill: var(--accent-color) !important;
 }
+
 /* Toggle Switch Slider Styles */
 .switch input:checked + .slider {
     background-color: var(--accent-color) !important;
@@ -422,6 +423,7 @@ select {
 .switch input:checked + .slider:before {
     transform: translateX(22px);
 }
+
 /* Note Names Key Labels Styles */
 .key-label {
     position: absolute;
@@ -445,4 +447,131 @@ select {
 
 #piano-keyboard.show-labels .key-label {
     display: block; /* Native toggle show */
+}
+
+/* Responsive Mobile (9:16 / Portrait) Styles */
+@media (max-width: 768px) {
+    body {
+        height: 100dvh; /* Use dynamic viewport height for mobile browser address bars */
+    }
+
+    #control-panel {
+        padding: 8px 12px;
+        gap: 6px;
+    }
+
+    .panel-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+    }
+
+    .controls-group {
+        justify-content: center;
+        width: 100%;
+        gap: 6px;
+    }
+
+    button, label.file-label {
+        padding: 6px 10px;
+        font-size: 0.75rem;
+        flex: 1;
+        text-align: center;
+        min-width: 0; /* Allow flex shrinking */
+    }
+
+    select {
+        padding: 6px 20px 6px 8px;
+        font-size: 0.75rem;
+        width: 100%;
+    }
+
+    .select-wrapper {
+        width: 100%;
+    }
+
+    .slider-control {
+        padding: 2px 6px;
+        font-size: 0.7rem;
+        flex: 1;
+        justify-content: space-between;
+    }
+
+    .slider-control input[type="range"] {
+        width: 60px;
+    }
+
+    .timeline-container {
+        gap: 8px;
+        margin: 2px 0;
+    }
+
+    .time-display {
+        font-size: 0.75rem;
+        min-width: 65px;
+    }
+
+    .stats-container {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 4px;
+        padding: 6px 10px;
+        font-size: 0.7rem;
+    }
+
+    /* Keyboard Height Optimization for Mobile View */
+    #piano-keyboard {
+        height: 100px;
+        border-top-width: 2px;
+    }
+
+    .key.white {
+        border-bottom-width: 3px;
+    }
+
+    .key.black {
+        height: 55%;
+        border-bottom-width: 3px;
+    }
+
+    .key-label {
+        font-size: 0.45rem;
+        bottom: 6px;
+    }
+
+    .key.black .key-label {
+        display: none !important; /* Hide black key labels on mobile */
+    }
+
+    /* Sheet Music Modal Mobile Optimizations */
+    #sheet-content {
+        width: 95%;
+        height: 95%;
+        padding: 15px;
+        border-radius: 8px;
+    }
+
+    #btn-close-sheet {
+        top: 15px;
+        right: 15px;
+        padding: 6px 12px;
+        font-size: 0.8rem;
+    }
+
+    #sheet-tab-notation-content-vertical,
+    #sheet-tab-studio-content-vertical {
+        max-height: calc(100vh - 280px) !important;
+    }
+
+    /* Maximize popup modal Mobile optimizations */
+    #second-sheet-max-modal > div {
+        width: 100% !important;
+        height: 100% !important;
+        border-radius: 0 !important;
+        padding: 15px !important;
+    }
+
+    #max-modal-scroll-container {
+        padding: 10px 5px !important;
+    }
 }
