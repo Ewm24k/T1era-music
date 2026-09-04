@@ -82,9 +82,11 @@ function buildKeyElement(midi, isBlack) {
     pianoKeysMap.set(midi, key);
 }
 
+// Optimized dynamically to adapt to CSS media query keyboard heights
 function handleResize() {
+    const keyboardHeight = elKeyboard.clientHeight || 160;
     elCanvas.width = elCanvas.parentElement.clientWidth;
-    elCanvas.height = elCanvas.parentElement.clientHeight - 160;
+    elCanvas.height = elCanvas.parentElement.clientHeight - keyboardHeight;
     calculateLayoutMetrics();
     createKeyboard();
 }
