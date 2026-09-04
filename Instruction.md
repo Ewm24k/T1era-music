@@ -171,3 +171,7 @@ curl -i -X POST https://crock-blast-purchase.ngrok-free.dev/transcribe-vortex \
 ```
 tail -n 100 /home/tengkufiboking/T1era-music/error.log
 ```
+
+```
+grep -A 50 'yt_vl2xwo0gf_1788500407717' /home/tengkufiboking/T1era-music/error.log
+```
