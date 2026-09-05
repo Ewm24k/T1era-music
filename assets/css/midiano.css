@@ -954,3 +954,61 @@ select {
         padding: 10px 5px !important;
     }
 }
+
+/* =========================================================
+   MODERN DROPDOWN MENU COMPONENT STYLES
+   ========================================================= */
+.dropdown-wrapper {
+    position: relative;
+    display: inline-flex;
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    background: rgba(22, 22, 30, 0.95);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    min-width: 210px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    z-index: 1300; /* Higher than canvas overlays */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    pointer-events: none;
+}
+
+.dropdown-content.show {
+    display: block;
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.dropdown-content a {
+    color: var(--text-color);
+    padding: 11px 16px;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: background 0.2s ease, color 0.2s ease;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.dropdown-content a:last-child {
+    border-bottom: none;
+}
+
+.dropdown-content a:hover {
+    background: var(--accent-color);
+    color: #ffffff;
+}
