@@ -882,12 +882,20 @@ select {
         gap: 6px;
     }
 
-    button, label.file-label {
+    /* Adjusted: General button grid on mobile to format standard actions into a spacious, wrap-friendly 3-column array */
+    .controls-group button, 
+    .controls-group label.file-label {
         padding: 6px 10px;
         font-size: 0.75rem;
-        flex: 1;
+        flex: 1 1 calc(33.333% - 6px);
         text-align: center;
-        min-width: 0; /* Allow flex shrinking */
+        min-width: 85px; /* Ensures text fits nicely without line wraps */
+    }
+
+    /* Prevent selection lists from compressing standard buttons */
+    .select-wrapper {
+        width: 100%;
+        flex: 1 1 100%;
     }
 
     select {
@@ -896,14 +904,30 @@ select {
         width: 100%;
     }
 
-    .select-wrapper {
-        width: 100%;
+    /* Added: Placed Generate Music and Download buttons into a separate half-width block at the bottom of the tools dropdown */
+    #btn-transcribe, 
+    .dropdown-wrapper {
+        flex: 1 1 calc(50% - 6px) !important;
+        min-width: 140px !important;
     }
 
+    .dropdown-wrapper #btn-download-menu {
+        width: 100% !important;
+        padding: 8px 12px !important;
+    }
+
+    /* Reposition the dropdown content on mobile to align right to avoid horizontal overflow issues */
+    .dropdown-content {
+        min-width: 210px;
+        right: 0;
+        left: auto;
+    }
+
+    /* Set up paired mix knobs (Volume, Reverb, Speed, Zoom) inside a spacious 2-column set */
     .slider-control {
-        padding: 2px 6px;
+        padding: 4px 8px;
         font-size: 0.7rem;
-        flex: 1;
+        flex: 1 1 calc(50% - 6px);
         justify-content: space-between;
     }
 
