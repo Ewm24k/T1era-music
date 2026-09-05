@@ -58,6 +58,10 @@ let volNode = null;
 let masterCompressor = null;
 let masterLimiter = null;
 
+// Hardware Clock PLL Synchronization State Anchors
+let audioStartTime = 0;
+let logicalStartTime = 0;
+
 // Setup a global variable for splendid piano
 let splendidPiano = null;
 let splendidLoaded = false;
@@ -135,10 +139,14 @@ class SmplrToneWrapper {
             velocity: midiVelocity
         });
     }
-    // Added specific triggerRelease mapping to stop notes individually
+    // Added specific triggerRelease mapping to stop notes individually and prevent voice stacking
     triggerRelease(noteName, time) {
-        if (this.smplr && typeof this.smplr.stop === 'function') {
-            this.smplr.stop(noteName, time);
+        try {
+            if (this.smplr && typeof this.smplr.stop === 'function') {
+                this.smplr.stop(noteName, time);
+            }
+        } catch (e) {
+            // Safe silent catch
         }
     }
     releaseAll() {
@@ -153,7 +161,7 @@ class SmplrToneWrapper {
 
 // --- Audio Synthesizer Construction ---
 function setupAudioEngine() {
-    // 1. Optimize internal latency of Tone scheduler queue to preserve 80ms lookahead buffer
+    // 1. Optimize internal latency of Tone scheduler queue to preserve lookahead buffer
     Tone.context.lookAhead = 0.08;
 
     // 2. Create a Master Limiter to physically clamp clipping spikes above -1dB
@@ -161,10 +169,10 @@ function setupAudioEngine() {
 
     // 3. Create a Master Compressor to dynamically smooth heavy chords
     masterCompressor = new Tone.Compressor({
-        threshold: -16, // DB compression trigger offset
-        ratio: 3.5,     // dynamic compression ratio
-        attack: 0.02,   // fast attack to catch clipping transients
-        release: 0.08   // quick release envelope
+        threshold: -20, // DB compression trigger offset
+        ratio: 4,       // dynamic compression ratio
+        attack: 0.015,  // fast attack to instantly catch peaks
+        release: 0.12   // quick release envelope
     }).connect(masterLimiter);
 
     // 4. Connect Reverb Unit to Compressor
@@ -201,7 +209,7 @@ function loadSampledPiano() {
             "A6": "A6.mp3", "C7": "C7.mp3", "D#7": "Ds7.mp3", "F#7": "Fs7.mp3",
             "A7": "A7.mp3", "C8": "C8.mp3"
         },
-        release: 1.1, // Optimized down from 1.5 to prevent voice build-up under heavy notes load
+        release: 1.1, // Gently optimized down from 1.5 to prevent voice build-up under heavy notes load
         maxPolyphony: 24, // Strict voice limit directly on sampler level to protect CPU thread
         baseUrl: "https://tonejs.github.io/audio/salamander/",
         onload: () => {
@@ -302,7 +310,7 @@ async function setInstrument(type) {
         }).connect(volNode);
     } else if (type === 'ambient') {
         activeInstrument = new Tone.PolySynth(Tone.Synth, {
-            maxPolyphony: 16, // Ambient pads use extremely long decays, capped lower to prevent CPU buffer underruns
+            maxPolyphony: 16, // Capped lower to prevent CPU buffer underruns
             oscillator: { type: "triangle" },
             envelope: { attack: 0.15, decay: 2.0, sustain: 0.5, release: 2.0 }
         }).connect(volNode);
@@ -391,6 +399,11 @@ function startPlayback() {
     }
     isPlaying = true;
     lastFrameTime = performance.now();
+    
+    // Anchor the Phase-Locked Loop Hardware Clocks
+    audioStartTime = Tone.now();
+    logicalStartTime = currentPlaybackTime;
+    
     btnPlay.disabled = true;
     btnPause.disabled = false;
     updatePlaybackNoteIndex();
@@ -436,6 +449,11 @@ function updatePlaybackNoteIndex() {
 function seekTo(time) {
     currentPlaybackTime = Math.max(0, Math.min(time, totalDuration));
     lastTriggeredTime = currentPlaybackTime;
+    
+    // Re-Anchor the Phase-Locked Loop Clocks on seek
+    audioStartTime = Tone.now();
+    logicalStartTime = currentPlaybackTime;
+    
     updatePlaybackNoteIndex();
     updateTimeDisplay();
     activeInstrument.releaseAll();
