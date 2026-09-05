@@ -71,22 +71,6 @@ customStyle.innerHTML = `
     gap: 20px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
-  .proc-card {
-    width: 100%;
-    max-width: 500px;
-    background: rgba(10, 7, 22, 0.88);
-    border: 1px solid rgba(255, 145, 77, 0.25);
-    box-shadow: 0 20px 80px rgba(255, 145, 77, 0.15), 0 0 35px rgba(60, 42, 107, 0.25);
-    border-radius: 18px;
-    padding: 30px;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    text-align: left;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  }
   .proc-header {
     display: flex;
     align-items: center;
@@ -275,6 +259,9 @@ function toggleMenu() {
 menuToggle.addEventListener("click", toggleMenu);
 menuOverlay.addEventListener("click", toggleMenu);
 
+// Optimization Cache state to prevent multiple query trigger loops
+let hasProcessedRedirect = false;
+
 if (auth) {
   onAuthStateChanged(auth, (user) => {
     currentUserObj = user;
@@ -298,6 +285,13 @@ if (auth) {
         avatarFallbackEl.textContent = initials;
       }
       menuFooter.style.display = "flex";
+
+      // [CRITICAL PERFORMANCE FIXED]: Execute redirect handlers strictly inside 
+      // the authentication lifecycle after credentials have been verified and bound
+      setTimeout(() => {
+        handleTranscribeQueryRedirections();
+      }, 350);
+
     } else {
       // Buang status pengesahan jika tidak log masuk
       localStorage.removeItem("t1era_logged_in");
@@ -1748,7 +1742,7 @@ function openLiveTerminalConsole(userId, jobId) {
         setStepStatus("step-reconstruct", "success");
         setStepStatus("step-stabilize", "success");
         setStepStatus("step-styling", "loading");
-    } else if (status === "QUANTIZING_TIMELINE") {
+      } else if (status === "QUANTIZING_TIMELINE") {
         setStepStatus("step-transcribe", "success");
         setStepStatus("step-repair", "success");
         setStepStatus("step-reconstruct", "success");
@@ -1832,12 +1826,15 @@ bypassIntroForAuthenticatedUser();
 // SISTEM PEMINTASAN & HALAAN AUTOMATIK DARI MIDIANO.HTML
 // =========================================================
 function handleTranscribeQueryRedirections() {
+  if (hasProcessedRedirect) return;
+
   const urlParams = new URLSearchParams(window.location.search);
   const action = urlParams.get("action");
   const modelParam = urlParams.get("model");
   const youtubeParam = urlParams.get("youtube");
 
   if (action === "transcribe") {
+    hasProcessedRedirect = true;
     console.log("[T1ERA ROUTER] Halaan dari midiano.html dikesan.");
     
     // 1. Force visual console active instantly
@@ -1873,8 +1870,3 @@ function handleTranscribeQueryRedirections() {
     }
   }
 }
-
-// Attach the redirection observer as part of DOM Loaded sequence
-window.addEventListener("DOMContentLoaded", () => {
-  handleTranscribeQueryRedirections();
-})
