@@ -58,6 +58,39 @@ let volNode = null;
 let masterCompressor = null;
 let masterLimiter = null;
 
+// --- Voice Management (added for polyphony / dropout fix) ---
+// Tracks currently-sounding voices so we can gracefully release the quietest
+// one before hitting the polyphony ceiling, instead of letting the sampler
+// hard-cut the oldest voice (which is what produced the audible "choke" /
+// sudden silence when many keys played at once).
+const MAX_ACTIVE_VOICES = 32; // tune per device; try 24-40
+let activeVoiceLog = []; // { note, velocity, releaseTime }
+
+function triggerNoteWithVoiceGuard(noteName, duration, time, velocity) {
+    if (!activeInstrument) return;
+
+    // Drop voices from the log whose sound should already have finished
+    const now = Tone.now();
+    activeVoiceLog = activeVoiceLog.filter(v => v.releaseTime > now);
+
+    if (activeVoiceLog.length >= MAX_ACTIVE_VOICES) {
+        // Release the quietest currently-held voice instead of letting the
+        // engine hard-kill the oldest one — much less audible.
+        activeVoiceLog.sort((a, b) => a.velocity - b.velocity);
+        const victim = activeVoiceLog.shift();
+        if (victim && typeof activeInstrument.triggerRelease === 'function') {
+            activeInstrument.triggerRelease(victim.note, now);
+        }
+    }
+
+    activeInstrument.triggerAttackRelease(noteName, duration, time, velocity);
+    activeVoiceLog.push({
+        note: noteName,
+        velocity: velocity || 0.8,
+        releaseTime: (time || now) + (duration || 0.1) + 0.15
+    });
+}
+
 // Hardware Clock PLL Synchronization State Anchors
 let audioStartTime = 0;
 let logicalStartTime = 0;
@@ -162,17 +195,26 @@ class SmplrToneWrapper {
 // --- Audio Synthesizer Construction ---
 function setupAudioEngine() {
     // 1. Optimize internal latency of Tone scheduler queue to preserve lookahead buffer
-    Tone.context.lookAhead = 0.08;
+    // Raised from 0.08 -> 0.15: dense chords/runs were blowing past the old
+    // 80ms buffer while the render loop was also doing canvas/particle work
+    // on the same thread, causing the scheduler to fall behind and produce
+    // the "laggy / cuts out for a second" symptom under heavy polyphony.
+    Tone.context.lookAhead = 0.15;
+    // Smaller scheduler tick so playback stays smoother when many notes
+    // are queued back-to-back.
+    Tone.context.updateInterval = 0.03;
 
     // 2. Create a Master Limiter to physically clamp clipping spikes above -1dB
     masterLimiter = new Tone.Limiter(-1).toDestination();
 
     // 3. Create a Master Compressor to dynamically smooth heavy chords
+    // Softened attack/ratio slightly so sudden bursts of many simultaneous
+    // notes don't get slammed all at once (which read as an abrupt dip/choke).
     masterCompressor = new Tone.Compressor({
-        threshold: -20, // DB compression trigger offset
-        ratio: 4,       // dynamic compression ratio
-        attack: 0.015,  // fast attack to instantly catch peaks
-        release: 0.12   // quick release envelope
+        threshold: -18, // DB compression trigger offset
+        ratio: 3,       // dynamic compression ratio (was 4)
+        attack: 0.03,   // slower attack avoids grabbing every transient (was 0.015)
+        release: 0.25   // release envelope (was 0.12)
     }).connect(masterLimiter);
 
     // 4. Connect Reverb Unit to Compressor
@@ -209,8 +251,12 @@ function loadSampledPiano() {
             "A6": "A6.mp3", "C7": "C7.mp3", "D#7": "Ds7.mp3", "F#7": "Fs7.mp3",
             "A7": "A7.mp3", "C8": "C8.mp3"
         },
-        release: 1.1, // Gently optimized down from 1.5 to prevent voice build-up under heavy notes load
-        maxPolyphony: 24, // Strict voice limit directly on sampler level to protect CPU thread
+        // Lowered from 1.5 -> 1.1 previously; lowered further to 0.7 here.
+        // A long release keeps voices "held" long after a note visually ends,
+        // which fills the polyphony ceiling much faster during dense passages
+        // and triggers voice-stealing sooner than it looks like it should.
+        release: 0.7,
+        maxPolyphony: 32, // Raised from 24 — was hitting the ceiling too easily on dense chords/runs
         baseUrl: "https://tonejs.github.io/audio/salamander/",
         onload: () => {
             samplerLoaded = true;
@@ -244,6 +290,10 @@ async function setInstrument(type) {
             activeInstrument.dispose();
         }
     }
+
+    // Clear voice-guard log whenever the instrument changes so stale entries
+    // from the previous instrument don't cause unnecessary early releases.
+    activeVoiceLog = [];
 
     if (type === 'splendid') {
         if (!splendidPiano) {
@@ -287,20 +337,20 @@ async function setInstrument(type) {
         } else {
             // Temporary warm synth fallback while downloading (Optimized with voice caps)
             activeInstrument = new Tone.PolySynth(Tone.Synth, {
-                maxPolyphony: 24, // Safety limit to prevent audio engine choking
+                maxPolyphony: 32, // Raised from 24
                 oscillator: { type: "sine" },
                 envelope: { attack: 0.005, decay: 1.2, sustain: 0.1, release: 0.8 }
             }).connect(volNode);
         }
     } else if (type === 'grand') {
         activeInstrument = new Tone.PolySynth(Tone.Synth, {
-            maxPolyphony: 24, // Optimized limit down from 32
+            maxPolyphony: 32, // Raised from 24
             oscillator: { type: "sine" },
             envelope: { attack: 0.005, decay: 1.2, sustain: 0.1, release: 0.8 }
         }).connect(volNode);
     } else if (type === 'rhodes') {
         activeInstrument = new Tone.PolySynth(Tone.FMSynth, {
-            maxPolyphony: 24, // Optimized limit down from 32
+            maxPolyphony: 32, // Raised from 24
             harmonicity: 3.05,
             modulationIndex: 10,
             oscillator: { type: "sine" },
@@ -316,7 +366,7 @@ async function setInstrument(type) {
         }).connect(volNode);
     } else if (type === 'chiptune') {
         activeInstrument = new Tone.PolySynth(Tone.Synth, {
-            maxPolyphony: 24, // Optimized limit down from 32
+            maxPolyphony: 32, // Raised from 24
             oscillator: { type: "square" },
             envelope: { attack: 0.002, decay: 0.3, sustain: 0.15, release: 0.3 }
         }).connect(volNode);
@@ -415,6 +465,7 @@ function pausePlayback() {
     btnPlay.disabled = false;
     btnPause.disabled = true;
     activeInstrument.releaseAll();
+    activeVoiceLog = [];
 }
 
 function stopPlayback() {
@@ -427,6 +478,7 @@ function stopPlayback() {
     btnPlay.disabled = (midiData === null);
     btnPause.disabled = true;
     activeInstrument.releaseAll();
+    activeVoiceLog = [];
 }
 
 function updatePlaybackNoteIndex() {
@@ -457,6 +509,7 @@ function seekTo(time) {
     updatePlaybackNoteIndex();
     updateTimeDisplay();
     activeInstrument.releaseAll();
+    activeVoiceLog = [];
 }
 
 function updateTimeDisplay() {
