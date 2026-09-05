@@ -274,8 +274,9 @@ function renderFrame(now) {
     lastFrameTime = now;
 
     if (isPlaying && midiData) {
-        const prevTime = currentPlaybackTime;
-        currentPlaybackTime += delta * playbackSpeed;
+        // OPTIMIZED: Synchronize currentPlaybackTime directly with the sound card hardware clock
+        const elapsedRealTime = Tone.now() - audioStartTime;
+        currentPlaybackTime = logicalStartTime + (elapsedRealTime * playbackSpeed);
         
         if (currentPlaybackTime >= totalDuration) {
             if (isLooping) {
@@ -288,13 +289,30 @@ function renderFrame(now) {
         elTimeline.value = currentPlaybackTime;
         updateTimeDisplay();
 
-        // Audio Note Trigger Scheduler (Highly Optimized Pointer check)
+        // Audio Note Trigger Scheduler with Hardware-Bound Lookahead (PLL Clock Sync)
+        const lookahead = 0.100; // 100ms future queue window
+        const nextWindowTime = currentPlaybackTime + lookahead;
+
         while (playbackNoteIndex < activeNotesMemory.length) {
             const note = activeNotesMemory[playbackNoteIndex];
-            if (note.time < currentPlaybackTime) {
-                if (note.time >= prevTime) {
-                    const playDelay = Math.max(0, note.time - prevTime) / playbackSpeed;
-                    activeInstrument.triggerAttackRelease(note.name, note.duration, Tone.now() + playDelay, note.velocity);
+            if (note.time < nextWindowTime) {
+                // Calculate exact, mathematically perfect future hardware audio play time
+                const targetTime = audioStartTime + (note.time - logicalStartTime) / playbackSpeed;
+                
+                try {
+                    const noteName = Tone.Frequency(note.midi, "midi").toNote();
+                    if (noteName && activeInstrument) {
+                        if (Tone.context.state === 'suspended') {
+                            Tone.context.resume();
+                        }
+                        // Choke duplicate active pitches before trigger attack
+                        if (typeof activeInstrument.triggerRelease === 'function') {
+                            activeInstrument.triggerRelease(noteName, targetTime);
+                        }
+                        activeInstrument.triggerAttackRelease(noteName, note.duration, targetTime, note.velocity);
+                    }
+                } catch (e) {
+                    console.warn("Piano roll playback voice skipped safely:", e);
                 }
                 playbackNoteIndex++;
             } else {
@@ -305,6 +323,25 @@ function renderFrame(now) {
 
     // Draw Process
     ctx.clearRect(0, 0, elCanvas.width, elCanvas.height);
+
+    // Draw Octave Split Lines directly on the background (High Contrast & Antialiasing Rounding Optimized) [1]
+    if (window.showOctaveLines !== false) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(99, 102, 241, 0.4)"; // Highly visible elegant indigo grid
+        ctx.lineWidth = 1.5; // Thicker stroke prevents line fading
+        ctx.beginPath();
+        
+        // Draw vertical octave split lines at the exact left boundary of each C key
+        const octaveMidiNotes = [24, 36, 48, 60, 72, 84, 96, 108];
+        octaveMidiNotes.forEach(midi => {
+            const x = Math.round(getNoteX(midi)); // Round to integer prevents browser subpixel interpolation blur
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, elCanvas.height);
+        });
+        
+        ctx.stroke(); // Single-pass batch stroke optimizes GPU load
+        ctx.restore();
+    }
 
     currentlyActiveMidiKeys.clear(); // Reused directly to eliminate GC frame pauses
 
