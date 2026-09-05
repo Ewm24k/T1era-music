@@ -275,7 +275,7 @@
                     <h2 style="color: #111827; font-size: 1.3rem; font-weight: 700; margin: 0;">Full Sheet Music (Portrait Wrapped)</h2>
                     <button id="btn-play-max" style="background-color: #10b981; color: white; border: 1px solid #d1d5db; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Play Score</button>
                     <button id="btn-stop-max" disabled style="background-color: #ef4444; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Stop Score</button>
-                    <button id="btn-download-max" style="background-color: #4b5563; color: white; border: 1px solid #d1d5db; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Download SVG</button>
+                    <button id="btn-download-max" style="background-color: #4b5563; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Download SVG</button>
                 </div>
                 <button id="btn-close-max" style="background: #ef4444; color: white; border: none; border-radius: 6px; padding: 8px 16px; cursor: pointer; font-weight: 600; font-size: 0.9rem;">Close Fullscreen</button>
             </div>
@@ -311,6 +311,15 @@
                 <span>Show Key Labels (C-D-E)</span>
                 <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 22px;">
                     <input type="checkbox" id="chk-toggle-labels" style="opacity: 0; width: 0; height: 0;">
+                    <span class="slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #20202c; transition: .3s; border-radius: 22px; border: 1px solid var(--panel-border);"></span>
+                </label>
+            </div>
+
+            <!-- Added Toggle settings item 3: Octave Split Lines -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <span>Octave Split Lines</span>
+                <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 22px;">
+                    <input type="checkbox" id="chk-toggle-splits" checked style="opacity: 0; width: 0; height: 0;">
                     <span class="slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #20202c; transition: .3s; border-radius: 22px; border: 1px solid var(--panel-border);"></span>
                 </label>
             </div>
