@@ -843,9 +843,11 @@ select {
         gap: 6px;
     }
 
-    /* Mobile header container: configured to stretch fully across padding boundaries */
+    /* Mobile header container: stacks the title text and tools button vertically */
     .mobile-header-row {
         display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
         width: 100% !important;
         max-width: 100% !important;
         padding: 0 !important;
@@ -855,12 +857,19 @@ select {
         border-bottom: 1px solid var(--panel-border);
     }
 
-    /* Hide the mobile track status text ("No File Loaded") */
+    /* Styled active track title display centered above the full-width tools button */
     #mobile-track-title {
-        display: none !important;
+        display: block !important;
+        width: 100% !important;
+        text-align: center !important;
+        font-size: 0.85rem !important;
+        font-weight: 600 !important;
+        color: var(--text-color) !important;
+        margin-bottom: 6px !important;
+        line-height: 1.4 !important;
     }
 
-    /* Full-width tools expander button on mobile viewports with no left/right empty gaps */
+    /* Full-width expander tools button on mobile viewports with no left/right empty gaps */
     #btn-expand-tools {
         flex: 1 1 100% !important;
         width: 100% !important;
