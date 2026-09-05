@@ -135,6 +135,12 @@ class SmplrToneWrapper {
             velocity: midiVelocity
         });
     }
+    // Added specific triggerRelease mapping to stop notes individually
+    triggerRelease(noteName, time) {
+        if (this.smplr && typeof this.smplr.stop === 'function') {
+            this.smplr.stop(noteName, time);
+        }
+    }
     releaseAll() {
         if (this.smplr && typeof this.smplr.stop === 'function') {
             this.smplr.stop();
@@ -147,25 +153,28 @@ class SmplrToneWrapper {
 
 // --- Audio Synthesizer Construction ---
 function setupAudioEngine() {
-    // 1. Create a Master Limiter to physically clamp clipping spikes above -1dB
+    // 1. Optimize internal latency of Tone scheduler queue to preserve 80ms lookahead buffer
+    Tone.context.lookAhead = 0.08;
+
+    // 2. Create a Master Limiter to physically clamp clipping spikes above -1dB
     masterLimiter = new Tone.Limiter(-1).toDestination();
 
-    // 2. Create a Master Compressor to dynamically smooth heavy chords
+    // 3. Create a Master Compressor to dynamically smooth heavy chords
     masterCompressor = new Tone.Compressor({
-        threshold: -12, // dB offset threshold
-        ratio: 4,       // dynamic squeeze ratio
-        attack: 0.02,   // fast attack to instantly catch peaks
-        release: 0.1    // quick release
+        threshold: -16, // DB compression trigger offset
+        ratio: 3.5,     // dynamic compression ratio
+        attack: 0.02,   // fast attack to catch clipping transients
+        release: 0.08   // quick release envelope
     }).connect(masterLimiter);
 
-    // 3. Connect Reverb Unit to Compressor
+    // 4. Connect Reverb Unit to Compressor
     reverbNode = new Tone.Reverb({
-        roomSize: 0.8,  // Slightly reduced from 0.85 to prevent infinite muddy echo accumulation
-        wet: 0.25       // Lower wet mix slightly to preserve crisp attack transients
+        roomSize: 0.8,  // Clean decay width
+        wet: 0.25       // Lower wet mix slightly to preserve transient attacks
     }).connect(masterCompressor);
 
-    // 4. Connect Master Volume to Reverb
-    volNode = new Tone.Volume(-8).connect(reverbNode);
+    // 5. Connect Master Volume to Reverb
+    volNode = new Tone.Volume(-12).connect(reverbNode); // Lowered baseline output level to preserve digital headroom
 
     // Initiate loading of sampled piano assets asynchronously immediately
     loadSampledPiano();
@@ -192,7 +201,8 @@ function loadSampledPiano() {
             "A6": "A6.mp3", "C7": "C7.mp3", "D#7": "Ds7.mp3", "F#7": "Fs7.mp3",
             "A7": "A7.mp3", "C8": "C8.mp3"
         },
-        release: 1.1, // Gently optimized down from 1.5 to prevent voice build-up under heavy notes load
+        release: 1.1, // Optimized down from 1.5 to prevent voice build-up under heavy notes load
+        maxPolyphony: 24, // Strict voice limit directly on sampler level to protect CPU thread
         baseUrl: "https://tonejs.github.io/audio/salamander/",
         onload: () => {
             samplerLoaded = true;
