@@ -834,9 +834,35 @@ select {
         height: 100dvh; /* Use dynamic viewport height for mobile browser address bars */
     }
 
+    /* Baseline style for mobile header container */
+    .mobile-header-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        padding-bottom: 4px;
+    }
+
+    /* Hide the mobile track status text ("No File Loaded") */
+    #mobile-track-title {
+        display: none !important;
+    }
+
     /* Modified: Anchored mobile visualizer canvas base to the keyboard top */
     #visualizer-canvas {
         bottom: 100px;
+    }
+
+    /* Collapsible Tools dropdown mechanics inside control panel rows */
+    #control-panel .panel-row {
+        display: none; /* Collapsed by default on mobile viewports */
+        flex-direction: column;
+        gap: 10px;
+        width: 100%;
+    }
+
+    #control-panel.expanded .panel-row {
+        display: flex; /* Expands menu when 'expanded' class is present */
     }
 
     #control-panel {
@@ -901,6 +927,16 @@ select {
         gap: 4px;
         padding: 6px 10px;
         font-size: 0.7rem;
+    }
+
+    /* Scale down the branding watermark overlay on mobile screens */
+    .brand-logo {
+        top: 10px !important;
+        right: 10px !important;
+        padding: 4px 8px !important;
+        font-size: 0.55rem !important; /* Smaller text sizes under Android and iOS */
+        border-radius: 4px !important;
+        gap: 4px !important;
     }
 
     /* Keyboard Height Optimization for Mobile View */
