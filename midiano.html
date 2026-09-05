@@ -25,6 +25,20 @@
                 <button id="btn-restart" disabled>Restart</button>
                 <!-- Sheet Music Popup Button -->
                 <button id="btn-sheet" disabled>Sheet Music</button>
+
+                <!-- Moved "Generate Music" Orange Button Beside Sheet Music -->
+                <button id="btn-transcribe" style="background-color: #f35f22; border-color: #f35f22; color: #ffffff; font-weight: 600;" title="Generate Music">Generate Music</button>
+
+                <!-- Modern Dropdown Download Button wrapper -->
+                <div class="dropdown-wrapper">
+                    <button id="btn-download-menu" style="background-color: #4b5563; border-color: #4b5563; color: #ffffff;" disabled>Download</button>
+                    <div id="download-dropdown" class="dropdown-content">
+                        <a href="#" id="down-midi">🎵 Download MIDI File</a>
+                        <a href="#" id="down-json">📄 Download JSON Structure</a>
+                        <a href="#" id="down-svg">🎨 Download SVG Sheet</a>
+                        <a href="#" id="down-xml">🎼 Download MusicXML</a>
+                    </div>
+                </div>
             </div>
 
             <div class="controls-group">
@@ -73,9 +87,6 @@
                 
                 <!-- Settings Gear Button -->
                 <button id="btn-settings" style="margin-left: 10px; min-width: 40px; padding: 8px 10px;" title="Settings">⚙️</button>
-
-                <!-- "Generate Music" Orange Button -->
-                <button id="btn-transcribe" style="background-color: #f35f22; border-color: #f35f22; color: #ffffff; font-weight: 600; margin-left: 5px;" title="Generate Music">Generate Music</button>
             </div>
         </div>
 
@@ -411,6 +422,7 @@
     <script src="assets/js/midiano-core.js"></script>
     <script src="assets/js/midiano-settings.js"></script>
     <script src="assets/js/midiano-transcribe.js"></script>
+    <script src="assets/js/midiano-download.js"></script>
     <script src="assets/js/midiano-visualizer.js"></script>
     <script src="assets/js/midiano-sheet.js"></script>
 </body>
