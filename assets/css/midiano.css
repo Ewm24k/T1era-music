@@ -834,11 +834,25 @@ select {
         height: 100dvh; /* Use dynamic viewport height for mobile browser address bars */
     }
 
-    /* Mobile header container: configured to allow full-width children stretch */
+    /* Defensive layout setting to block collapse limits in mobile flex containers */
+    #control-panel {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        padding: 8px 12px;
+        gap: 6px;
+    }
+
+    /* Mobile header container: configured to stretch fully across padding boundaries */
     .mobile-header-row {
-        display: flex;
-        width: 100%;
-        padding-bottom: 8px;
+        display: flex !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        padding-bottom: 8px !important;
+        box-sizing: border-box !important;
+        border-bottom: 1px solid var(--panel-border);
     }
 
     /* Hide the mobile track status text ("No File Loaded") */
@@ -846,10 +860,11 @@ select {
         display: none !important;
     }
 
-    /* Full-width expander tools button on mobile viewports with no left/right empty gaps */
+    /* Full-width tools expander button on mobile viewports with no left/right empty gaps */
     #btn-expand-tools {
         flex: 1 1 100% !important;
         width: 100% !important;
+        max-width: 100% !important;
         margin: 0 !important;
         padding: 8px 12px !important;
         font-size: 0.75rem !important;
@@ -857,6 +872,7 @@ select {
         align-items: center;
         justify-content: center;
         gap: 6px;
+        box-sizing: border-box !important;
     }
 
     /* Modified: Anchored mobile visualizer canvas base to the keyboard top */
@@ -874,11 +890,6 @@ select {
 
     #control-panel.expanded .panel-row {
         display: flex; /* Expands menu when 'expanded' class is present */
-    }
-
-    #control-panel {
-        padding: 8px 12px;
-        gap: 6px;
     }
 
     .panel-row {
