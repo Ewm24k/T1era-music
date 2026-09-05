@@ -1,6 +1,7 @@
 // Initialize global setting states
 window.showSplashParticles = true;
 window.showKeyLabels = false;
+window.showOctaveLines = true; // Enabled by default [1]
 
 document.addEventListener("DOMContentLoaded", () => {
     const btnSettings = document.getElementById("btn-settings");
@@ -11,6 +12,9 @@ document.addEventListener("DOMContentLoaded", () => {
     // Target Key Labels Selector Node
     const chkToggleLabels = document.getElementById("chk-toggle-labels");
     const pianoKeyboard = document.getElementById("piano-keyboard");
+
+    // Target Octave Split Lines Toggle [1]
+    const chkToggleSplits = document.getElementById("chk-toggle-splits");
 
     // Open Settings Modal
     btnSettings.addEventListener("click", () => {
@@ -48,5 +52,10 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
             pianoKeyboard.classList.remove("show-labels");
         }
+    });
+
+    // Toggle Octave Split Lines Event Handler [1]
+    chkToggleSplits.addEventListener("change", (e) => {
+        window.showOctaveLines = e.target.checked;
     });
 });
