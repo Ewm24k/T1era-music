@@ -834,11 +834,9 @@ select {
         height: 100dvh; /* Use dynamic viewport height for mobile browser address bars */
     }
 
-    /* Baseline style for mobile header container - centered child layout */
+    /* Mobile header container: configured to allow full-width children stretch */
     .mobile-header-row {
         display: flex;
-        justify-content: center; /* Centered layout for mobile tools expander */
-        align-items: center;
         width: 100%;
         padding-bottom: 8px;
     }
@@ -848,14 +846,17 @@ select {
         display: none !important;
     }
 
-    /* Compact, centered tools expander button on mobile viewports */
+    /* Full-width expander tools button on mobile viewports with no left/right empty gaps */
     #btn-expand-tools {
-        flex: 0 1 auto !important;
-        width: auto !important;
-        min-width: 110px !important;
-        padding: 6px 12px !important;
+        flex: 1 1 100% !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 8px 12px !important;
         font-size: 0.75rem !important;
-        margin: 0 auto !important;
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
     }
 
     /* Modified: Anchored mobile visualizer canvas base to the keyboard top */
