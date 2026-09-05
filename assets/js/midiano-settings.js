@@ -58,4 +58,19 @@ document.addEventListener("DOMContentLoaded", () => {
     chkToggleSplits.addEventListener("change", (e) => {
         window.showOctaveLines = e.target.checked;
     });
+
+    // Expand / Collapse Mobile Tools Dropdown Panel
+    const btnExpandTools = document.getElementById("btn-expand-tools");
+    const controlPanel = document.getElementById("control-panel");
+    if (btnExpandTools && controlPanel) {
+        btnExpandTools.addEventListener("click", () => {
+            controlPanel.classList.toggle("expanded");
+            const isExpanded = controlPanel.classList.contains("expanded");
+            btnExpandTools.querySelector("span").textContent = isExpanded ? "Hide Tools" : "Show Tools";
+            const svg = btnExpandTools.querySelector("svg");
+            if (svg) {
+                svg.style.transform = isExpanded ? "rotate(180deg)" : "rotate(0deg)";
+            }
+        });
+    }
 });
