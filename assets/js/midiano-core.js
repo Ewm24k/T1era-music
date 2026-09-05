@@ -66,13 +66,58 @@ let masterLimiter = null;
 const MAX_ACTIVE_VOICES = 32; // tune per device; try 24-40
 let activeVoiceLog = []; // { note, velocity, releaseTime }
 
+// Per-pitch bookkeeping: if the same key is retriggered while its previous
+// hit is still ringing (common in dense/repeated-note passages), calling
+// triggerAttack again on top of it makes two overlapping voices on the same
+// sample, which phases/smears and can sound like a glitch. We release the
+// old one first.
+let activeVoiceByPitch = new Map(); // noteName -> releaseTime
+
+// Mega-chord / massive-burst congestion control: if an unusually large
+// number of note-on events land inside the same short window (e.g. a giant
+// block chord or a dense multi-hand run hits all at once), triggering every
+// single one synchronously is what causes the remaining "bit buggy" stutter
+// even after the voice-guard fix above. We cap how many *new* voices we're
+// willing to start per burst window and silently skip the extra low-velocity
+// ones — visually the keys still light up (that's driven elsewhere), but we
+// stop asking the audio engine to spin up more voices than it can service
+// smoothly in one instant.
+const BURST_WINDOW_SEC = 0.02;   // ~20ms — notes this close together count as one "burst"
+const MAX_TRIGGERS_PER_BURST = 18; // hard ceiling on new voices started within a burst
+let burstWindowStart = 0;
+let burstTriggerCount = 0;
+
 function triggerNoteWithVoiceGuard(noteName, duration, time, velocity) {
     if (!activeInstrument) return;
 
-    // Drop voices from the log whose sound should already have finished
     const now = Tone.now();
-    activeVoiceLog = activeVoiceLog.filter(v => v.releaseTime > now);
+    const scheduledTime = time || now;
 
+    // --- Burst congestion control ---
+    if (scheduledTime - burstWindowStart > BURST_WINDOW_SEC) {
+        // New burst window
+        burstWindowStart = scheduledTime;
+        burstTriggerCount = 0;
+    }
+    burstTriggerCount++;
+    if (burstTriggerCount > MAX_TRIGGERS_PER_BURST && (velocity || 0.8) < 0.55) {
+        // We're deep into a massive simultaneous-note burst and this is one
+        // of the quieter notes in it — skip starting a new voice for it
+        // entirely rather than adding more load on top of an already
+        // saturated instant. Louder/melody notes still get through.
+        return;
+    }
+
+    // --- Same-pitch retrigger guard ---
+    if (activeVoiceByPitch.has(noteName) && activeVoiceByPitch.get(noteName) > now) {
+        if (typeof activeInstrument.triggerRelease === 'function') {
+            activeInstrument.triggerRelease(noteName, now);
+        }
+        activeVoiceLog = activeVoiceLog.filter(v => v.note !== noteName);
+    }
+
+    // --- Overall polyphony guard (existing behavior) ---
+    activeVoiceLog = activeVoiceLog.filter(v => v.releaseTime > now);
     if (activeVoiceLog.length >= MAX_ACTIVE_VOICES) {
         // Release the quietest currently-held voice instead of letting the
         // engine hard-kill the oldest one — much less audible.
@@ -81,14 +126,13 @@ function triggerNoteWithVoiceGuard(noteName, duration, time, velocity) {
         if (victim && typeof activeInstrument.triggerRelease === 'function') {
             activeInstrument.triggerRelease(victim.note, now);
         }
+        activeVoiceByPitch.delete(victim?.note);
     }
 
     activeInstrument.triggerAttackRelease(noteName, duration, time, velocity);
-    activeVoiceLog.push({
-        note: noteName,
-        velocity: velocity || 0.8,
-        releaseTime: (time || now) + (duration || 0.1) + 0.15
-    });
+    const releaseTime = scheduledTime + (duration || 0.1) + 0.15;
+    activeVoiceLog.push({ note: noteName, velocity: velocity || 0.8, releaseTime });
+    activeVoiceByPitch.set(noteName, releaseTime);
 }
 
 // Hardware Clock PLL Synchronization State Anchors
@@ -203,6 +247,12 @@ function setupAudioEngine() {
     // Smaller scheduler tick so playback stays smoother when many notes
     // are queued back-to-back.
     Tone.context.updateInterval = 0.03;
+    // "playback" trades a little extra output latency for a larger, more
+    // forgiving audio buffer under the hood — worth it here since this is a
+    // visualizer/player, not a live-input instrument, and it's the setting
+    // that matters most for surviving massive simultaneous-note bursts
+    // without underrunning.
+    try { Tone.context.latencyHint = "playback"; } catch (e) { /* not all contexts allow reassignment after construction; safe to ignore */ }
 
     // 2. Create a Master Limiter to physically clamp clipping spikes above -1dB
     masterLimiter = new Tone.Limiter(-1).toDestination();
@@ -291,9 +341,13 @@ async function setInstrument(type) {
         }
     }
 
-    // Clear voice-guard log whenever the instrument changes so stale entries
-    // from the previous instrument don't cause unnecessary early releases.
+    // Clear voice-guard state whenever the instrument changes so stale
+    // entries from the previous instrument don't cause unnecessary early
+    // releases or bogus burst-window counts.
     activeVoiceLog = [];
+    activeVoiceByPitch.clear();
+    burstWindowStart = 0;
+    burstTriggerCount = 0;
 
     if (type === 'splendid') {
         if (!splendidPiano) {
@@ -466,6 +520,7 @@ function pausePlayback() {
     btnPause.disabled = true;
     activeInstrument.releaseAll();
     activeVoiceLog = [];
+    activeVoiceByPitch.clear();
 }
 
 function stopPlayback() {
@@ -479,6 +534,7 @@ function stopPlayback() {
     btnPause.disabled = true;
     activeInstrument.releaseAll();
     activeVoiceLog = [];
+    activeVoiceByPitch.clear();
 }
 
 function updatePlaybackNoteIndex() {
@@ -510,6 +566,7 @@ function seekTo(time) {
     updateTimeDisplay();
     activeInstrument.releaseAll();
     activeVoiceLog = [];
+    activeVoiceByPitch.clear();
 }
 
 function updateTimeDisplay() {
