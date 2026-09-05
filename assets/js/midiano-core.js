@@ -652,8 +652,10 @@ function setupEventListeners() {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Clear cached resolved title for manual uploads so it uses the file name
-        window.resolvedMidiTitle = file.name.replace(".mid", "").replace(".midi", "");
+        // Optimized: Only overwrite the resolved title if this is NOT the automated player simulator file
+        if (file.name !== "t1era_score.mid") {
+            window.resolvedMidiTitle = file.name.replace(".mid", "").replace(".midi", "");
+        }
 
         const reader = new FileReader();
         reader.onload = (event) => loadMidi(event.target.result);
