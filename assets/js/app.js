@@ -1648,7 +1648,7 @@ function openLiveTerminalConsole(userId, jobId) {
       const fakeInterval = setInterval(() => {
         fakeProgress += 3;
         if (progressBar) progressBar.style.width = `${Math.min(99, fakeProgress)}%`;
-        if (progressPct) progressPct.textContent = `${Math.min(99, fakeProgress)}%`;
+        if (progressPct) progressPct.textContent = `${Math.round(percent / 4)}%`;
 
         if (fakeProgress >= 40 && fakeProgress < 55) {
           setStepStatus("step-transcribe", "success");
@@ -1790,7 +1790,7 @@ function bypassIntroForAuthenticatedUser() {
     overlay.style.display = "none";
     loadingScreen.style.display = "none";
     
-    // Aktifkan landing screen & sediakan loop video secara senyap di belakang
+    // @ts-ignore
     landingScreen.classList.add("active");
     try {
       v2.play()
@@ -1857,16 +1857,18 @@ function handleTranscribeQueryRedirections() {
       }
     }
 
-    // 4. Pre-fill and auto-submit the YouTube stream if passed
+    // 4. Pre-fill and highlight the submit button (Satisfies Browser User Gesture Policy)
     if (youtubeParam && youtubeLinkInput) {
       youtubeLinkInput.value = decodeURIComponent(youtubeParam);
       
-      // Delay click slightly to allow DOM buffers to update safely
-      setTimeout(() => {
-        if (youtubeSubmitBtn) {
-          youtubeSubmitBtn.click();
-        }
-      }, 800);
+      // Update button styling to draw focus for a secure physical tap/gesture
+      if (youtubeSubmitBtn) {
+        youtubeSubmitBtn.innerHTML = "🚀 Start Transcription Engine";
+        youtubeSubmitBtn.style.backgroundColor = "#f35f22";
+        youtubeSubmitBtn.style.borderColor = "#f35f22";
+        youtubeSubmitBtn.style.boxShadow = "0 0 15px rgba(243, 95, 34, 0.4)";
+        youtubeSubmitBtn.style.fontWeight = "700";
+      }
     }
   }
 }
