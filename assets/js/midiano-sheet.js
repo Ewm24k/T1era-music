@@ -1,3 +1,22 @@
+// --- Shared massive-key / anti-choke playback guard ---
+// Prefers the triggerNoteWithVoiceGuard() function defined in the audio
+// engine script (handles same-pitch choking, overall polyphony stealing,
+// and massive-chord burst thinning in one place). Falls back to a plain
+// choke+attack call if that script isn't loaded, so this file still works
+// on its own.
+function playNoteSafely(noteName, duration, time, velocity) {
+    if (typeof triggerNoteWithVoiceGuard === 'function') {
+        triggerNoteWithVoiceGuard(noteName, duration, time, velocity);
+        return;
+    }
+    if (activeInstrument) {
+        if (typeof activeInstrument.triggerRelease === 'function') {
+            activeInstrument.triggerRelease(noteName, time);
+        }
+        activeInstrument.triggerAttackRelease(noteName, duration, time, velocity);
+    }
+}
+
 // Algorithmic spelling engine: Converts pitch numbers into properly spelled notes based on current Key Signature
 function midiToAbcPitch(midi, key) {
     const pitchClass = midi % 12;
@@ -516,11 +535,12 @@ function startVerticalPlayback(targetContainerId) {
                             if (Tone.context.state === 'suspended') {
                                 Tone.context.resume(); // Keep audio process active
                             }
-                            // Note Choking: gracefully stop the active decay of duplicate identical pitches before attacking
-                            if (typeof activeInstrument.triggerRelease === 'function') {
-                                activeInstrument.triggerRelease(noteName, Tone.now() + playDelay + lookahead);
-                            }
-                            activeInstrument.triggerAttackRelease(noteName, duration, Tone.now() + playDelay + lookahead, velocity);
+                            // Routed through the shared voice guard: handles same-pitch
+                            // choking, overall polyphony stealing, and massive-chord burst
+                            // thinning in one place, instead of an unconditional
+                            // release+attack on every note (extra audio-graph churn that
+                            // was part of what still glitched under dense passages).
+                            playNoteSafely(noteName, duration, Tone.now() + playDelay + lookahead, velocity);
                             notesTriggeredThisFrame++;
                         }
                     } catch (e) {
@@ -809,11 +829,11 @@ function startSheetPlayback() {
                             if (Tone.context.state === 'suspended') {
                                 Tone.context.resume();
                             }
-                            // Note Choking: gracefully stop identical pitch nodes before starting new triggers
-                            if (typeof activeInstrument.triggerRelease === 'function') {
-                                activeInstrument.triggerRelease(noteName, Tone.now() + playDelay + lookahead);
-                            }
-                            activeInstrument.triggerAttackRelease(noteName, duration, Tone.now() + playDelay + lookahead, velocity);
+                            // Routed through the shared voice guard: handles same-pitch
+                            // choking, overall polyphony stealing, and massive-chord burst
+                            // thinning in one place, instead of an unconditional
+                            // release+attack on every note.
+                            playNoteSafely(noteName, duration, Tone.now() + playDelay + lookahead, velocity);
                             notesTriggeredThisFrame++;
                         }
                     } catch (e) {
@@ -1160,11 +1180,11 @@ function startStudioPlayback() {
                             if (Tone.context.state === 'suspended') {
                                 Tone.context.resume();
                             }
-                            // Note Choking: gracefully stop identical pitch nodes before starting new triggers
-                            if (typeof activeInstrument.triggerRelease === 'function') {
-                                activeInstrument.triggerRelease(noteName, Tone.now() + playDelay + lookahead);
-                            }
-                            activeInstrument.triggerAttackRelease(noteName, duration, Tone.now() + playDelay + lookahead, velocity);
+                            // Routed through the shared voice guard: handles same-pitch
+                            // choking, overall polyphony stealing, and massive-chord burst
+                            // thinning in one place, instead of an unconditional
+                            // release+attack on every note.
+                            playNoteSafely(noteName, duration, Tone.now() + playDelay + lookahead, velocity);
                             notesTriggeredThisFrame++;
                         }
                     } catch (e) {
