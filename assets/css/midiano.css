@@ -237,7 +237,7 @@ select {
     top: 0;
     left: 0;
     width: 100%;
-    height: calc(100% - 160px);
+    bottom: 160px; /* Modified: Replaced height logic with absolute bottom boundary spacing */
     display: block;
 }
 
@@ -832,6 +832,11 @@ select {
 @media (max-width: 768px) {
     body {
         height: 100dvh; /* Use dynamic viewport height for mobile browser address bars */
+    }
+
+    /* Modified: Anchored mobile visualizer canvas base to the keyboard top */
+    #visualizer-canvas {
+        bottom: 100px;
     }
 
     #control-panel {
