@@ -24,6 +24,11 @@ body {
     overflow: hidden;
 }
 
+/* Mobile Header Row - Hidden by default on PC / Desktop versions */
+.mobile-header-row {
+    display: none;
+}
+
 /* Control Panel */
 #control-panel {
     background-color: var(--panel-color);
