@@ -72,7 +72,7 @@ let masterLimiter = null;
 // one before hitting the polyphony ceiling, instead of letting the sampler
 // hard-cut the oldest voice (which is what produced the audible "choke" /
 // sudden silence when many keys played at once).
-const MAX_ACTIVE_VOICES = IS_MOBILE_DEVICE ? 18 : 32; // lower ceiling on phones — less CPU headroom per voice
+const MAX_ACTIVE_VOICES = IS_MOBILE_DEVICE ? 14 : 32; // lower ceiling on phones — less CPU headroom per voice
 let activeVoiceLog = []; // { note, velocity, releaseTime }
 
 // Per-pitch bookkeeping: if the same key is retriggered while its previous
@@ -97,10 +97,33 @@ let activeVoiceByPitch = new Map(); // noteName -> releaseTime
 // bigger batch of due notes at once. Widen the burst window slightly and
 // lower the per-burst ceiling on mobile so that catch-up doesn't overwhelm
 // a phone's smaller CPU headroom the way it would on desktop.
-const BURST_WINDOW_SEC = IS_MOBILE_DEVICE ? 0.03 : 0.02;   // ~20-30ms — notes this close together count as one "burst"
-const MAX_TRIGGERS_PER_BURST = IS_MOBILE_DEVICE ? 10 : 18; // hard ceiling on new voices started within a burst
+const BURST_WINDOW_SEC = IS_MOBILE_DEVICE ? 0.035 : 0.02;   // ~20-35ms — notes this close together count as one "burst"
+const MAX_TRIGGERS_PER_BURST = IS_MOBILE_DEVICE ? 8 : 18; // hard ceiling on new voices started within a burst
 let burstWindowStart = 0;
 let burstTriggerCount = 0;
+
+// Removes a voice log entry by note name via in-place splice instead of
+// array.filter(). filter() allocates a brand-new array on every call — on a
+// phone, calling that on every single note trigger during a dense passage
+// creates enough garbage to cause GC micro-stalls (the "sound drops out for
+// a second then comes back" pattern). Splice mutates in place, no new array.
+function removeVoiceLogEntryByNote(noteName) {
+    for (let i = activeVoiceLog.length - 1; i >= 0; i--) {
+        if (activeVoiceLog[i].note === noteName) {
+            activeVoiceLog.splice(i, 1);
+        }
+    }
+}
+
+// Prunes expired voices in place (same allocation-avoidance reasoning as
+// above) instead of activeVoiceLog = activeVoiceLog.filter(...).
+function pruneExpiredVoiceLog(now) {
+    for (let i = activeVoiceLog.length - 1; i >= 0; i--) {
+        if (activeVoiceLog[i].releaseTime <= now) {
+            activeVoiceLog.splice(i, 1);
+        }
+    }
+}
 
 function triggerNoteWithVoiceGuard(noteName, duration, time, velocity) {
     if (!activeInstrument) return;
@@ -128,11 +151,11 @@ function triggerNoteWithVoiceGuard(noteName, duration, time, velocity) {
         if (typeof activeInstrument.triggerRelease === 'function') {
             activeInstrument.triggerRelease(noteName, now);
         }
-        activeVoiceLog = activeVoiceLog.filter(v => v.note !== noteName);
+        removeVoiceLogEntryByNote(noteName);
     }
 
     // --- Overall polyphony guard (existing behavior) ---
-    activeVoiceLog = activeVoiceLog.filter(v => v.releaseTime > now);
+    pruneExpiredVoiceLog(now);
     if (activeVoiceLog.length >= MAX_ACTIVE_VOICES) {
         // Release the quietest currently-held voice instead of letting the
         // engine hard-kill the oldest one — much less audible.
@@ -297,13 +320,25 @@ function setupAudioEngine() {
     }).connect(masterCompressor);
 
     // 5. Connect Master Volume to Reverb
-    volNode = new Tone.Volume(-12).connect(reverbNode); // Lowered baseline output level to preserve digital headroom
+    // Convolution reverb runs continuously regardless of note count or even
+    // "wet" mix level — lowering wet blends the output but doesn't stop the
+    // convolution itself from computing every sample. That's a fixed CPU
+    // tax a phone can't spare, so on mobile we skip the reverb node
+    // entirely and route straight to the compressor instead.
+    volNode = IS_MOBILE_DEVICE
+        ? new Tone.Volume(-12).connect(masterCompressor)
+        : new Tone.Volume(-12).connect(reverbNode); // Lowered baseline output level to preserve digital headroom
 
     // Initiate loading of sampled piano assets asynchronously immediately
     loadSampledPiano();
 
-    // Set initial fallback/dynamic instrument
-    setInstrument('sampled');
+    // Set initial fallback/dynamic instrument. Real piano samples are much
+    // more expensive to mix per-voice than a synthesized oscillator (each
+    // voice is a decoded audio buffer being resampled/mixed vs. a simple
+    // waveform), so phones default to a light synthesized piano instead —
+    // the sampler still loads in the background if the user switches to it
+    // manually, just isn't the default under load.
+    setInstrument(IS_MOBILE_DEVICE ? 'grand' : 'sampled');
 }
 
 // Load premium real concert piano samples asynchronously
@@ -329,7 +364,7 @@ function loadSampledPiano() {
         // which fills the polyphony ceiling much faster during dense passages
         // and triggers voice-stealing sooner than it looks like it should.
         release: 0.7,
-        maxPolyphony: IS_MOBILE_DEVICE ? 20 : 32, // lower ceiling on phones; still enough for dense chords/runs
+        maxPolyphony: IS_MOBILE_DEVICE ? 16 : 32, // lower ceiling on phones; still enough for dense chords/runs
         baseUrl: "https://tonejs.github.io/audio/salamander/",
         onload: () => {
             samplerLoaded = true;
@@ -414,20 +449,20 @@ async function setInstrument(type) {
         } else {
             // Temporary warm synth fallback while downloading (Optimized with voice caps)
             activeInstrument = new Tone.PolySynth(Tone.Synth, {
-                maxPolyphony: IS_MOBILE_DEVICE ? 20 : 32, // lower ceiling on phones
+                maxPolyphony: IS_MOBILE_DEVICE ? 16 : 32, // lower ceiling on phones
                 oscillator: { type: "sine" },
                 envelope: { attack: 0.005, decay: 1.2, sustain: 0.1, release: 0.8 }
             }).connect(volNode);
         }
     } else if (type === 'grand') {
         activeInstrument = new Tone.PolySynth(Tone.Synth, {
-            maxPolyphony: IS_MOBILE_DEVICE ? 20 : 32, // lower ceiling on phones
+            maxPolyphony: IS_MOBILE_DEVICE ? 16 : 32, // lower ceiling on phones
             oscillator: { type: "sine" },
             envelope: { attack: 0.005, decay: 1.2, sustain: 0.1, release: 0.8 }
         }).connect(volNode);
     } else if (type === 'rhodes') {
         activeInstrument = new Tone.PolySynth(Tone.FMSynth, {
-            maxPolyphony: IS_MOBILE_DEVICE ? 20 : 32, // lower ceiling on phones
+            maxPolyphony: IS_MOBILE_DEVICE ? 16 : 32, // lower ceiling on phones
             harmonicity: 3.05,
             modulationIndex: 10,
             oscillator: { type: "sine" },
@@ -443,7 +478,7 @@ async function setInstrument(type) {
         }).connect(volNode);
     } else if (type === 'chiptune') {
         activeInstrument = new Tone.PolySynth(Tone.Synth, {
-            maxPolyphony: IS_MOBILE_DEVICE ? 20 : 32, // lower ceiling on phones
+            maxPolyphony: IS_MOBILE_DEVICE ? 16 : 32, // lower ceiling on phones
             oscillator: { type: "square" },
             envelope: { attack: 0.002, decay: 0.3, sustain: 0.15, release: 0.3 }
         }).connect(volNode);
