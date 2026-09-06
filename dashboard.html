@@ -70,13 +70,9 @@
         .sidebar-logo {
             display: flex;
             align-items: center;
-            gap: 10px;
             padding-left: 8px;
             margin-bottom: 24px;
-        }
-
-        .logo-icon {
-            flex-shrink: 0;
+            height: 22px;
         }
 
         .logo-text {
@@ -163,7 +159,7 @@
         .playlist-color-dot.boost { background: #e9af51; }
         .playlist-color-dot.energy { background: #e95151; }
 
-        /* Sidebar Footer styling */
+        /* Sidebar Logout styling */
         .sidebar-footer {
             margin-top: auto;
             padding-top: 15px;
@@ -936,6 +932,143 @@
             opacity: 1;
         }
 
+        /* Modern Disclaimer Modal Styles */
+        .disclaimer-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(4, 4, 6, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            padding: 20px;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .disclaimer-card {
+            background: #0f0f13;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 480px;
+            position: relative;
+            padding: 28px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+            transform: translateY(0);
+            animation: slideUp 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .disclaimer-close-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: color 0.2s, transform 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4px;
+        }
+
+        .disclaimer-close-btn:hover {
+            color: #fff;
+            transform: scale(1.1);
+        }
+
+        .disclaimer-header {
+            margin-bottom: 18px;
+        }
+
+        .beta-badge {
+            background: rgba(243, 95, 34, 0.1);
+            color: var(--accent);
+            border: 1px solid rgba(243, 95, 34, 0.2);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .disclaimer-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: -0.01em;
+        }
+
+        .disclaimer-body {
+            color: var(--text-secondary);
+            font-size: 13px;
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .disclaimer-body p strong {
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .disclaimer-highlight-box {
+            background: rgba(255, 255, 255, 0.02);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 8px 8px 0;
+            padding: 12px 16px;
+            display: flex;
+            gap: 12px;
+            font-size: 12.5px;
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.5;
+        }
+
+        .disclaimer-footer {
+            margin-top: 24px;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .btn-acknowledge {
+            background: var(--accent-gradient);
+            border: none;
+            color: #fff;
+            font-family: inherit;
+            font-size: 12.5px;
+            font-weight: 600;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            width: 100%;
+        }
+
+        .btn-acknowledge:hover {
+            box-shadow: 0 0 15px rgba(243, 95, 34, 0.4);
+            transform: translateY(-1px);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
         /* ---------------------------------------------------------
            ADVANCED RESPONSIVE DESIGN (IOS / ANDROID SUPPORT)
            --------------------------------------------------------- */
@@ -1266,6 +1399,22 @@
                 stroke: var(--accent);
                 opacity: 1;
             }
+
+            /* Responsive Popup Styles */
+            .disclaimer-card {
+                padding: 22px;
+            }
+            .disclaimer-title {
+                font-size: 1.15rem;
+            }
+            .disclaimer-body {
+                font-size: 12px;
+                gap: 10px;
+            }
+            .disclaimer-highlight-box {
+                padding: 10px 12px;
+                font-size: 11.5px;
+            }
         }
     </style>
 </head>
@@ -1276,9 +1425,6 @@
         <!-- Left Sidebar Section (Hidden on Mobile View) -->
         <aside class="sidebar">
             <div class="sidebar-logo">
-                <svg class="logo-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#f35f22" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                </svg>
                 <span class="logo-text">T1ERA <span>Music</span></span>
             </div>
 
@@ -1364,9 +1510,6 @@
             <header class="header">
                 <!-- Mobile Brand (Visible only on mobile width formats) -->
                 <div class="mobile-brand">
-                    <svg class="logo-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#f35f22" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                    </svg>
                     <span class="logo-text">T1ERA <span>Music</span></span>
                 </div>
 
@@ -1613,6 +1756,38 @@
                 <span>Studio</span>
             </a>
         </nav>
+
+        <!-- Modern Disclaimer Popup / Modal -->
+        <div id="disclaimer-modal" class="disclaimer-overlay" style="display: none;">
+            <div class="disclaimer-card">
+                <button class="disclaimer-close-btn" id="close-disclaimer-btn" aria-label="Close disclaimer">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+                <div class="disclaimer-header">
+                    <span class="beta-badge">Beta Disclaimer</span>
+                    <h2 class="disclaimer-title">Welcome to T1ERA Studio</h2>
+                </div>
+                <div class="disclaimer-body">
+                    <p>T1ERA Music is not a standard streaming media player. Rather, it serves as an interactive catalog designed to help you find tracks you wish to <strong>transcribe into interactive piano sheets</strong>.</p>
+                    
+                    <div class="disclaimer-highlight-box">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:2px;">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        <span>All audio previews are limited to <strong>30 seconds</strong>. These streams are solely provided to help you recognize and confirm the identity of the track before loading it into the studio.</span>
+                    </div>
+
+                    <p>Because T1ERA is actively in its <strong>Beta phase</strong>, not all catalog tracks have specialized, database-trained AI piano models yet. If a trained model exists for your selected song, the engine will transcribe it with high precision. Otherwise, the platform will utilize a generalized pre-trained model which, while capable, may produce a less refined transcription.</p>
+                </div>
+                <div class="disclaimer-footer">
+                    <button class="btn-acknowledge" id="acknowledge-disclaimer-btn">Got It, Let's Go</button>
+                </div>
+            </div>
+        </div>
 
     </div>
 
