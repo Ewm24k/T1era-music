@@ -57,6 +57,7 @@ body, html {
 }
 .logo-icon {
     filter: drop-shadow(0 0 5px var(--accent-glow));
+    flex-shrink: 0;
 }
 .logo-text {
     font-weight: 700;
@@ -378,7 +379,7 @@ body, html {
     color: var(--bg-dark);
 }
 
-/* Categories & popular list segments layouts */
+/* Sections */
 .section-title-wrapper {
     display: flex;
     justify-content: space-between;
@@ -661,33 +662,301 @@ body, html {
     transform: translate(-50%, -50%);
 }
 
-/* Adaptive mobile layout adjustments */
+/* ---------------------------------------------------------
+   ADAPTIVE PHONE AND MOBILE MEDIA QUERIES (IOS & ANDROID)
+   --------------------------------------------------------- */
+.mobile-brand {
+    display: none;
+}
+.mobile-nav {
+    display: none;
+}
+
 @media (max-width: 1024px) {
     .popular-grid {
         grid-template-columns: repeat(4, 1fr);
     }
 }
+
 @media (max-width: 768px) {
+    body, html {
+        overflow-x: hidden;
+    }
+
+    /* Completely isolate layout sidebar */
     .sidebar {
-        width: 70px;
-        padding: 20px 10px;
+        display: none !important;
     }
-    .logo-text, .nav-divider {
-        display: none;
+
+    /* Setup bottom nav gap metrics on main content panel */
+    .main-content {
+        padding: 16px 16px calc(148px + env(safe-area-inset-bottom)) 16px !important;
+        background: radial-gradient(circle at 50% 0%, #121217 0%, var(--bg-dark) 100%);
+        gap: 24px;
     }
-    .sidebar-logo {
-        justify-content: center;
+
+    /* Redefine Responsive grid layouts for native mobile headers */
+    .header {
+        display: grid !important;
+        grid-template-columns: 1fr auto !important;
+        gap: 12px !important;
+        margin-bottom: 16px !important;
     }
-    .nav-item a {
-        justify-content: center;
+
+    .mobile-brand {
+        display: flex !important;
+        align-items: center;
+        gap: 8px;
+        grid-column: 1 !important;
+        order: 1 !important;
     }
-    .playlist-color-dot {
-        margin: 0 auto;
+    .mobile-brand .logo-text {
+        font-weight: 700;
+        font-size: 14.5px;
+        letter-spacing: -0.01em;
     }
-    .btn-logout span:last-child {
-        display: none;
+    .mobile-brand .logo-text span {
+        color: var(--accent-orange);
     }
+
+    .search-bar-wrapper {
+        grid-column: 1 / -1 !important;
+        width: 100% !important;
+        order: 3 !important;
+        background: rgba(255, 255, 255, 0.03);
+        padding: 8px 16px;
+    }
+
+    .header-right {
+        grid-column: 2 !important;
+        order: 2 !important;
+        gap: 8px !important;
+    }
+    .header-right .btn-piano-studio,
+    .header-right .icon-circle-btn {
+        display: none !important; 
+    }
+    .profile-widget {
+        padding: 4px 6px !important;
+    }
+    .profile-meta {
+        display: none !important;
+    }
+
+    /* Clean 2-column list setups */
     .popular-grid {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 12px !important;
+    }
+    .track-card {
+        padding: 8px !important;
+        border-radius: 12px !important;
+    }
+    .track-card-title {
+        font-size: 11px !important;
+    }
+    .track-card-artist {
+        font-size: 9.5px !important;
+    }
+
+    /* Custom 3D cover flow rotation overrides */
+    .carousel-container {
+        height: 160px !important;
+        perspective: 600px;
+    }
+    .carousel-card {
+        width: 110px !important;
+        height: 110px !important;
+    }
+    .carousel-card.active {
+        width: 135px !important;
+        height: 135px !important;
+        transform: translate3d(0, 0, 50px) !important;
+    }
+    .card-back-left {
+        transform: translate3d(-100px, 0, -50px) rotateY(20deg) !important;
+        opacity: 0.15;
+    }
+    .card-mid-left {
+        transform: translate3d(-60px, 0, -25px) rotateY(10deg) !important;
+        opacity: 0.5;
+    }
+    .card-mid-right {
+        transform: translate3d(60px, 0, -25px) rotateY(-10deg) !important;
+        opacity: 0.5;
+    }
+    .card-back-right {
+        transform: translate3d(100px, 0, -50px) rotateY(-20deg) !important;
+        opacity: 0.15;
+    }
+    .card-track-title {
+        font-size: 10px !important;
+    }
+    .card-track-artist {
+        font-size: 8.5px !important;
+    }
+    .carousel-play-btn {
+        width: 30px;
+        height: 30px;
+        bottom: 12px;
+        right: 12px;
+    }
+
+    /* Simplified transcription lists */
+    .trans-row {
+        padding: 10px 12px !important;
+    }
+    .trans-row__index {
+        display: none !important;
+    }
+    .trans-row__art-wrap {
+        width: 28px !important;
+        height: 28px !important;
+    }
+    .trans-row__title {
+        font-size: 11.5px !important;
+        max-width: 140px;
+    }
+    .trans-row__artist {
+        font-size: 9.5px !important;
+    }
+    .trans-badge {
+        display: none !important;
+    }
+    .trans-row__action {
+        padding: 5px 10px !important;
+        font-size: 10px !important;
+    }
+
+    /* Dynamic Glassmorphic Floating player controls overlay */
+    .player-bar {
+        position: fixed !important;
+        bottom: calc(60px + env(safe-area-inset-bottom)) !important;
+        left: 12px !important;
+        right: 12px !important;
+        width: auto !important;
+        height: 64px !important;
+        border-radius: 14px !important;
+        background: rgba(14, 14, 22, 0.9) !important;
+        backdrop-filter: blur(25px) !important;
+        -webkit-backdrop-filter: blur(25px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        padding: 0 16px !important;
+        z-index: 999 !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+    }
+
+    .player-left {
+        width: 70% !important;
+        gap: 10px !important;
+    }
+    .player-track-art {
+        width: 40px !important;
+        height: 40px !important;
+        border-radius: 8px !important;
+    }
+    .player-title {
+        font-size: 11.5px !important;
+    }
+    .player-artist {
+        font-size: 9.5px !important;
+    }
+
+    .player-center {
+        width: auto !important;
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: flex-end !important;
+    }
+    .player-controls {
+        gap: 0 !important;
+    }
+    #player-prev-btn, #player-next-btn {
+        display: none !important;
+    }
+    .control-play-btn-circle {
+        width: 36px !important;
+        height: 36px !important;
+        background: #fff !important;
+        color: #000 !important;
+        box-shadow: 0 4px 12px rgba(255,255,255,0.2) !important;
+    }
+
+    /* Embedded overlay progression line */
+    .player-timeline {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        height: 2.5px !important;
+        padding: 0 !important;
+        gap: 0 !important;
+    }
+    .player-timeline .time-stamp {
+        display: none !important;
+    }
+    .timeline-slider-track {
+        width: 100% !important;
+        height: 2.5px !important;
+        border-radius: 0 !important;
+        background: rgba(255, 255, 255, 0.08) !important;
+    }
+    .timeline-slider-fill {
+        border-radius: 0 !important;
+        background: var(--accent-orange) !important;
+    }
+    .timeline-thumb {
+        display: none !important;
+    }
+    .player-right {
+        display: none !important;
+    }
+
+    /* Bottom mobile navigation strip bar */
+    .mobile-nav {
+        display: flex !important;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        background: rgba(10, 10, 14, 0.95);
+        backdrop-filter: blur(25px);
+        -webkit-backdrop-filter: blur(25px);
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        justify-content: space-around;
+        align-items: center;
+        z-index: 1000;
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+    .mobile-nav-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 9.5px;
+        font-weight: 500;
+        transition: color 0.2s ease;
+        flex: 1;
+        padding: 6px 0;
+    }
+    .mobile-nav-item svg {
+        stroke: currentColor;
+        opacity: 0.6;
+        transition: opacity 0.2s, stroke 0.2s;
+    }
+    .mobile-nav-item.active {
+        color: var(--accent-orange);
+    }
+    .mobile-nav-item.active svg {
+        stroke: var(--accent-orange);
+        opacity: 1;
     }
 }
