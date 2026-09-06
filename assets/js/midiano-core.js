@@ -102,6 +102,24 @@ const MAX_TRIGGERS_PER_BURST = IS_MOBILE_DEVICE ? 8 : 18; // hard ceiling on new
 let burstWindowStart = 0;
 let burstTriggerCount = 0;
 
+// --- Mobile-only: staggered overflow + emergency flush ---
+// These only ever run when IS_MOBILE_DEVICE is true — the desktop code path
+// below is untouched and behaves exactly as before.
+//
+// Instead of silently dropping quiet notes once a burst goes over its cap
+// (which is still what desktop does), phones nudge the overflow notes a few
+// milliseconds later than the rest of the chord. This spreads the CPU spike
+// of a huge chord across a slightly longer window instead of asking a phone
+// to spin up 20+ voices in the exact same audio callback. A few ms of
+// stagger on a massive chord is effectively inaudible (real hands never hit
+// every key in a chord in perfect unison anyway), but it meaningfully cuts
+// the instantaneous DSP spike that was still choking phones. A hard drop of
+// the very quietest notes remains as a last-resort safety valve if a chord
+// is absurdly large even for staggering to absorb.
+const MOBILE_STAGGER_STEP_SEC = 0.006;        // ~6ms added per overflow note
+const MOBILE_MAX_STAGGERED_OVERFLOW = 10;     // beyond this many staggered extras, start dropping quietest as last resort
+const MOBILE_EMERGENCY_FLUSH_MULTIPLIER = 4;  // if a burst is this many times over cap, hard-reset instead of fighting it note by note
+
 // Removes a voice log entry by note name via in-place splice instead of
 // array.filter(). filter() allocates a brand-new array on every call — on a
 // phone, calling that on every single note trigger during a dense passage
@@ -130,6 +148,7 @@ function triggerNoteWithVoiceGuard(noteName, duration, time, velocity) {
 
     const now = Tone.now();
     const scheduledTime = time || now;
+    let effectiveTime = time;
 
     // --- Burst congestion control ---
     if (scheduledTime - burstWindowStart > BURST_WINDOW_SEC) {
@@ -138,11 +157,32 @@ function triggerNoteWithVoiceGuard(noteName, duration, time, velocity) {
         burstTriggerCount = 0;
     }
     burstTriggerCount++;
-    if (burstTriggerCount > MAX_TRIGGERS_PER_BURST && (velocity || 0.8) < 0.55) {
-        // We're deep into a massive simultaneous-note burst and this is one
-        // of the quieter notes in it — skip starting a new voice for it
-        // entirely rather than adding more load on top of an already
-        // saturated instant. Louder/melody notes still get through.
+
+    if (IS_MOBILE_DEVICE) {
+        // Emergency safety valve: an extreme pile-up (an absurdly dense
+        // multi-track chord dump) got past normal thinning. Hard-reset once
+        // per burst window so a phone can recover cleanly instead of
+        // staying choked, rather than keep fighting it note by note.
+        if (burstTriggerCount > MAX_TRIGGERS_PER_BURST * MOBILE_EMERGENCY_FLUSH_MULTIPLIER) {
+            activeInstrument.releaseAll();
+            activeVoiceLog.length = 0;
+            activeVoiceByPitch.clear();
+            burstTriggerCount = 1; // this note becomes the first of a fresh window
+        }
+
+        if (burstTriggerCount > MAX_TRIGGERS_PER_BURST) {
+            const overflowIndex = burstTriggerCount - MAX_TRIGGERS_PER_BURST;
+            if (overflowIndex > MOBILE_MAX_STAGGERED_OVERFLOW && (velocity || 0.8) < 0.55) {
+                // Chord is large even for staggering to absorb — drop the
+                // quietest tail as a last resort, same as desktop does.
+                return;
+            }
+            // Nudge this note a few ms later instead of firing it in the
+            // exact same instant as the rest of the chord.
+            effectiveTime = scheduledTime + overflowIndex * MOBILE_STAGGER_STEP_SEC;
+        }
+    } else if (burstTriggerCount > MAX_TRIGGERS_PER_BURST && (velocity || 0.8) < 0.55) {
+        // Desktop: unchanged behavior — skip the quietest overflow notes.
         return;
     }
 
@@ -167,8 +207,8 @@ function triggerNoteWithVoiceGuard(noteName, duration, time, velocity) {
         activeVoiceByPitch.delete(victim?.note);
     }
 
-    activeInstrument.triggerAttackRelease(noteName, duration, time, velocity);
-    const releaseTime = scheduledTime + (duration || 0.1) + 0.15;
+    activeInstrument.triggerAttackRelease(noteName, duration, effectiveTime, velocity);
+    const releaseTime = (effectiveTime || scheduledTime) + (duration || 0.1) + 0.15;
     activeVoiceLog.push({ note: noteName, velocity: velocity || 0.8, releaseTime });
     activeVoiceByPitch.set(noteName, releaseTime);
 }
@@ -276,6 +316,23 @@ class SmplrToneWrapper {
 
 // --- Audio Synthesizer Construction ---
 function setupAudioEngine() {
+    // 0. Mobile-only: swap in a lower-rate audio context before anything
+    // else touches Tone.context. Every DSP node in this chain (sampler
+    // mixing, compressor, limiter, and previously the reverb) costs CPU
+    // proportional to the sample rate — running at 24kHz instead of the
+    // usual 44.1/48kHz roughly halves that fixed cost across the board,
+    // not just for voice count. The trade-off is a slightly duller top end
+    // (audio bandwidth caps around ~12kHz), which is a reasonable trade for
+    // a piano/MIDI visualizer on a phone. Desktop is completely unaffected —
+    // this whole block only runs when IS_MOBILE_DEVICE is true.
+    if (IS_MOBILE_DEVICE) {
+        try {
+            Tone.setContext(new Tone.Context({ latencyHint: "playback", sampleRate: 24000 }));
+        } catch (e) {
+            console.warn("Could not set reduced-rate mobile audio context, using device default:", e);
+        }
+    }
+
     // 1. Optimize internal latency of Tone scheduler queue to preserve lookahead buffer
     // Raised from 0.08 -> 0.15: dense chords/runs were blowing past the old
     // 80ms buffer while the render loop was also doing canvas/particle work
@@ -339,6 +396,24 @@ function setupAudioEngine() {
     // the sampler still loads in the background if the user switches to it
     // manually, just isn't the default under load.
     setInstrument(IS_MOBILE_DEVICE ? 'grand' : 'sampled');
+
+    // Mobile-only: phones/tablets suspend the AudioContext much more readily
+    // than desktop when the app is backgrounded, the screen locks, or the
+    // browser tab loses focus — even briefly. Coming back without resuming
+    // the context is a plausible source of "sound disappears, comes back a
+    // few seconds later" specifically on phones. Auto-resume on return.
+    if (IS_MOBILE_DEVICE) {
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && Tone.context.state !== 'running') {
+                Tone.context.resume();
+            }
+        });
+        window.addEventListener('focus', () => {
+            if (Tone.context.state !== 'running') {
+                Tone.context.resume();
+            }
+        });
+    }
 }
 
 // Load premium real concert piano samples asynchronously
