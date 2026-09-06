@@ -16,7 +16,6 @@ import {
 // ==========================================
 // CONFIGURATION & GLOBAL CONSTANTS
 // ==========================================
-// SVG Icon definitions
 const playIconSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>`;
 const pauseIconSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>`;
 
@@ -24,11 +23,9 @@ const youtubeIconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="#f
 const uploadIconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#00df89" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>`;
 const studioIconSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:2px;"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M6 3v11"/><path d="M10 3v11"/><path d="M14 3v11"/><path d="M18 3v11"/><path d="M2 14h20"/></svg>`;
 
-// Global Cache registries
 const resolvedTitleCache = new Map();
 const validatedMidiCache = new Set();
 
-// Reliable fallback default tracks array
 const popularTracksDataMockFallback = [
     { id: 1, title: "Golden Days", artist: "Felix Carter", duration: "3:12", art: "https://picsum.photos/id/65/300/300" },
     { id: 2, title: "Fading Horizon", artist: "Ella Hunt", duration: "4:05", art: "https://picsum.photos/id/1025/300/300" },
@@ -38,12 +35,10 @@ const popularTracksDataMockFallback = [
     { id: 6, title: "Echoes of Midnight", artist: "Jon Hickman", duration: "3:58", art: "https://picsum.photos/id/322/300/300" }
 ];
 
-// Document Selectors
 const popularGrid = document.getElementById("popular-tracks-grid");
 const categoriesRow = document.getElementById("categories-row");
 const searchInput = document.getElementById("search-input");
 
-// Player Details Selectors
 const playerAlbumArt = document.getElementById("player-album-art");
 const playerTrackTitle = document.getElementById("player-track-title");
 const playerTrackArtist = document.getElementById("player-track-artist");
@@ -55,12 +50,10 @@ const playPauseIcon = document.getElementById("play-pause-icon");
 const prevBtn = document.getElementById("player-prev-btn");
 const nextBtn = document.getElementById("player-next-btn");
 
-// Timeline Trackers
 const timelineTrack = document.getElementById("timeline-track");
 const timelineFill = document.getElementById("timeline-fill");
 const timelineThumb = document.getElementById("timeline-thumb");
 
-// Volume Trackers
 const volumeTrack = document.getElementById("volume-track");
 const volumeFill = document.getElementById("volume-fill");
 const volumeThumb = document.getElementById("volume-thumb");
@@ -68,11 +61,14 @@ const volumeThumb = document.getElementById("volume-thumb");
 // Tab Navigation Elements
 const navHome = document.getElementById("nav-home");
 const navTranscriptions = document.getElementById("nav-transcriptions");
+const mobileNavHome = document.getElementById("mobile-nav-home");
+const mobileNavTranscriptions = document.getElementById("mobile-nav-transcriptions");
+
 const homeView = document.getElementById("home-view");
 const transcriptionsView = document.getElementById("transcriptions-view");
 const transcriptionsList = document.getElementById("transcriptions-list");
 
-// Real Audio & Playback States
+// Audio States
 const audioPlayer = new Audio();
 let isPlaying = false;
 let isRealPlayback = false; 
@@ -90,30 +86,55 @@ if (volumeFill && volumeThumb) {
 }
 
 // ==========================================
-// NAVIGATION & AUTHENTICATION SECURE
+// UNIFIED DESKTOP & MOBILE TAB NAVIGATION
 // ==========================================
-if (navHome && navTranscriptions) {
+function syncActiveNav(tabId) {
+    document.querySelectorAll(".nav-item").forEach(item => item.classList.remove("active"));
+    document.querySelectorAll(".mobile-nav-item").forEach(item => item.classList.remove("active"));
+
+    if (tabId === "home") {
+        if (navHome) navHome.classList.add("active");
+        if (mobileNavHome) mobileNavHome.classList.add("active");
+        homeView.style.display = "block";
+        transcriptionsView.style.display = "none";
+    } else if (tabId === "transcriptions") {
+        if (navTranscriptions) navTranscriptions.classList.add("active");
+        if (mobileNavTranscriptions) mobileNavTranscriptions.classList.add("active");
+        homeView.style.display = "none";
+        transcriptionsView.style.display = "block";
+        loadUserTranscriptions();
+    }
+}
+
+if (navHome) {
     navHome.addEventListener("click", (e) => {
         e.preventDefault();
-        setActiveTab(navHome, homeView);
+        syncActiveNav("home");
     });
+}
+if (mobileNavHome) {
+    mobileNavHome.addEventListener("click", (e) => {
+        e.preventDefault();
+        syncActiveNav("home");
+    });
+}
 
+if (navTranscriptions) {
     navTranscriptions.addEventListener("click", (e) => {
         e.preventDefault();
-        setActiveTab(navTranscriptions, transcriptionsView);
-        loadUserTranscriptions();
+        syncActiveNav("transcriptions");
+    });
+}
+if (mobileNavTranscriptions) {
+    mobileNavTranscriptions.addEventListener("click", (e) => {
+        e.preventDefault();
+        syncActiveNav("transcriptions");
     });
 }
 
-function setActiveTab(activeNavItem, activeViewElement) {
-    document.querySelectorAll(".nav-item").forEach(item => item.classList.remove("active"));
-    activeNavItem.classList.add("active");
-
-    homeView.style.display = "none";
-    transcriptionsView.style.display = "none";
-    activeViewElement.style.display = "block";
-}
-
+// ==========================================
+// AUTHENTICATION SECURE STATE CONTROL
+// ==========================================
 let currentUser = null;
 
 if (auth) {
@@ -145,7 +166,7 @@ if (auth) {
 }
 
 // ==========================================
-// FIRESTORE TRANSCRIPTIONS LOAD & RENDER
+// FIRESTORE TRANSCRIPTIONS SYNC
 // ==========================================
 let snapshotUnsubscribe = null;
 
@@ -207,7 +228,7 @@ function loadUserTranscriptions() {
                         }
                     }
                 } catch (e) {
-                    console.warn(`[STORAGE TITLE RESOLVE WARNING] Failed to retrieve details.json for Job ${job.id}:`, e);
+                    console.warn(`[STORAGE TITLE RESOLVE WARNING] Failed details fetch for ${job.id}:`, e);
                 }
             }
 
@@ -232,7 +253,7 @@ function loadUserTranscriptions() {
                     return job; 
                 } catch (error) {
                     if (error.code === 'storage/object-not-found' || error.message.includes('not found')) {
-                        console.warn(`[DATA SELF-HEAL] File missing for Job ${job.id}. Purging metadata...`);
+                        console.warn(`[DATA SELF-HEAL] Purging metadata missing remote storage job: ${job.id}`);
                         try {
                             await deleteDoc(doc(db, "users", currentUser.uid, "midi_jobs", job.id));
                         } catch (fs_err) {
@@ -340,7 +361,7 @@ function getMockTranscriptions() {
 }
 
 // =======================================================
-// DEEZER MUSIC API VIA JSONP (KEYLESS + CORS BYPASS)
+// DEEZER MUSIC API VIA JSONP (KEYLESS COR BYPASS)
 // =======================================================
 function makeDeezerJSONPRequest(endpoint, params) {
     return new Promise((resolve, reject) => {
@@ -384,7 +405,7 @@ function makeDeezerJSONPRequest(endpoint, params) {
 }
 
 // ==========================================
-// CORE DATA FETCH CONTROL (DEEZER ENGINE)
+// CORE DATA FETCH CONTROL
 // ==========================================
 async function fetchDeezerTracks(params = {}) {
     popularGrid.innerHTML = `
@@ -414,7 +435,7 @@ async function fetchDeezerTracks(params = {}) {
             `;
         }
     } catch (error) {
-        console.warn("[HYBRID DATA RESOLVER] Deezer API failed. Routing locally. Reason:", error.message);
+        console.warn("[HYBRID DATA RESOLVER] Routing locally. Reason:", error.message);
         
         if (params.q) {
             const searchFiltered = searchLocalMockTracks(params.q);
@@ -488,7 +509,7 @@ function renderPopularTracks(tracks) {
 }
 
 // ==========================================
-// UNIFIED REAL-TIME STREAMS PLAYER
+// STREAMS PLAYER
 // ==========================================
 function selectAndPlayTrack(track) {
     activeTrack = track;
@@ -496,7 +517,6 @@ function selectAndPlayTrack(track) {
     playerTrackTitle.textContent = track.title;
     playerTrackArtist.textContent = track.artist;
     
-    // Stop any existing players/tickers
     audioPlayer.pause();
     if (tickerInterval) {
         clearInterval(tickerInterval);
@@ -504,7 +524,6 @@ function selectAndPlayTrack(track) {
     }
 
     if (track.audio) {
-        // Play standard Deezer 30s preview directly via HTML5 Audio elements
         isRealPlayback = true;
         audioPlayer.src = track.audio;
         audioPlayer.volume = currentVolume;
@@ -515,10 +534,9 @@ function selectAndPlayTrack(track) {
                 playPauseBtn.style.transform = "scale(1.05)";
             })
             .catch(err => {
-                console.warn("[PLAYBACK INTERRUPTED] Stream is loaded or playing elsewhere:", err);
+                console.warn("[PLAYBACK INTERRUPTED] Playback halted:", err);
             });
     } else {
-        // Fallback mock playback
         isRealPlayback = false;
         trackLength.textContent = track.duration;
         currentSeconds = 0;
@@ -529,7 +547,6 @@ function selectAndPlayTrack(track) {
     }
 }
 
-// Unified play/pause toggle triggers
 playPauseBtn.addEventListener("click", () => {
     if (isRealPlayback) {
         if (isPlaying) {
@@ -544,7 +561,7 @@ playPauseBtn.addEventListener("click", () => {
                     playPauseIcon.innerHTML = pauseIconSvg;
                     playPauseBtn.style.transform = "scale(1.05)";
                 })
-                .catch(err => console.warn("Failed to play track preview:", err));
+                .catch(err => console.warn("Failed play track preview:", err));
         }
     } else {
         if (isPlaying) {
@@ -555,7 +572,6 @@ playPauseBtn.addEventListener("click", () => {
     }
 });
 
-// Previous and Next buttons handlers
 if (prevBtn) {
     prevBtn.addEventListener("click", () => {
         if (currentTrackList.length > 0 && currentTrackIndex > 0) {
@@ -574,7 +590,6 @@ if (nextBtn) {
     });
 }
 
-// Mock Player State handlers
 function startPlaybackState() {
     isPlaying = true;
     playPauseIcon.innerHTML = pauseIconSvg;
@@ -612,7 +627,7 @@ function updatePlayerTick() {
 }
 
 // ==========================================
-// AUDIO SYSTEM EVENT LISTENERS (REAL PROGRESSION)
+// AUDIO PROGRESS TRACKERS
 // ==========================================
 audioPlayer.addEventListener("timeupdate", () => {
     if (!isRealPlayback) return;
@@ -642,7 +657,6 @@ audioPlayer.addEventListener("ended", () => {
     }
 });
 
-// Interactive Seek Bar (Timeline) click event
 timelineTrack.addEventListener("click", (e) => {
     const rect = timelineTrack.getBoundingClientRect();
     const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
@@ -662,7 +676,6 @@ timelineTrack.addEventListener("click", (e) => {
     }
 });
 
-// Volume Bar setting logic
 volumeTrack.addEventListener("click", (e) => {
     const rect = volumeTrack.getBoundingClientRect();
     const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
@@ -674,7 +687,7 @@ volumeTrack.addEventListener("click", (e) => {
 });
 
 // ==========================================
-// FILTER CAPSULES & DEBOUNCED SEARCH ACTIONS
+// FILTERS & GENRE MAPPING
 // ==========================================
 categoriesRow.addEventListener("click", (e) => {
     if (e.target.classList.contains("capsule")) {
@@ -688,7 +701,6 @@ categoriesRow.addEventListener("click", (e) => {
     }
 });
 
-// Debounced Live Search event mapping
 let searchTimeout = null;
 if (searchInput) {
     searchInput.addEventListener("input", (e) => {
@@ -697,10 +709,8 @@ if (searchInput) {
         
         searchTimeout = setTimeout(() => {
             if (query.length > 0) {
-                // Fetch tracks matching search parameters from Deezer Catalog
                 fetchDeezerTracks({ q: query });
             } else {
-                // Restore search defaults based on selected capsule
                 const activeCapsule = document.querySelector(".capsule.active");
                 const genre = activeCapsule ? activeCapsule.dataset.genre : "all";
                 fetchDeezerTracksByGenre(genre);
@@ -710,7 +720,7 @@ if (searchInput) {
 }
 
 // ==========================================
-// SESSION DISCONNECT ACTIONS
+// LOGOUT PROCESS
 // ==========================================
 document.getElementById("dashboard-logout-btn").addEventListener("click", () => {
     if (confirm("Disconnect session?")) {
@@ -736,5 +746,5 @@ document.getElementById("dashboard-logout-btn").addEventListener("click", () => 
     }
 });
 
-// Initial boot logic
+// Boot logic
 fetchDeezerTracksByGenre("all");
