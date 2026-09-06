@@ -720,6 +720,32 @@ if (searchInput) {
 }
 
 // ==========================================
+// DISCLAIMER MODAL STATE CONTROL
+// ==========================================
+const disclaimerModal = document.getElementById("disclaimer-modal");
+const closeDisclaimerBtn = document.getElementById("close-disclaimer-btn");
+const acknowledgeDisclaimerBtn = document.getElementById("acknowledge-disclaimer-btn");
+
+if (disclaimerModal) {
+    const isAcknowledged = localStorage.getItem("t1era_disclaimer_acknowledged");
+    if (!isAcknowledged) {
+        disclaimerModal.style.display = "flex";
+    }
+
+    const closePopup = () => {
+        disclaimerModal.style.display = "none";
+        localStorage.setItem("t1era_disclaimer_acknowledged", "true");
+    };
+
+    if (closeDisclaimerBtn) {
+        closeDisclaimerBtn.addEventListener("click", closePopup);
+    }
+    if (acknowledgeDisclaimerBtn) {
+        acknowledgeDisclaimerBtn.addEventListener("click", closePopup);
+    }
+}
+
+// ==========================================
 // LOGOUT PROCESS
 // ==========================================
 document.getElementById("dashboard-logout-btn").addEventListener("click", () => {
