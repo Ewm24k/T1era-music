@@ -5,9 +5,11 @@
     --card-bg: rgba(255, 255, 255, 0.02);
     --border-light: rgba(255, 255, 255, 0.06);
     --accent-orange: #f35f22;
+    --accent-gradient: linear-gradient(135deg, #f35f22 0%, #d43f00 100%);
     --accent-glow: rgba(243, 95, 34, 0.35);
     --text-white: #ffffff;
     --text-muted: #737380;
+    --text-secondary: rgba(255, 255, 255, 0.5);
     --accent-teal: #10b981;
 }
 
@@ -52,12 +54,8 @@ body, html {
 .sidebar-logo {
     display: flex;
     align-items: center;
-    gap: 12px;
     margin-bottom: 35px;
-}
-.logo-icon {
-    filter: drop-shadow(0 0 5px var(--accent-glow));
-    flex-shrink: 0;
+    height: 24px;
 }
 .logo-text {
     font-weight: 700;
@@ -662,6 +660,143 @@ body, html {
     transform: translate(-50%, -50%);
 }
 
+/* Modern Disclaimer Modal Styles */
+.disclaimer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(4, 4, 6, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    padding: 20px;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.disclaimer-card {
+    background: #0f0f13;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 480px;
+    position: relative;
+    padding: 28px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+    transform: translateY(0);
+    animation: slideUp 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.disclaimer-close-btn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color 0.2s, transform 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+}
+
+.disclaimer-close-btn:hover {
+    color: #fff;
+    transform: scale(1.1);
+}
+
+.disclaimer-header {
+    margin-bottom: 18px;
+}
+
+.beta-badge {
+    background: rgba(243, 95, 34, 0.1);
+    color: var(--accent-orange);
+    border: 1px solid rgba(243, 95, 34, 0.2);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+
+.disclaimer-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.01em;
+}
+
+.disclaimer-body {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.disclaimer-body p strong {
+    color: #fff;
+    font-weight: 600;
+}
+
+.disclaimer-highlight-box {
+    background: rgba(255, 255, 255, 0.02);
+    border-left: 3px solid var(--accent-orange);
+    border-radius: 0 8px 8px 0;
+    padding: 12px 16px;
+    display: flex;
+    gap: 12px;
+    font-size: 12.5px;
+    color: rgba(255, 255, 255, 0.8);
+    line-height: 1.5;
+}
+
+.disclaimer-footer {
+    margin-top: 24px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.btn-acknowledge {
+    background: var(--accent-gradient);
+    border: none;
+    color: #fff;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 10px 20px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+}
+
+.btn-acknowledge:hover {
+    box-shadow: 0 0 15px rgba(243, 95, 34, 0.4);
+    transform: translateY(-1px);
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
 /* ---------------------------------------------------------
    ADAPTIVE PHONE AND MOBILE MEDIA QUERIES (IOS & ANDROID)
    --------------------------------------------------------- */
@@ -958,5 +1093,21 @@ body, html {
     .mobile-nav-item.active svg {
         stroke: var(--accent-orange);
         opacity: 1;
+    }
+
+    /* Mobile disclaimer tweaks */
+    .disclaimer-card {
+        padding: 22px;
+    }
+    .disclaimer-title {
+        font-size: 1.15rem;
+    }
+    .disclaimer-body {
+        font-size: 12px;
+        gap: 10px;
+    }
+    .disclaimer-highlight-box {
+        padding: 10px 12px;
+        font-size: 11.5px;
     }
 }
