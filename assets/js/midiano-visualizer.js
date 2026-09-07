@@ -240,7 +240,6 @@ function getVisibleNotesSlice() {
     return activeNotesMemory.slice(start, end + 1);
 }
 
-// Retrieves or generates pre-allocated gradients to optimize paint iterations
 // Retrieves or generates pre-allocated gradients to optimize paint iterations.
 // Built entirely in LOCAL coordinates (0,0 = the note's own top-left) so the
 // same cached gradient object is safe to reuse for ANY note sharing the same
@@ -379,11 +378,15 @@ function renderFrame(now) {
             const x = getNoteX(note.midi);
             const w = isBlack ? blackKeyWidth : whiteKeyWidth;
 
-            // Fetch optimized cached gradient
-            ctx.fillStyle = getCachedNoteGradient(ctx, x, noteVisualYEnd, w, noteVisualYStart, isBlack, isNoteActiveNow);
+            // Fetch optimized cached gradient (local space — paint via a
+            // translated context so the cache stays valid at every position)
+            ctx.save();
+            ctx.translate(x, noteVisualYEnd);
+            ctx.fillStyle = getCachedNoteGradient(ctx, w, noteVisualHeight, isBlack, isNoteActiveNow);
             ctx.beginPath();
-            ctx.roundRect(x + 2, noteVisualYEnd, w - 4, noteVisualHeight, 6);
+            ctx.roundRect(2, 0, w - 4, noteVisualHeight, 6);
             ctx.fill();
+            ctx.restore();
 
             // Active glow trace element (Optimized to simulate neon without costly canvas shadowBlur context)
             if (isNoteActiveNow) {
