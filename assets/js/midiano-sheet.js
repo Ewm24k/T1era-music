@@ -534,9 +534,14 @@ function startVerticalPlayback(targetContainerId) {
     function updateVerticalFrame(now) {
         if (!isVerticalPlaying) return;
 
-        // PLL Clock Sync: Update progression using exact audio hardware context elapsed duration
+        // PLL Clock Sync: Update visual progression using exact audio hardware context elapsed duration
         const elapsedRealTime = Tone.now() - verticalAudioStartTime;
-        verticalPlaybackTime = verticalLogicalStartTime + (elapsedRealTime * playbackSpeed);
+        const rawPlaybackTime = verticalLogicalStartTime + (elapsedRealTime * playbackSpeed);
+
+        // COMPENSATE: Subtract processing and hardware output latency so visuals align with sound
+        const rawCtx = Tone.context.rawContext;
+        const totalAudioLatency = (Tone.context.lookAhead || 0) + (rawCtx.baseLatency || 0) + (rawCtx.outputLatency || 0);
+        verticalPlaybackTime = Math.max(0, rawPlaybackTime - totalAudioLatency);
 
         const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
 
@@ -578,7 +583,7 @@ function startVerticalPlayback(targetContainerId) {
 
         // 3. Audio Scheduling Loop (Pre-trigger future notes with lookahead)
         const lookahead = 0.100; // 100ms future queue window
-        const nextWindowTime = verticalPlaybackTime + lookahead;
+        const nextWindowTime = rawPlaybackTime + lookahead;
 
         while (verticalPlaybackNoteIndex < activeNotesMemory.length) {
             const note = activeNotesMemory[verticalPlaybackNoteIndex];
@@ -725,34 +730,6 @@ function resetVerticalNoteHighlights(containerId) {
     });
 }
 
-function updateVerticalPlayButtonStates(containerId, isPlayingState) {
-    if (containerId === 'sheet-music-notation-vertical') {
-        const btnPlay = document.getElementById('btn-play-second');
-        const btnStop = document.getElementById('btn-stop-second');
-        if (isPlayingState) {
-            btnPlay.textContent = "Pause Score";
-            btnPlay.style.backgroundColor = "#fbbf24";
-            btnStop.disabled = false;
-        } else {
-            btnPlay.textContent = "Play Vert. Score";
-            btnPlay.style.backgroundColor = "#10b981";
-            btnStop.disabled = true;
-        }
-    } else if (containerId === 'sheet-music-notation-max') {
-        const btnPlay = document.getElementById('btn-play-max');
-        const btnStop = document.getElementById('btn-stop-max');
-        if (isPlayingState) {
-            btnPlay.textContent = "Pause Score";
-            btnPlay.style.backgroundColor = "#fbbf24";
-            btnStop.disabled = false;
-        } else {
-            btnPlay.textContent = "Play Score";
-            btnPlay.style.backgroundColor = "#10b981";
-            btnStop.disabled = true;
-        }
-    }
-}
-
 // Export vector SVG directly to browser download queue
 function downloadVerticalSVG(containerId) {
     const svgElement = document.querySelector(`#${containerId} svg`);
@@ -861,7 +838,12 @@ function startSheetPlayback() {
 
         // PLL Clock Sync: Update visual progression using exact audio hardware context elapsed duration
         const elapsedRealTime = Tone.now() - sheetAudioStartTime;
-        sheetMusicPlaybackTime = sheetLogicalStartTime + (elapsedRealTime * playbackSpeed);
+        const rawPlaybackTime = sheetLogicalStartTime + (elapsedRealTime * playbackSpeed);
+
+        // COMPENSATE: Subtract processing and hardware output latency so visuals align with sound
+        const rawCtx = Tone.context.rawContext;
+        const totalAudioLatency = (Tone.context.lookAhead || 0) + (rawCtx.baseLatency || 0) + (rawCtx.outputLatency || 0);
+        sheetMusicPlaybackTime = Math.max(0, rawPlaybackTime - totalAudioLatency);
 
         const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
 
@@ -886,7 +868,7 @@ function startSheetPlayback() {
 
         // 3. Audio Triggering Scheduler (Pre-trigger future notes with 100ms lookahead)
         const lookahead = 0.100; // 100ms future queue window
-        const nextWindowTime = sheetMusicPlaybackTime + lookahead;
+        const nextWindowTime = rawPlaybackTime + lookahead;
 
         while (sheetPlaybackNoteIndex < activeNotesMemory.length) {
             const note = activeNotesMemory[sheetPlaybackNoteIndex];
@@ -1262,7 +1244,12 @@ function startStudioPlayback() {
 
         // PLL Clock Sync: Update visual progression using exact audio hardware context elapsed duration
         const elapsedRealTime = Tone.now() - studioAudioStartTime;
-        studioPlaybackTime = studioLogicalStartTime + (elapsedRealTime * playbackSpeed);
+        const rawPlaybackTime = studioLogicalStartTime + (elapsedRealTime * playbackSpeed);
+
+        // COMPENSATE: Subtract processing and hardware output latency so visuals align with sound
+        const rawCtx = Tone.context.rawContext;
+        const totalAudioLatency = (Tone.context.lookAhead || 0) + (rawCtx.baseLatency || 0) + (rawCtx.outputLatency || 0);
+        studioPlaybackTime = Math.max(0, rawPlaybackTime - totalAudioLatency);
 
         const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
 
@@ -1296,7 +1283,7 @@ function startStudioPlayback() {
 
         // Audio Triggering Scheduler (Pre-trigger future notes with 100ms lookahead)
         const lookahead = 0.100; // 100ms future queue window
-        const nextWindowTime = studioPlaybackTime + lookahead;
+        const nextWindowTime = rawPlaybackTime + lookahead;
 
         while (studioPlaybackNoteIndex < studioNotesMemory.length) {
             const note = studioNotesMemory[studioPlaybackNoteIndex];
