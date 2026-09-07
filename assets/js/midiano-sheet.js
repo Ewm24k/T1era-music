@@ -238,10 +238,10 @@ function renderVerticalSheetMusic(targetContainerId) {
         }
     }
 
-    // 2. Mobile Layout & Geometry Scaling Parameters strictly when MAXIMIZED
-    const isMaximizedView = (targetContainerId === 'sheet-music-notation-max');
+    // 2. Mobile Layout & Geometry Scaling Parameters
+    const isVerticalOrMax = (targetContainerId === 'sheet-music-notation-vertical' || targetContainerId === 'sheet-music-notation-max');
     const isPhoneView = containerWidth < 768;
-    const shouldScale = isMaximizedView && isPhoneView; // Zoom out *only* in fullscreen maximised state on phone devices
+    const shouldScale = isVerticalOrMax && isPhoneView; // Zoom out *only* in fullscreen maximised state on phone devices
 
     const scale = shouldScale ? 0.65 : 1.0;
     const systemDuration = shouldScale ? 6 : 10;            // Expands spacing horizontally by 66% on mobile
@@ -496,9 +496,9 @@ function startVerticalPlayback(targetContainerId) {
         localMarginRight = 15;
     }
     
-    const isMaximizedView = (targetContainerId === 'sheet-music-notation-max');
+    const isVerticalOrMax = (targetContainerId === 'sheet-music-notation-vertical' || targetContainerId === 'sheet-music-notation-max');
     const isPhoneView = containerWidth < 768;
-    const shouldScale = isMaximizedView && isPhoneView;
+    const shouldScale = isVerticalOrMax && isPhoneView;
 
     const scale = shouldScale ? 0.65 : 1.0;
     const systemDuration = shouldScale ? 6 : 10;
