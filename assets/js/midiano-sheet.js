@@ -9,6 +9,177 @@ let verticalLogicalStartTime = 0;
 let studioAudioStartTime = 0;
 let studioLogicalStartTime = 0;
 
+// --- Helper Functions for Procedural Rests Rendering ---
+function renderRestsForGap(svgContent, startX, endX, centerY, isRH) {
+    const gapDuration = (endX - startX) / pixelsPerSecond;
+    if (gapDuration <= 0.05) return svgContent;
+
+    const bpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0]) 
+        ? midiData.header.tempos[0].bpm 
+        : 120;
+    const beatDuration = 60 / bpm;
+
+    const whole = 4 * beatDuration;
+    const half = 2 * beatDuration;
+    const quarter = 1 * beatDuration;
+    const eighth = 0.5 * beatDuration;
+    const sixteenth = 0.25 * beatDuration;
+
+    let remaining = gapDuration;
+    let currentX = startX;
+
+    const color = isRH ? "#818cf8" : "#fbbf24";
+    const dy = 3; // spacing increment
+
+    while (remaining > 0.05) {
+        let restType = "";
+        let restWidth = 0;
+
+        if (remaining >= whole - 0.05) {
+            restType = "whole";
+            restWidth = whole * pixelsPerSecond;
+            remaining -= whole;
+        } else if (remaining >= half - 0.05) {
+            restType = "half";
+            restWidth = half * pixelsPerSecond;
+            remaining -= half;
+        } else if (remaining >= quarter - 0.05) {
+            restType = "quarter";
+            restWidth = quarter * pixelsPerSecond;
+            remaining -= quarter;
+        } else if (remaining >= eighth - 0.05) {
+            restType = "eighth";
+            restWidth = eighth * pixelsPerSecond;
+            remaining -= eighth;
+        } else if (remaining >= sixteenth - 0.05) {
+            restType = "sixteenth";
+            restWidth = sixteenth * pixelsPerSecond;
+            remaining -= sixteenth;
+        } else {
+            break;
+        }
+
+        const midX = currentX + restWidth / 2;
+
+        if (restType === "whole") {
+            const line4Y = centerY - 3 * dy;
+            svgContent += `<rect x="${midX - 7}" y="${line4Y}" width="14" height="6" fill="${color}" opacity="0.85" />`;
+        } else if (restType === "half") {
+            svgContent += `<rect x="${midX - 7}" y="${centerY - 6}" width="14" height="6" fill="${color}" opacity="0.85" />`;
+        } else if (restType === "quarter") {
+            svgContent += `<path d="M ${midX - 3},${centerY - 10} l 6,6 l -6,6 l 5,4 a 4,4 0 0,1 -6,4" stroke="${color}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85" />`;
+        } else if (restType === "eighth") {
+            svgContent += `
+            <g transform="translate(${midX}, ${centerY})" stroke="${color}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85">
+                <circle cx="-3" cy="-3" r="1.5" fill="${color}" stroke="none" />
+                <path d="M -3,-3 c 4,-3 6,2 0,5 L -4,8" />
+            </g>`;
+        } else if (restType === "sixteenth") {
+            svgContent += `
+            <g transform="translate(${midX}, ${centerY})" stroke="${color}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85">
+                <circle cx="-3" cy="-6" r="1.5" fill="${color}" stroke="none" />
+                <path d="M -3,-6 c 4,-3 6,2 0,5 L -5,8" />
+                <circle cx="-4" cy="-1" r="1.5" fill="${color}" stroke="none" />
+                <path d="M -4,-1 c 4,-3 6,2 0,5" />
+            </g>`;
+        }
+
+        currentX += restWidth;
+    }
+
+    return svgContent;
+}
+
+function renderRestsForGapVertical(svgContent, startSecs, endSecs, systemDuration, systemHeight, rhStaffCenterY, lhStaffCenterY, localPixelsPerSecond, marginLeftValue, startPadding, scale, showColors) {
+    const bpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0]) 
+        ? midiData.header.tempos[0].bpm 
+        : 120;
+    const beatDuration = 60 / bpm;
+
+    const whole = 4 * beatDuration;
+    const half = 2 * beatDuration;
+    const quarter = 1 * beatDuration;
+    const eighth = 0.5 * beatDuration;
+    const sixteenth = 0.25 * beatDuration;
+
+    let remaining = endSecs - startSecs;
+    let currentSecs = startSecs;
+
+    const dy = 3.0;
+
+    while (remaining > 0.05) {
+        let restType = "";
+        let restSecs = 0;
+
+        if (remaining >= whole - 0.05) {
+            restType = "whole";
+            restSecs = whole;
+            remaining -= whole;
+        } else if (remaining >= half - 0.05) {
+            restType = "half";
+            restSecs = half;
+            remaining -= half;
+        } else if (remaining >= quarter - 0.05) {
+            restType = "quarter";
+            restSecs = quarter;
+            remaining -= quarter;
+        } else if (remaining >= eighth - 0.05) {
+            restType = "eighth";
+            restSecs = eighth;
+            remaining -= eighth;
+        } else if (remaining >= sixteenth - 0.05) {
+            restType = "sixteenth";
+            restSecs = sixteenth;
+            remaining -= sixteenth;
+        } else {
+            break;
+        }
+
+        const systemIdx = Math.floor(currentSecs / systemDuration);
+        const yOffset = systemIdx * systemHeight + 40;
+        const systemTimeOffset = currentSecs - systemIdx * systemDuration;
+        
+        const restX = systemTimeOffset * localPixelsPerSecond + marginLeftValue + startPadding * scale;
+        const midX = restX + (restSecs * localPixelsPerSecond) / 2;
+
+        const rhColor = showColors ? "#4f46e5" : "#111115";
+        const lhColor = showColors ? "#d97706" : "#111115";
+
+        svgContent = drawSingleRestSVG(svgContent, midX, yOffset + rhStaffCenterY, restType, rhColor, dy, scale);
+        svgContent = drawSingleRestSVG(svgContent, midX, yOffset + lhStaffCenterY, restType, lhColor, dy, scale);
+
+        currentSecs += restSecs;
+    }
+
+    return svgContent;
+}
+
+function drawSingleRestSVG(svgContent, x, centerY, type, color, dy, scale) {
+    if (type === "whole") {
+        const line4Y = centerY - 3 * dy * scale;
+        svgContent += `<rect x="${x - 7 * scale}" y="${line4Y}" width="${14 * scale}" height="${6 * scale}" fill="${color}" opacity="0.85" />`;
+    } else if (type === "half") {
+        svgContent += `<rect x="${x - 7 * scale}" y="${centerY - 6 * scale}" width="${14 * scale}" height="${6 * scale}" fill="${color}" opacity="0.85" />`;
+    } else if (type === "quarter") {
+        svgContent += `<path d="M ${x - 3 * scale},${centerY - 10 * scale} l ${6 * scale},${6 * scale} l ${-6 * scale},${6 * scale} l ${5 * scale},${4 * scale} a ${4 * scale},${4 * scale} 0 0,1 ${-6 * scale},${4 * scale}" stroke="${color}" stroke-width="${2 * scale}" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85" />`;
+    } else if (type === "eighth") {
+        svgContent += `
+        <g transform="translate(${x}, ${centerY}) scale(${scale})" stroke="${color}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85">
+            <circle cx="-3" cy="-3" r="1.5" fill="${color}" stroke="none" />
+            <path d="M -3,-3 c 4,-3 6,2 0,5 L -4,8" />
+        </g>`;
+    } else if (type === "sixteenth") {
+        svgContent += `
+        <g transform="translate(${x}, ${centerY}) scale(${scale})" stroke="${color}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85">
+            <circle cx="-3" cy="-6" r="1.5" fill="${color}" stroke="none" />
+            <path d="M -3,-6 c 4,-3 6,2 0,5 L -5,8" />
+            <circle cx="-4" cy="-1" r="1.5" fill="${color}" stroke="none" />
+            <path d="M -4,-1 c 4,-3 6,2 0,5" />
+        </g>`;
+    }
+    return svgContent;
+}
+
 // --- Shared massive-key / anti-choke playback guard ---
 // Prefers the triggerNoteWithVoiceGuard() function defined in the audio
 // engine script (handles same-pitch choking, overall polyphony stealing,
@@ -82,7 +253,9 @@ function toAbcFraction(val) {
 function renderSheetMusic() {
     if (!midiData || activeNotesMemory.length === 0) return;
 
-    const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
+    // Use absolute timeline progression starting from 0 seconds
+    const firstNoteTime = 0;
+    const firstNoteActualTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
     const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
     const svgWidth = totalDurationSecs * pixelsPerSecond + 200; // Offset spacing
     const svgHeight = 320;
@@ -114,7 +287,6 @@ function renderSheetMusic() {
     svgContent += `<text x="30" y="225" fill="#9ca3af" font-size="14" font-weight="bold">LH</text>`;
 
     // 4. Render procedurally-drawn clef symbols
-    // Treble Clef centered on G4 (relative y = 10 from center y = 80)
     svgContent += `
     <g transform="translate(60, 80)" stroke="#818cf8" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round" stroke-linejoin="round">
         <path d="M 5,-40 L 5,30 C 5,38 0,42 -5,42 C -9,42 -12,38 -12,34 C -12,30 -9,27 -6,27 C -3,27 0,31 0,34" />
@@ -123,7 +295,6 @@ function renderSheetMusic() {
         <path d="M 5,10 C 5,22 -8,22 -8,10 C -8,-2 13,-2 13,10 C 13,20 3,24 0,16" />
     </g>`;
 
-    // Bass Clef with dots flanking F3 (relative y = -10 from center y = 220)
     svgContent += `
     <g transform="translate(60, 220)" stroke="#fbbf24" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round" stroke-linejoin="round">
         <path d="M -8,-10 C -2,-18 10,-18 10,-8 C 10,2 -2,10 -8,18 C -10,21 -12,25 -12,28" />
@@ -132,7 +303,13 @@ function renderSheetMusic() {
         <circle cx="16" cy="-5" r="2.5" fill="#fbbf24" stroke="none" />
     </g>`;
 
-    // 5. Render notes row-by-row strictly matching the raw activeNotesMemory log
+    // 5. Render Starting silence rests if needed before first note triggers
+    if (firstNoteActualTime > 0.05) {
+        svgContent = renderRestsForGap(svgContent, 100, firstNoteActualTime * pixelsPerSecond + 100, rhStaffCenterY, true);
+        svgContent = renderRestsForGap(svgContent, 100, firstNoteActualTime * pixelsPerSecond + 100, lhStaffCenterY, false);
+    }
+
+    // 6. Render notes row-by-row strictly matching the raw activeNotesMemory log
     activeNotesMemory.forEach((note, index) => {
         const shiftedStart = Math.max(0, note.time - firstNoteTime);
         const x = shiftedStart * pixelsPerSecond + 100;
@@ -223,7 +400,8 @@ function renderSheetMusic() {
 function renderVerticalSheetMusic(targetContainerId) {
     if (!midiData || activeNotesMemory.length === 0) return;
 
-    const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
+    const firstNoteTime = 0;
+    const firstNoteActualTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
     const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
 
     const marginLeft = 100;
@@ -355,6 +533,15 @@ function renderVerticalSheetMusic(targetContainerId) {
                 <text x="${tsX}" y="${yOffset + lhStaffCenterY + 12 * scale}" font-family="Georgia, serif" font-size="${24 * scale}" font-weight="bold" text-anchor="middle">${timeSignatureDen}</text>
             </g>`;
         }
+    }
+
+    // Render starting play rests in wrapped vertical systems if needed
+    if (firstNoteActualTime > 0.05) {
+        svgContent = renderRestsForGapVertical(
+            svgContent, 0, firstNoteActualTime, 
+            systemDuration, systemHeight, rhStaffCenterY, lhStaffCenterY, 
+            localPixelsPerSecond, marginLeftValue, startPadding, scale, showColors
+        );
     }
 
     // 4. Draw the notes into their corresponding staff systems (Scale-fitted)
@@ -517,7 +704,7 @@ function startVerticalPlayback(targetContainerId) {
     const systemWidth = containerWidth - localMarginLeft - localMarginRight;
     const localPixelsPerSecond = (systemWidth - startPadding * scale) / systemDuration;
 
-    const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
+    const firstNoteTime = 0;
     
     // Fast seek of starting index
     verticalPlaybackNoteIndex = 0;
@@ -730,6 +917,34 @@ function resetVerticalNoteHighlights(containerId) {
     });
 }
 
+function updateVerticalPlayButtonStates(containerId, isPlayingState) {
+    if (containerId === 'sheet-music-notation-vertical') {
+        const btnPlay = document.getElementById('btn-play-second');
+        const btnStop = document.getElementById('btn-stop-second');
+        if (isPlayingState) {
+            btnPlay.textContent = "Pause Score";
+            btnPlay.style.backgroundColor = "#fbbf24";
+            btnStop.disabled = false;
+        } else {
+            btnPlay.textContent = "Play Vert. Score";
+            btnPlay.style.backgroundColor = "#10b981";
+            btnStop.disabled = true;
+        }
+    } else if (containerId === 'sheet-music-notation-max') {
+        const btnPlay = document.getElementById('btn-play-max');
+        const btnStop = document.getElementById('btn-stop-max');
+        if (isPlayingState) {
+            btnPlay.textContent = "Pause Score";
+            btnPlay.style.backgroundColor = "#fbbf24";
+            btnStop.disabled = false;
+        } else {
+            btnPlay.textContent = "Play Score";
+            btnPlay.style.backgroundColor = "#10b981";
+            btnStop.disabled = true;
+        }
+    }
+}
+
 // Export vector SVG directly to browser download queue
 function downloadVerticalSVG(containerId) {
     const svgElement = document.querySelector(`#${containerId} svg`);
@@ -822,7 +1037,7 @@ function startSheetPlayback() {
     resetSheetNoteHighlights();
 
     // Setup optimized index seek heads
-    const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
+    const firstNoteTime = 0;
     sheetPlaybackNoteIndex = 0;
     while (sheetPlaybackNoteIndex < activeNotesMemory.length && Math.max(0, activeNotesMemory[sheetPlaybackNoteIndex].time - firstNoteTime) < sheetMusicPlaybackTime) {
         sheetPlaybackNoteIndex++;
@@ -987,7 +1202,8 @@ function renderStudioSheetMusic(targetContainerId) {
         return;
     }
 
-    const firstNoteTime = studioNotesMemory.length > 0 ? studioNotesMemory[0].time : 0;
+    const firstNoteTime = 0;
+    const firstNoteActualTime = studioNotesMemory.length > 0 ? studioNotesMemory[0].time : 0;
     const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
 
     const marginLeft = 100;
@@ -1088,6 +1304,15 @@ function renderStudioSheetMusic(targetContainerId) {
                 <text x="${tsX}" y="${yOffset + lhStaffCenterY + 18}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureDen}</text>
             </g>`;
         }
+    }
+
+    // Render starting play rests in wrapped studio systems if needed
+    if (firstNoteActualTime > 0.05) {
+        svgContent = renderRestsForGapVertical(
+            svgContent, 0, firstNoteActualTime, 
+            systemDuration, systemHeight, rhStaffCenterY, lhStaffCenterY, 
+            localPixelsPerSecond, marginLeft, startPadding, 1.0, showColors
+        );
     }
 
     studioNotesMemory.forEach((note, index) => {
@@ -1225,7 +1450,7 @@ function startStudioPlayback() {
     const startPadding = 45;
     const localPixelsPerSecond = (systemWidth - startPadding) / systemDuration;
 
-    const firstNoteTime = studioNotesMemory.length > 0 ? studioNotesMemory[0].time : 0;
+    const firstNoteTime = 0;
     
     // Fast seek of starting studio indexes
     studioPlaybackNoteIndex = 0;
