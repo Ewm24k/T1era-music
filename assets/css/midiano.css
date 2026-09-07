@@ -1115,71 +1115,43 @@ select {
 }
 
 /* =========================================================
-   SECTION 2 & STUDIO SHEET MUSIC HEADER STYLES (DESKTOP)
+   MAXIMIZED MODAL HEADER STYLES (DESKTOP)
    ========================================================= */
-.sheet-section-header {
+.max-modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 15px;
-    gap: 15px;
-    flex-wrap: wrap;
+    border-bottom: 2px solid #e5e7eb;
+    padding-bottom: 10px;
     width: 100%;
+    gap: 15px;
 }
 
-.sheet-section-title-group {
-    flex: 1 1 auto;
-}
-
-.sheet-section-title {
-    color: var(--text-color);
-    font-size: 1rem !important;
-    margin-bottom: 4px;
-}
-
-.sheet-section-subtitle {
-    color: var(--text-muted);
-    font-size: 0.8rem;
+.max-modal-title {
+    color: #111827;
+    font-size: 1.3rem;
+    font-weight: 700;
     margin: 0;
 }
 
-.sheet-section-controls {
+.max-modal-btn-grid {
     display: flex;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
-}
-
-.sheet-toggle-wrapper {
-    display: flex;
+    gap: 12px;
     align-items: center;
 }
 
-.sheet-toggle-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--text-color);
-    font-size: 0.85rem;
+.max-modal-btn-grid button {
+    padding: 6px 12px;
+    border-radius: 6px;
     cursor: pointer;
-    user-select: none;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: 1px solid #d1d5db;
+    transition: all 0.2s ease;
 }
 
-.sheet-toggle-label input[type="checkbox"] {
-    accent-color: var(--accent-color);
-    width: 15px;
-    height: 15px;
-    cursor: pointer;
-}
-
-.sheet-btn-grid {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-/* Custom UI Actions for Sheet Headers */
+/* Standardized Buttons Inside Maximized Modal Header */
 .btn-primary-action {
     background-color: #10b981 !important;
     color: white !important;
@@ -1206,58 +1178,48 @@ select {
     color: white !important;
 }
 
+.btn-close-action {
+    background: #ef4444 !important;
+    color: white !important;
+    border: none !important;
+    padding: 8px 16px !important;
+}
+.btn-close-action:hover {
+    background: #dc2626 !important;
+}
+
 /* =========================================================
-   RESPONSIVE MOBILE OVERRIDES (iOS & Android Portrait 9:16)
+   MAXIMIZED MODAL RESPONSIVE MOBILE OVERRIDES (9:16 portrait)
    ========================================================= */
 @media (max-width: 768px) {
-    .sheet-section-header {
+    .max-modal-header {
         flex-direction: column !important;
         align-items: stretch !important;
-        gap: 12px !important;
-        margin-bottom: 12px !important;
+        gap: 10px !important;
+        border-bottom: 1px solid #e5e7eb !important;
+        padding-bottom: 10px !important;
+        margin-bottom: 10px !important;
     }
 
-    .sheet-section-title-group {
+    .max-modal-title {
         text-align: center !important;
-        border-bottom: 1px solid var(--panel-border);
-        padding-bottom: 8px;
+        font-size: 1rem !important;
     }
 
-    .sheet-section-controls {
-        flex-direction: column !important;
-        align-items: stretch !important;
-        gap: 12px !important;
-    }
-
-    .sheet-toggle-wrapper {
-        background-color: rgba(255, 255, 255, 0.02);
-        border: 1px solid var(--panel-border);
-        border-radius: 8px;
-        padding: 10px 14px;
-        justify-content: center;
-        width: 100%;
-    }
-
-    .sheet-toggle-label {
-        width: 100%;
-        justify-content: center;
-        font-size: 0.8rem;
-    }
-
-    .sheet-btn-grid {
+    .max-modal-btn-grid {
         display: grid !important;
-        grid-template-columns: 1fr 1fr !important; /* Balanced, symmetric 2x2 grid */
+        grid-template-columns: 1fr 1fr !important; /* Symmetrical 2x2 grid */
         gap: 8px !important;
-        width: 100%;
+        width: 100% !important;
     }
 
-    .sheet-btn-grid button {
+    .max-modal-btn-grid button {
         width: 100% !important;
-        padding: 11px 6px !important; /* Clean, spacious touch target heights */
+        padding: 10px 4px !important; /* Larger click target area */
         font-size: 0.75rem !important;
         text-align: center;
         justify-content: center;
-        margin: 0 !important;
         box-sizing: border-box !important;
+        margin: 0 !important;
     }
 }
