@@ -1223,3 +1223,189 @@ select {
         margin: 0 !important;
     }
 }
+
+/* =========================================================
+   POPUP HEADER DESIGN & RESPONSIVE LAYOUT (DESKTOP)
+   ========================================================= */
+.popup-header-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--panel-border);
+    padding-bottom: 12px;
+    width: 100%;
+    gap: 15px;
+}
+
+.popup-title-bar {
+    display: none; /* Hidden on Desktop */
+}
+
+.popup-controls-wrapper {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
+.popup-tab-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.popup-tab-item {
+    background-color: #20202c;
+    color: var(--text-muted);
+    border: 1px solid var(--panel-border);
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: all 0.2s ease;
+}
+
+.popup-tab-item.active {
+    background-color: var(--accent-color) !important;
+    color: var(--text-color) !important;
+}
+
+.popup-divider {
+    color: var(--panel-border);
+    margin: 0 5px;
+    font-size: 1.1rem;
+    user-select: none;
+}
+
+.popup-playback-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.popup-playback-btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+    border: 1px solid var(--panel-border);
+    transition: all 0.2s ease;
+}
+
+.popup-playback-btn.play {
+    background-color: #10b981;
+    color: white;
+}
+
+.popup-playback-btn.stop {
+    background-color: #ef4444;
+    color: white;
+}
+
+/* =========================================================
+   POPUP RESPONSIVE MOBILE OVERRIDES (9:16 portrait)
+   ========================================================= */
+@media (max-width: 768px) {
+    .popup-header-container {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+        border-bottom: 1px solid var(--panel-border) !important;
+        padding-bottom: 15px !important;
+        margin-bottom: 15px !important;
+    }
+
+    .popup-title-bar {
+        display: flex !important;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        margin-bottom: 4px;
+    }
+
+    .popup-title {
+        color: var(--text-color);
+        font-size: 0.95rem;
+        font-weight: 700;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+    }
+
+    .popup-close-btn {
+        background: rgba(239, 68, 68, 0.15) !important;
+        color: #fca5a5 !important;
+        border: 1px solid rgba(239, 68, 68, 0.3) !important;
+        width: 32px;
+        height: 32px;
+        border-radius: 50% !important;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem !important;
+        cursor: pointer;
+        padding: 0 !important;
+        line-height: 1;
+        transition: all 0.2s ease;
+    }
+    .popup-close-btn:hover {
+        background-color: #ef4444 !important;
+        color: white !important;
+    }
+
+    /* Hide Desktop divider and buttons on Mobile viewports */
+    .popup-divider {
+        display: none !important;
+    }
+    #btn-close-sheet {
+        display: none !important;
+    }
+
+    .popup-controls-wrapper {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+    }
+
+    .popup-tab-bar {
+        display: grid !important;
+        grid-template-columns: repeat(3, 1fr) !important; /* Clean segmented bar */
+        gap: 4px !important;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid var(--panel-border);
+        padding: 4px;
+        border-radius: 8px;
+        width: 100%;
+    }
+
+    .popup-tab-item {
+        width: 100% !important;
+        padding: 10px 4px !important;
+        font-size: 0.75rem !important;
+        text-align: center;
+        justify-content: center;
+        border: none !important;
+        margin: 0 !important;
+        border-radius: 6px !important;
+    }
+
+    .popup-playback-bar {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important; /* Play and Stop side-by-side */
+        gap: 8px !important;
+        width: 100%;
+    }
+
+    .popup-playback-btn {
+        width: 100% !important;
+        padding: 11px 6px !important; /* Mobile friendly touch target */
+        font-size: 0.78rem !important;
+        text-align: center;
+        justify-content: center;
+        margin: 0 !important;
+    }
+}
