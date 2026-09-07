@@ -131,18 +131,27 @@
     <!-- Sheet Music Overlay Popup Container -->
     <div id="sheet-modal">
         <div id="sheet-content">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--panel-border); padding-bottom: 12px; width: 100%;">
-                <div style="display: flex; gap: 12px; align-items: center;">
-                    <button id="btn-tab-notation" style="background-color: var(--accent-color); color: var(--text-color); border: 1px solid var(--panel-border); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600;">Staff Notation (Literal)</button>
-                    <button id="btn-tab-raw" style="background-color: #20202c; color: var(--text-muted); border: 1px solid var(--panel-border); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600;">Raw MIDI Event List & JSON</button>
-                    <!-- Studio Tab Trigger Button -->
-                    <button id="btn-tab-studio" style="background-color: #20202c; color: var(--text-muted); border: 1px solid var(--panel-border); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600;">Studio</button>
+            <!-- New Popup Responsive Header (Consistent PC layout, customized clean tab segmented bar on Mobile) -->
+            <div class="popup-header-container">
+                <!-- Mobile Title and Circular Close Button Bar -->
+                <div class="popup-title-bar">
+                    <span class="popup-title">Sheet Music Console</span>
+                    <button onclick="document.getElementById('sheet-modal').style.display='none'; stopSheetPlayback(); stopVerticalPlayback(); stopStudioPlayback();" class="popup-close-btn">&times;</button>
+                </div>
+                
+                <div class="popup-controls-wrapper">
+                    <div class="popup-tab-bar">
+                        <button id="btn-tab-notation" class="popup-tab-item active">Staff Notation (Literal)</button>
+                        <button id="btn-tab-raw" class="popup-tab-item">Raw MIDI Event List & JSON</button>
+                        <button id="btn-tab-studio" class="popup-tab-item">Studio</button>
+                    </div>
                     
-                    <span style="color: var(--panel-border); margin: 0 5px;">|</span>
+                    <span class="popup-divider">|</span>
                     
-                    <!-- Score Audio Playback Buttons -->
-                    <button id="btn-play-sheet" style="background-color: #10b981; color: white; border: 1px solid var(--panel-border); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600;">Play Score</button>
-                    <button id="btn-stop-sheet" disabled style="background-color: #ef4444; color: white; border: 1px solid var(--panel-border); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600;">Stop Score</button>
+                    <div class="popup-playback-bar">
+                        <button id="btn-play-sheet" class="popup-playback-btn play">Play Score</button>
+                        <button id="btn-stop-sheet" class="popup-playback-btn stop" disabled>Stop Score</button>
+                    </div>
                 </div>
                 <button id="btn-close-sheet" style="position: static;">Close</button>
             </div>
