@@ -73,9 +73,7 @@ function renderSheetMusic() {
 
     const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
     const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
-    
-    const startPadding = 50; // Shift note starts to make space for the first-system time signature
-    const svgWidth = totalDurationSecs * pixelsPerSecond + 200 + startPadding; // Offset spacing
+    const svgWidth = totalDurationSecs * pixelsPerSecond + 200; // Offset spacing
     const svgHeight = 320;
 
     // RH and LH staff centerline layouts
@@ -123,33 +121,10 @@ function renderSheetMusic() {
         <circle cx="16" cy="-5" r="2.5" fill="#fbbf24" stroke="none" />
     </g>`;
 
-    // Robust Time Signature Parsing from MIDI Header
-    let timeSignatureNum = 4;
-    let timeSignatureDen = 4;
-    if (midiData && midiData.header && midiData.header.timeSignatures && midiData.header.timeSignatures.length > 0) {
-        const ts = midiData.header.timeSignatures[0].timeSignature;
-        if (Array.isArray(ts) && ts.length === 2) {
-            timeSignatureNum = ts[0];
-            timeSignatureDen = ts[1];
-        }
-    }
-
-    // Render Time Signature inside Section 1 staff
-    const tsX = 115;
-    svgContent += `
-    <g id="horizontal-time-signature-treble" fill="#9ca3af" stroke="none">
-        <text x="${tsX}" y="${rhStaffCenterY - 6}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureNum}</text>
-        <text x="${tsX}" y="${rhStaffCenterY + 18}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureDen}</text>
-    </g>
-    <g id="horizontal-time-signature-bass" fill="#9ca3af" stroke="none">
-        <text x="${tsX}" y="${lhStaffCenterY - 6}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureNum}</text>
-        <text x="${tsX}" y="${lhStaffCenterY + 18}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureDen}</text>
-    </g>`;
-
     // 5. Render notes row-by-row strictly matching the raw activeNotesMemory log
     activeNotesMemory.forEach((note, index) => {
         const shiftedStart = Math.max(0, note.time - firstNoteTime);
-        const x = shiftedStart * pixelsPerSecond + 100 + startPadding;
+        const x = shiftedStart * pixelsPerSecond + 100;
         const w = Math.max(10, note.duration * pixelsPerSecond); // Ensure a minimal width
         const pitch = note.midi;
 
@@ -163,6 +138,8 @@ function renderSheetMusic() {
             color = "#818cf8"; // Purple/indigo
             
             // Center line (Line 3) of RH Treble clef is B4 (MIDI 71)
+            // Notes above Line 3 (pitch >= 72) stem points down
+            // Notes on or below Line 3 (pitch <= 71) stem points up
             if (pitch >= 72) {
                 stemDirection = "down";
             } else {
@@ -173,6 +150,8 @@ function renderSheetMusic() {
             color = "#fbbf24"; // Amber/gold
             
             // Center line (Line 3) of LH Bass clef is D3 (MIDI 50)
+            // Notes above Line 3 (pitch >= 51) stem points down
+            // Notes on or below Line 3 (pitch <= 50) stem points up
             if (pitch >= 51) {
                 stemDirection = "down";
             } else {
@@ -196,10 +175,15 @@ function renderSheetMusic() {
                 });
             }
         } else {
-            // LH (Bass) Ledger Lines
+            // LH (Bass) Ledger Lines (Corrected loop wrapper to resolve reference error crash)
             if (pitch <= 40) { // Low ledger notes (such as E2 = 40)
-                const ly = lhStaffCenterY - (lp - 50) * dy;
-                svgContent += `<line x1="${x - 12}" y1="${ly}" x2="${x + 12}" y2="${ly}" stroke="${color}" stroke-width="1.5" />`;
+                const lhLedgerLines = [40, 36, 33, 29, 26, 24, 21];
+                lhLedgerLines.forEach(lp => {
+                    if (lp >= pitch) {
+                        const ly = lhStaffCenterY - (lp - 50) * dy;
+                        svgContent += `<line x1="${x - 12}" y1="${ly}" x2="${x + 12}" y2="${ly}" stroke="${color}" stroke-width="1.5" />`;
+                    }
+                });
             }
         }
 
@@ -217,14 +201,8 @@ function renderSheetMusic() {
         }
     });
 
-    // Bold Double Bar Line at the End of Horizontal continuous piece
-    const endX = totalDurationSecs * pixelsPerSecond + 100 + startPadding;
-    svgContent += `<!-- Double Bar Line at the End of Horizontal Piece -->`;
-    svgContent += `<line x1="${endX}" y1="${rhStaffCenterY - 18}" x2="${endX}" y2="${lhStaffCenterY + 21}" stroke="#4b5563" stroke-width="1.5" />`;
-    svgContent += `<line x1="${endX + 4}" y1="${rhStaffCenterY - 18}" x2="${endX + 4}" y2="${lhStaffCenterY + 21}" stroke="#4b5563" stroke-width="3.5" />`;
-
-    // Playback tracking cursor line (offset to starting coordinates)
-    svgContent += `<line id="sheet-playback-cursor" x1="${100 + startPadding}" y1="10" x2="${100 + startPadding}" y2="290" stroke="#ef4444" stroke-width="2" style="display: none;" />`;
+    // Playback tracking cursor line
+    svgContent += `<line id="sheet-playback-cursor" x1="100" y1="10" x2="100" y2="290" stroke="#ef4444" stroke-width="2" style="display: none;" />`;
 
     // Insert vector graphic content inside the display frame
     const svgString = `<svg width="${svgWidth}" height="${svgHeight}" style="background: #0b0b0f; border-radius: 8px;">${svgContent}</svg>`;
@@ -774,7 +752,7 @@ function downloadVerticalSVG(containerId) {
     URL.revokeObjectURL(url);
 }
 
-// Dump raw MIDI structural data chronologically and in raw JSON payload formats
+// Dump raw MIDI structural data chronologically and in raw JSON formats
 function populateRawMidiData() {
     if (!midiData) return;
 
@@ -857,8 +835,6 @@ function startSheetPlayback() {
         sheetPlaybackNoteIndex++;
     }
 
-    const startPadding = 50; // Align cursor movement with shifted notes
-
     // Frame scheduler to drive audio events and follow pointer visual states
     function updateSheetFrame(now) {
         if (!sheetMusicPlaying) return;
@@ -877,7 +853,7 @@ function startSheetPlayback() {
         }
 
         // 1. Move pointer line
-        const cursorX = sheetMusicPlaybackTime * pixelsPerSecond + 100 + startPadding;
+        const cursorX = sheetMusicPlaybackTime * pixelsPerSecond + 100;
         if (cursor) {
             cursor.setAttribute('x1', cursorX);
             cursor.setAttribute('x2', cursorX);
@@ -971,11 +947,10 @@ function stopSheetPlayback() {
     sheetMusicPlaybackTime = 0;
     activeInstrument.releaseAll();
 
-    const startPadding = 50;
     const cursor = document.getElementById('sheet-playback-cursor');
     if (cursor) {
-        cursor.setAttribute('x1', 100 + startPadding);
-        cursor.setAttribute('x2', 100 + startPadding);
+        cursor.setAttribute('x1', 100);
+        cursor.setAttribute('x2', 100);
         cursor.style.display = "none";
     }
 
@@ -1282,8 +1257,8 @@ function startStudioPlayback() {
         }
 
         // OPTIMIZED: only scroll Studio panel container when line wraps
-        if (currentSystemIdx !== lastStudioScrolledIdx) {
-            lastStudioScrolledIdx = currentSystemIdx;
+        if (currentSystemIdx !== lastScrolledSystemIdx) {
+            lastScrolledSystemIdx = currentSystemIdx;
             const scrollContainer = document.getElementById('sheet-tab-studio-content-vertical');
             if (scrollContainer) {
                 const targetScrollTop = currentSystemIdx * activeSystemHeight - scrollContainer.clientHeight / 2 + activeSystemHeight / 2;
