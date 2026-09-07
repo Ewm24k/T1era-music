@@ -65,9 +65,6 @@ function renderRestsForGap(svgContent, startX, endX, centerY, isRH) {
 
     const whole = 4 * beatDuration;
     const half = 2 * beatDuration;
-    const quarter = 1 * beatDuration;
-    const eighth = 0.5 * beatDuration;
-    const sixteenth = 0.25 * beatDuration;
 
     let remaining = gapDuration;
     let currentX = startX;
@@ -87,18 +84,6 @@ function renderRestsForGap(svgContent, startX, endX, centerY, isRH) {
             restType = "half";
             restWidth = half * pixelsPerSecond;
             remaining -= half;
-        } else if (remaining >= quarter - 0.05) {
-            restType = "quarter";
-            restWidth = quarter * pixelsPerSecond;
-            remaining -= quarter;
-        } else if (remaining >= eighth - 0.05) {
-            restType = "eighth";
-            restWidth = eighth * pixelsPerSecond;
-            remaining -= eighth;
-        } else if (remaining >= sixteenth - 0.05) {
-            restType = "sixteenth";
-            restWidth = sixteenth * pixelsPerSecond;
-            remaining -= sixteenth;
         } else {
             break;
         }
@@ -110,22 +95,6 @@ function renderRestsForGap(svgContent, startX, endX, centerY, isRH) {
             svgContent += `<rect x="${midX - 7}" y="${line4Y}" width="14" height="6" fill="${color}" opacity="0.85" />`;
         } else if (restType === "half") {
             svgContent += `<rect x="${midX - 7}" y="${centerY - 6}" width="14" height="6" fill="${color}" opacity="0.85" />`;
-        } else if (restType === "quarter") {
-            svgContent += `<path d="M ${midX - 3},${centerY - 10} l 6,6 l -6,6 l 5,4 a 4,4 0 0,1 -6,4" stroke="${color}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85" />`;
-        } else if (restType === "eighth") {
-            svgContent += `
-            <g transform="translate(${midX}, ${centerY})" stroke="${color}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85">
-                <circle cx="-3" cy="-3" r="1.5" fill="${color}" stroke="none" />
-                <path d="M -3,-3 c 4,-3 6,2 0,5 L -4,8" />
-            </g>`;
-        } else if (restType === "sixteenth") {
-            svgContent += `
-            <g transform="translate(${midX}, ${centerY})" stroke="${color}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85">
-                <circle cx="-3" cy="-6" r="1.5" fill="${color}" stroke="none" />
-                <path d="M -3,-6 c 4,-3 6,2 0,5 L -5,8" />
-                <circle cx="-4" cy="-1" r="1.5" fill="${color}" stroke="none" />
-                <path d="M -4,-1 c 4,-3 6,2 0,5" />
-            </g>`;
         }
 
         currentX += restWidth;
@@ -142,9 +111,6 @@ function renderRestsForGapVertical(svgContent, startSecs, endSecs, systemDuratio
 
     const whole = 4 * beatDuration;
     const half = 2 * beatDuration;
-    const quarter = 1 * beatDuration;
-    const eighth = 0.5 * beatDuration;
-    const sixteenth = 0.25 * beatDuration;
 
     let remaining = endSecs - startSecs;
     let currentSecs = startSecs;
@@ -163,18 +129,6 @@ function renderRestsForGapVertical(svgContent, startSecs, endSecs, systemDuratio
             restType = "half";
             restSecs = half;
             remaining -= half;
-        } else if (remaining >= quarter - 0.05) {
-            restType = "quarter";
-            restSecs = quarter;
-            remaining -= quarter;
-        } else if (remaining >= eighth - 0.05) {
-            restType = "eighth";
-            restSecs = eighth;
-            remaining -= eighth;
-        } else if (remaining >= sixteenth - 0.05) {
-            restType = "sixteenth";
-            restSecs = sixteenth;
-            remaining -= sixteenth;
         } else {
             break;
         }
@@ -204,22 +158,6 @@ function drawSingleRestSVG(svgContent, x, centerY, type, color, dy, scale) {
         svgContent += `<rect x="${x - 7 * scale}" y="${line4Y}" width="${14 * scale}" height="${6 * scale}" fill="${color}" opacity="0.85" />`;
     } else if (type === "half") {
         svgContent += `<rect x="${x - 7 * scale}" y="${centerY - 6 * scale}" width="${14 * scale}" height="${6 * scale}" fill="${color}" opacity="0.85" />`;
-    } else if (type === "quarter") {
-        svgContent += `<path d="M ${x - 3 * scale},${centerY - 10 * scale} l ${6 * scale},${6 * scale} l ${-6 * scale},${6 * scale} l ${5 * scale},${4 * scale} a ${4 * scale},${4 * scale} 0 0,1 ${-6 * scale},${4 * scale}" stroke="${color}" stroke-width="${2 * scale}" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85" />`;
-    } else if (type === "eighth") {
-        svgContent += `
-        <g transform="translate(${x}, ${centerY}) scale(${scale})" stroke="${color}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85">
-            <circle cx="-3" cy="-3" r="1.5" fill="${color}" stroke="none" />
-            <path d="M -3,-3 c 4,-3 6,2 0,5 L -4,8" />
-        </g>`;
-    } else if (type === "sixteenth") {
-        svgContent += `
-        <g transform="translate(${x}, ${centerY}) scale(${scale})" stroke="${color}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85">
-            <circle cx="-3" cy="-6" r="1.5" fill="${color}" stroke="none" />
-            <path d="M -3,-6 c 4,-3 6,2 0,5 L -5,8" />
-            <circle cx="-4" cy="-1" r="1.5" fill="${color}" stroke="none" />
-            <path d="M -4,-1 c 4,-3 6,2 0,5" />
-        </g>`;
     }
     return svgContent;
 }
@@ -359,13 +297,13 @@ function renderSheetMusic() {
         const doubleBarX = gap.end * pixelsPerSecond + 100 - 10;
         svgContent += `<!-- Double Bar Lines strictly fitting inside the 5 lines of each staff -->`;
         
-        // Treble staff double bar
-        svgContent += `<line x1="${doubleBarX - 3}" y1="${rhStaffCenterY - 18}" x2="${doubleBarX - 3}" y2="${rhStaffCenterY + 21}" stroke="#818cf8" stroke-width="1.2" opacity="0.8" />`;
-        svgContent += `<line x1="${doubleBarX}" y1="${rhStaffCenterY - 18}" x2="${doubleBarX}" y2="${rhStaffCenterY + 21}" stroke="#818cf8" stroke-width="2.8" opacity="0.8" />`;
+        // Treble staff double bar (dy = 3)
+        svgContent += `<line x1="${doubleBarX - 3}" y1="${rhStaffCenterY - 6 * dy}" x2="${doubleBarX - 3}" y2="${rhStaffCenterY + 7 * dy}" stroke="#818cf8" stroke-width="1.2" opacity="0.8" />`;
+        svgContent += `<line x1="${doubleBarX}" y1="${rhStaffCenterY - 6 * dy}" x2="${doubleBarX}" y2="${rhStaffCenterY + 7 * dy}" stroke="#818cf8" stroke-width="2.8" opacity="0.8" />`;
         
         // Bass staff double bar
-        svgContent += `<line x1="${doubleBarX - 3}" y1="${lhStaffCenterY - 21}" x2="${doubleBarX - 3}" y2="${lhStaffCenterY + 21}" stroke="#fbbf24" stroke-width="1.2" opacity="0.8" />`;
-        svgContent += `<line x1="${doubleBarX}" y1="${lhStaffCenterY - 21}" x2="${doubleBarX}" y2="${lhStaffCenterY + 21}" stroke="#fbbf24" stroke-width="2.8" opacity="0.8" />`;
+        svgContent += `<line x1="${doubleBarX - 3}" y1="${lhStaffCenterY - 7 * dy}" x2="${doubleBarX - 3}" y2="${lhStaffCenterY + 7 * dy}" stroke="#fbbf24" stroke-width="1.2" opacity="0.8" />`;
+        svgContent += `<line x1="${doubleBarX}" y1="${lhStaffCenterY - 7 * dy}" x2="${doubleBarX}" y2="${lhStaffCenterY + 7 * dy}" stroke="#fbbf24" stroke-width="2.8" opacity="0.8" />`;
     });
 
     // 6. Render notes row-by-row strictly matching the raw activeNotesMemory log
@@ -605,22 +543,24 @@ function renderVerticalSheetMusic(targetContainerId) {
             );
         }
 
-        // Draw separate vertical double bar lines strictly fitting inside the 5-lines on each staff
-        const doubleBarTime = Math.max(0, gap.end - 0.08);
-        const firstNoteSystemIdx = Math.floor(doubleBarTime / systemDuration);
+        // Calculate system index based on actual gap end (first note start) to avoid system splits
+        const firstNoteSystemIdx = Math.floor(gap.end / systemDuration);
         const yOffset = firstNoteSystemIdx * systemHeight + 40;
-        const systemTimeOffset = doubleBarTime - firstNoteSystemIdx * systemDuration;
-        const doubleBarX = systemTimeOffset * localPixelsPerSecond + marginLeftValue + startPadding * scale;
+        const systemTimeOffset = gap.end - firstNoteSystemIdx * systemDuration;
+        
+        // Compute exact scaled x position slightly before the note center
+        const noteX = systemTimeOffset * localPixelsPerSecond + marginLeftValue + startPadding * scale;
+        const doubleBarX = noteX - 10 * scale;
 
         svgContent += `<!-- Double Bar Lines strictly fitting inside the 5 lines of each staff (Vertical) -->`;
         
-        // Treble staff double bar
-        svgContent += `<line x1="${doubleBarX - 3 * scale}" y1="${yOffset + (rhStaffCenterY - 18) * scale}" x2="${doubleBarX - 3 * scale}" y2="${yOffset + (rhStaffCenterY + 21) * scale}" stroke="#111115" stroke-width="${1.0 * scale}" />`;
-        svgContent += `<line x1="${doubleBarX}" y1="${yOffset + (rhStaffCenterY - 18) * scale}" x2="${doubleBarX}" y2="${yOffset + (rhStaffCenterY + 21) * scale}" stroke="#111115" stroke-width="${2.4 * scale}" />`;
+        // Treble staff double bar (y coordinates fit exactly inside the 5 lines without scale multiplication on rhStaffCenterY)
+        svgContent += `<line x1="${doubleBarX - 3 * scale}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX - 3 * scale}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="${1.0 * scale}" />`;
+        svgContent += `<line x1="${doubleBarX}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="${2.4 * scale}" />`;
         
         // Bass staff double bar
-        svgContent += `<line x1="${doubleBarX - 3 * scale}" y1="${yOffset + (lhStaffCenterY - 21) * scale}" x2="${doubleBarX - 3 * scale}" y2="${yOffset + (lhStaffCenterY + 21) * scale}" stroke="#111115" stroke-width="${1.0 * scale}" />`;
-        svgContent += `<line x1="${doubleBarX}" y1="${yOffset + (lhStaffCenterY - 21) * scale}" x2="${doubleBarX}" y2="${yOffset + (lhStaffCenterY + 21) * scale}" stroke="#111115" stroke-width="${2.4 * scale}" />`;
+        svgContent += `<line x1="${doubleBarX - 3 * scale}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX - 3 * scale}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="${1.0 * scale}" />`;
+        svgContent += `<line x1="${doubleBarX}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="${2.4 * scale}" />`;
     });
 
     // 4. Draw the notes into their corresponding staff systems (Scale-fitted)
@@ -1398,22 +1338,24 @@ function renderStudioSheetMusic(targetContainerId) {
             );
         }
 
-        // Draw elegant double bar line slightly before the first note in Studio
-        const doubleBarTime = Math.max(0, gap.end - 0.08);
-        const firstNoteSystemIdx = Math.floor(doubleBarTime / systemDuration);
+        // Calculate system index based on actual gap end (first note start) to avoid system splits
+        const firstNoteSystemIdx = Math.floor(gap.end / systemDuration);
         const yOffset = firstNoteSystemIdx * systemHeight + 40;
-        const systemTimeOffset = doubleBarTime - firstNoteSystemIdx * systemDuration;
-        const doubleBarX = systemTimeOffset * localPixelsPerSecond + marginLeft + startPadding;
+        const systemTimeOffset = gap.end - firstNoteSystemIdx * systemDuration;
+        
+        // Compute exact x position slightly before the note center
+        const noteX = systemTimeOffset * localPixelsPerSecond + marginLeft + startPadding;
+        const doubleBarX = noteX - 10;
 
         svgContent += `<!-- Double Bar Lines strictly fitting inside the 5 lines of each staff (Studio) -->`;
         
-        // Treble staff double bar
-        svgContent += `<line x1="${doubleBarX - 3}" y1="${yOffset + rhStaffCenterY - 18}" x2="${doubleBarX - 3}" y2="${yOffset + rhStaffCenterY + 21}" stroke="#111115" stroke-width="1.0" />`;
-        svgContent += `<line x1="${doubleBarX}" y1="${yOffset + rhStaffCenterY - 18}" x2="${doubleBarX}" y2="${yOffset + rhStaffCenterY + 21}" stroke="#111115" stroke-width="2.4" />`;
+        // Treble staff double bar (dy = 3)
+        svgContent += `<line x1="${doubleBarX - 3}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX - 3}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="1.0" opacity="0.85" />`;
+        svgContent += `<line x1="${doubleBarX}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="2.4" opacity="0.85" />`;
         
         // Bass staff double bar
-        svgContent += `<line x1="${doubleBarX - 3}" y1="${yOffset + lhStaffCenterY - 21}" x2="${doubleBarX - 3}" y2="${yOffset + lhStaffCenterY + 21}" stroke="#111115" stroke-width="1.0" />`;
-        svgContent += `<line x1="${doubleBarX}" y1="${yOffset + lhStaffCenterY - 21}" x2="${doubleBarX}" y2="${yOffset + lhStaffCenterY + 21}" stroke="#111115" stroke-width="2.4" />`;
+        svgContent += `<line x1="${doubleBarX - 3}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX - 3}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="1.0" opacity="0.85" />`;
+        svgContent += `<line x1="${doubleBarX}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="2.4" opacity="0.85" />`;
     });
 
     studioNotesMemory.forEach((note, index) => {
