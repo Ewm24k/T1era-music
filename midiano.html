@@ -156,31 +156,24 @@
 
                 <!-- Section 2 (Vertical Portrait Sheet Music Layout) -->
                 <div id="second-sheet-section" style="background: #1a1a24; border: 1px solid var(--panel-border); border-radius: 8px; padding: 20px;">
-                    <!-- Section 2 Header (Optimized with responsive grid classes) -->
-                    <div class="sheet-section-header">
-                        <div class="sheet-section-title-group">
-                            <h3 class="sheet-section-title">Section 2: Portrait Wrapped Layout</h3>
-                            <p class="sheet-section-subtitle">Traditional vertical page scroll (White paper / Thin staves)</p>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <h3 style="color: var(--text-color); font-size: 1rem; margin-bottom: 4px;">Section 2: Portrait Wrapped Layout</h3>
+                            <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0;">Traditional vertical page scroll (White paper / Thin staves)</p>
                         </div>
-                        <div class="sheet-section-controls">
-                            <!-- Show Colors Checkbox -->
-                            <div class="sheet-toggle-wrapper">
-                                <label class="sheet-toggle-label">
-                                    <input type="checkbox" id="chk-show-colors">
-                                    Show Colorful Notes
-                                </label>
-                            </div>
+                        <div style="display: flex; gap: 12px; align-items: center;">
+                            <!-- Show Colors Checkbox (Unchecked by default) -->
+                            <label style="display: inline-flex; align-items: center; gap: 6px; color: var(--text-color); font-size: 0.85rem; cursor: pointer; user-select: none;">
+                                <input type="checkbox" id="chk-show-colors" style="accent-color: var(--accent-color);">
+                                Show Colorful Notes
+                            </label>
                             
-                            <!-- Symmetrical Playback and Action Buttons -->
-                            <div class="sheet-btn-grid">
-                                <button id="btn-play-second" class="btn-primary-action">Play Vert. Score</button>
-                                <button id="btn-stop-second" class="btn-danger-action" disabled>Stop Vert. Score</button>
-                                <button id="btn-maximize-second" class="btn-accent-action">Maximize View</button>
-                                <button id="btn-download-second" class="btn-muted-action">Download SVG</button>
-                            </div>
+                            <button id="btn-play-second" style="background-color: #10b981; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Play Vert. Score</button>
+                            <button id="btn-stop-second" disabled style="background-color: #ef4444; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Stop Vert. Score</button>
+                            <button id="btn-maximize-second" style="background-color: var(--accent-color); color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Maximize View</button>
+                            <button id="btn-download-second" style="background-color: #4b5563; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Download SVG</button>
                         </div>
                     </div>
-                    
                     <!-- Vertical Scroll Frame -->
                     <div id="sheet-tab-notation-content-vertical" style="overflow-y: auto; max-height: 400px; background: #ffffff; border-radius: 8px; border: 1px solid #d1d5db; display: flex; justify-content: center; padding: 20px 10px;">
                         <div id="sheet-music-notation-vertical" style="width: 100%; display: flex; justify-content: center;"></div>
@@ -266,17 +259,14 @@
 
                 <!-- Row 2 Section: Post-edited Music Sheet notation container with standalone audio dispatcher play/stop controls -->
                 <div style="background: #1a1a24; border: 1px solid var(--panel-border); border-radius: 8px; padding: 20px;">
-                    <!-- Row 2: Studio Sheet Music Header -->
-                    <div class="sheet-section-header">
-                        <div class="sheet-section-title-group">
-                            <h3 class="sheet-section-title">Row 2: Studio Sheet Music (After Editing)</h3>
-                            <p class="sheet-section-subtitle">Reflects the modified note sequence before saving permanently.</p>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <h3 style="color: var(--text-color); font-size: 1rem; margin-bottom: 4px;">Row 2: Studio Sheet Music (After Editing)</h3>
+                            <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0;">Reflects the modified note sequence before saving permanently.</p>
                         </div>
-                        <div class="sheet-section-controls">
-                            <div class="sheet-btn-grid" style="grid-template-columns: 1fr 1fr;">
-                                <button id="btn-studio-play-score" class="btn-primary-action">Play Studio Score</button>
-                                <button id="btn-studio-stop-score" class="btn-danger-action" disabled>Stop Studio Score</button>
-                            </div>
+                        <div style="display: flex; gap: 12px; align-items: center;">
+                            <button id="btn-studio-play-score" style="background-color: #10b981; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Play Studio Score</button>
+                            <button id="btn-studio-stop-score" disabled style="background-color: #ef4444; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Stop Studio Score</button>
                         </div>
                     </div>
                     <!-- Vertical Scroll Frame for Studio Sheet Music -->
@@ -292,14 +282,14 @@
     <!-- Second Sheet Maximize Popup Modal -->
     <div id="second-sheet-max-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9); z-index: 1100; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
         <div style="background: #ffffff; width: 90%; height: 90%; border-radius: 12px; padding: 30px; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8); position: relative;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; width: 100%;">
-                <div style="display: flex; gap: 12px; align-items: center;">
-                    <h2 style="color: #111827; font-size: 1.3rem; font-weight: 700; margin: 0;">Full Sheet Music (Portrait Wrapped)</h2>
-                    <button id="btn-play-max" style="background-color: #10b981; color: white; border: 1px solid #d1d5db; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Play Score</button>
-                    <button id="btn-stop-max" disabled style="background-color: #ef4444; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Stop Score</button>
-                    <button id="btn-download-max" style="background-color: #4b5563; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Download SVG</button>
+            <div class="max-modal-header">
+                <h2 class="max-modal-title">Full Sheet Music (Portrait Wrapped)</h2>
+                <div class="max-modal-btn-grid">
+                    <button id="btn-play-max" class="btn-primary-action">Play Score</button>
+                    <button id="btn-stop-max" class="btn-danger-action" disabled>Stop Score</button>
+                    <button id="btn-download-max" class="btn-muted-action">Download SVG</button>
+                    <button id="btn-close-max" class="btn-close-action">Close Fullscreen</button>
                 </div>
-                <button id="btn-close-max" style="background: #ef4444; color: white; border: none; border-radius: 6px; padding: 8px 16px; cursor: pointer; font-weight: 600; font-size: 0.9rem;">Close Fullscreen</button>
             </div>
             <!-- Fullscreen Scrolling Body -->
             <div id="max-modal-scroll-container" style="flex: 1; overflow-y: auto; background: #ffffff; display: flex; justify-content: center; padding: 20px 10px; border-radius: 8px; border: 1px solid #e5e7eb;">
