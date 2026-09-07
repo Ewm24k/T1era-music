@@ -138,8 +138,6 @@ function renderSheetMusic() {
             color = "#818cf8"; // Purple/indigo
             
             // Center line (Line 3) of RH Treble clef is B4 (MIDI 71)
-            // Notes above Line 3 (pitch >= 72) stem points down
-            // Notes on or below Line 3 (pitch <= 71) stem points up
             if (pitch >= 72) {
                 stemDirection = "down";
             } else {
@@ -150,8 +148,6 @@ function renderSheetMusic() {
             color = "#fbbf24"; // Amber/gold
             
             // Center line (Line 3) of LH Bass clef is D3 (MIDI 50)
-            // Notes above Line 3 (pitch >= 51) stem points down
-            // Notes on or below Line 3 (pitch <= 50) stem points up
             if (pitch >= 51) {
                 stemDirection = "down";
             } else {
@@ -241,7 +237,7 @@ function renderVerticalSheetMusic(targetContainerId) {
     // 2. Mobile Layout & Geometry Scaling Parameters
     const isVerticalOrMax = (targetContainerId === 'sheet-music-notation-vertical' || targetContainerId === 'sheet-music-notation-max');
     const isPhoneView = containerWidth < 768;
-    const shouldScale = isVerticalOrMax && isPhoneView; // Zoom out *only* in fullscreen maximised state on phone devices
+    const shouldScale = isVerticalOrMax && isPhoneView; // Zoom out in standard popup and maximized state on mobile screens
 
     const scale = shouldScale ? 0.65 : 1.0;
     const systemDuration = shouldScale ? 6 : 10;            // Expands spacing horizontally by 66% on mobile
@@ -752,7 +748,7 @@ function downloadVerticalSVG(containerId) {
     URL.revokeObjectURL(url);
 }
 
-// Dump raw MIDI structural data chronologically and in raw JSON formats
+// Dump raw MIDI structural data chronologically and in raw JSON payload formats
 function populateRawMidiData() {
     if (!midiData) return;
 
