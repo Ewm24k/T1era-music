@@ -1113,3 +1113,151 @@ select {
     background: var(--accent-color);
     color: #ffffff;
 }
+
+/* =========================================================
+   SECTION 2 & STUDIO SHEET MUSIC HEADER STYLES (DESKTOP)
+   ========================================================= */
+.sheet-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    gap: 15px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.sheet-section-title-group {
+    flex: 1 1 auto;
+}
+
+.sheet-section-title {
+    color: var(--text-color);
+    font-size: 1rem !important;
+    margin-bottom: 4px;
+}
+
+.sheet-section-subtitle {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin: 0;
+}
+
+.sheet-section-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.sheet-toggle-wrapper {
+    display: flex;
+    align-items: center;
+}
+
+.sheet-toggle-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-color);
+    font-size: 0.85rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.sheet-toggle-label input[type="checkbox"] {
+    accent-color: var(--accent-color);
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+}
+
+.sheet-btn-grid {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Custom UI Actions for Sheet Headers */
+.btn-primary-action {
+    background-color: #10b981 !important;
+    color: white !important;
+}
+.btn-primary-action:hover {
+    background-color: #059669 !important;
+}
+
+.btn-danger-action {
+    background-color: #ef4444 !important;
+    color: white !important;
+}
+.btn-danger-action:hover {
+    background-color: #dc2626 !important;
+}
+
+.btn-accent-action {
+    background-color: var(--accent-color) !important;
+    color: white !important;
+}
+
+.btn-muted-action {
+    background-color: #4b5563 !important;
+    color: white !important;
+}
+
+/* =========================================================
+   RESPONSIVE MOBILE OVERRIDES (iOS & Android Portrait 9:16)
+   ========================================================= */
+@media (max-width: 768px) {
+    .sheet-section-header {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+        margin-bottom: 12px !important;
+    }
+
+    .sheet-section-title-group {
+        text-align: center !important;
+        border-bottom: 1px solid var(--panel-border);
+        padding-bottom: 8px;
+    }
+
+    .sheet-section-controls {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+    }
+
+    .sheet-toggle-wrapper {
+        background-color: rgba(255, 255, 255, 0.02);
+        border: 1px solid var(--panel-border);
+        border-radius: 8px;
+        padding: 10px 14px;
+        justify-content: center;
+        width: 100%;
+    }
+
+    .sheet-toggle-label {
+        width: 100%;
+        justify-content: center;
+        font-size: 0.8rem;
+    }
+
+    .sheet-btn-grid {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important; /* Balanced, symmetric 2x2 grid */
+        gap: 8px !important;
+        width: 100%;
+    }
+
+    .sheet-btn-grid button {
+        width: 100% !important;
+        padding: 11px 6px !important; /* Clean, spacious touch target heights */
+        font-size: 0.75rem !important;
+        text-align: center;
+        justify-content: center;
+        margin: 0 !important;
+        box-sizing: border-box !important;
+    }
+}
