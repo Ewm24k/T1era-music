@@ -125,25 +125,31 @@ function pruneExpiredVoiceLog(now) {
     }
 }
 
-function triggerNoteWithVoiceGuard(noteName, duration, time, velocity) {
+function triggerNoteWithVoiceGuard(noteName, duration, time, velocity, strict) {
     if (!activeInstrument) return;
 
     const now = Tone.now();
     const scheduledTime = time || now;
 
     // --- Burst congestion control ---
-    if (scheduledTime - burstWindowStart > BURST_WINDOW_SEC) {
-        // New burst window
-        burstWindowStart = scheduledTime;
-        burstTriggerCount = 0;
-    }
-    burstTriggerCount++;
-    if (burstTriggerCount > MAX_TRIGGERS_PER_BURST && (velocity || 0.8) < 0.55) {
-        // We're deep into a massive simultaneous-note burst and this is one
-        // of the quieter notes in it — skip starting a new voice for it
-        // entirely rather than adding more load on top of an already
-        // saturated instant. Louder/melody notes still get through.
-        return;
+    // Skipped entirely in "strict" mode (sheet/score playback): that engine
+    // must sound exactly what's notated, so we never silently drop a note
+    // here — clipping/overload protection is still handled downstream by
+    // the compressor + limiter, and voice-stealing below still applies.
+    if (!strict) {
+        if (scheduledTime - burstWindowStart > BURST_WINDOW_SEC) {
+            // New burst window
+            burstWindowStart = scheduledTime;
+            burstTriggerCount = 0;
+        }
+        burstTriggerCount++;
+        if (burstTriggerCount > MAX_TRIGGERS_PER_BURST && (velocity || 0.8) < 0.55) {
+            // We're deep into a massive simultaneous-note burst and this is one
+            // of the quieter notes in it — skip starting a new voice for it
+            // entirely rather than adding more load on top of an already
+            // saturated instant. Louder/melody notes still get through.
+            return;
+        }
     }
 
     // --- Same-pitch retrigger guard ---
@@ -581,6 +587,7 @@ function pausePlayback() {
     activeVoiceByPitch.clear();
 }
 
+// Stop operation
 function stopPlayback() {
     isPlaying = false;
     currentPlaybackTime = 0;
@@ -1122,4 +1129,4 @@ window.addEventListener("DOMContentLoaded", () => {
         console.error("[T1ERA AUTO-LOAD ERROR] Gagal memuatkan fail MIDI secara automatik:", err);
       });
   }
-});
+})
