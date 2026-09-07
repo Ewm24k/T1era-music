@@ -1,7 +1,9 @@
 // --- Shared massive-key / anti-choke playback guard ---
 // Prefers the triggerNoteWithVoiceGuard() function defined in the audio
-// engine script. Falls back to a plain choke+attack call if that script 
-// isn't loaded, so this file still works on its own.
+// engine script (handles same-pitch choking, overall polyphony stealing,
+// and massive-chord burst thinning in one place). Falls back to a plain
+// choke+attack call if that script isn't loaded, so this file still works
+// on its own.
 function playNoteSafely(noteName, duration, time, velocity) {
     if (typeof triggerNoteWithVoiceGuard === 'function') {
         triggerNoteWithVoiceGuard(noteName, duration, time, velocity);
@@ -196,13 +198,8 @@ function renderSheetMusic() {
         } else {
             // LH (Bass) Ledger Lines
             if (pitch <= 40) { // Low ledger notes (such as E2 = 40)
-                const lhLedgerLines = [40, 36, 33, 29, 26, 24, 21];
-                lhLedgerLines.forEach(lp => {
-                    if (lp >= pitch) {
-                        const ly = lhStaffCenterY - (lp - 50) * dy;
-                        svgContent += `<line x1="${x - 12}" y1="${ly}" x2="${x + 12}" y2="${ly}" stroke="${color}" stroke-width="1.5" />`;
-                    }
-                });
+                const ly = lhStaffCenterY - (lp - 50) * dy;
+                svgContent += `<line x1="${x - 12}" y1="${ly}" x2="${x + 12}" y2="${ly}" stroke="${color}" stroke-width="1.5" />`;
             }
         }
 
@@ -451,7 +448,7 @@ function renderVerticalSheetMusic(targetContainerId) {
     svgContent += `<line x1="${endX}" y1="${lastSystemYOffset + (rhStaffCenterY - 18) * scale}" x2="${endX}" y2="${lastSystemYOffset + (lhStaffCenterY + 21) * scale}" stroke="#111115" stroke-width="${1.2 * scale}" />`;
     svgContent += `<line x1="${endX + 3 * scale}" y1="${lastSystemYOffset + (rhStaffCenterY - 18) * scale}" x2="${endX + 3 * scale}" y2="${lastSystemYOffset + (lhStaffCenterY + 21) * scale}" stroke="#111115" stroke-width="${2.8 * scale}" />`;
 
-    // Vertical playback tracking pointer cursor
+    // Vertical playback tracking pointer cursor (aligned to padding bounds)
     svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeftValue + startPadding * scale}" y1="10" x2="${marginLeftValue + startPadding * scale}" y2="${svgHeight - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
 
     // Draw footer copyright on the bottom center
