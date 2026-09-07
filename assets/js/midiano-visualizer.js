@@ -241,16 +241,21 @@ function getVisibleNotesSlice() {
 }
 
 // Retrieves or generates pre-allocated gradients to optimize paint iterations
-function getCachedNoteGradient(ctx, x, yEnd, w, yStart, isBlack, isNoteActiveNow) {
-    const height = Math.round(yStart - yEnd);
+// Retrieves or generates pre-allocated gradients to optimize paint iterations.
+// Built entirely in LOCAL coordinates (0,0 = the note's own top-left) so the
+// same cached gradient object is safe to reuse for ANY note sharing the same
+// width/height/state, no matter where it sits on the keyboard. Must be
+// painted through a ctx.translate(x, y) — see call site below.
+function getCachedNoteGradient(ctx, w, h, isBlack, isNoteActiveNow) {
     const width = Math.round(w);
+    const height = Math.max(1, Math.round(h));
     const cacheKey = `${width}_${height}_${isBlack ? 'B' : 'W'}_${isNoteActiveNow ? 'A' : 'I'}`;
-    
+
     if (gradientCache[cacheKey]) {
         return gradientCache[cacheKey];
     }
-    
-    const noteGrad = ctx.createLinearGradient(x, yEnd, x + w, yStart);
+
+    const noteGrad = ctx.createLinearGradient(0, height, width, 0);
     if (isNoteActiveNow) {
         noteGrad.addColorStop(0, '#e879f9');
         noteGrad.addColorStop(1, '#a855f7');
@@ -258,8 +263,7 @@ function getCachedNoteGradient(ctx, x, yEnd, w, yStart, isBlack, isNoteActiveNow
         noteGrad.addColorStop(0, isBlack ? '#4f46e5' : '#6366f1');
         noteGrad.addColorStop(1, isBlack ? '#1e1b4b' : '#312e81');
     }
-    
-    // Clear pool size limits to prevent excessive memory cache expansion
+
     if (Object.keys(gradientCache).length < 600) {
         gradientCache[cacheKey] = noteGrad;
     }
