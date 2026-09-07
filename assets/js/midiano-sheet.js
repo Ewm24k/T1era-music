@@ -4,9 +4,9 @@
 // and massive-chord burst thinning in one place). Falls back to a plain
 // choke+attack call if that script isn't loaded, so this file still works
 // on its own.
-function playNoteSafely(noteName, duration, time, velocity) {
+function playNoteSafely(noteName, duration, time, velocity, strict) {
     if (typeof triggerNoteWithVoiceGuard === 'function') {
-        triggerNoteWithVoiceGuard(noteName, duration, time, velocity);
+        triggerNoteWithVoiceGuard(noteName, duration, time, velocity, strict);
         return;
     }
     if (activeInstrument) {
@@ -584,7 +584,7 @@ function startVerticalPlayback(targetContainerId) {
                             if (Tone.context.state === 'suspended') {
                                 Tone.context.resume();
                             }
-                            playNoteSafely(noteName, duration, Tone.now() + playDelay + lookahead, velocity);
+                            playNoteSafely(noteName, duration, Tone.now() + playDelay + lookahead, velocity, true);
                             notesTriggeredThisFrame++;
                         }
                     } catch (e) {
@@ -883,7 +883,7 @@ function startSheetPlayback() {
                             if (Tone.context.state === 'suspended') {
                                 Tone.context.resume();
                             }
-                            playNoteSafely(noteName, duration, Tone.now() + playDelay + lookahead, velocity);
+                            playNoteSafely(noteName, duration, Tone.now() + playDelay + lookahead, velocity, true);
                             notesTriggeredThisFrame++;
                         }
                     } catch (e) {
@@ -1283,7 +1283,7 @@ function startStudioPlayback() {
                             if (Tone.context.state === 'suspended') {
                                 Tone.context.resume();
                             }
-                            playNoteSafely(noteName, duration, Tone.now() + playDelay + lookahead, velocity);
+                            playNoteSafely(noteName, duration, Tone.now() + playDelay + lookahead, velocity, true);
                             notesTriggeredThisFrame++;
                         }
                     } catch (e) {
