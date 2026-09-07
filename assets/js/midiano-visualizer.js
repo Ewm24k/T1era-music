@@ -277,9 +277,14 @@ function renderFrame(now) {
     lastFrameTime = now;
 
     if (isPlaying && midiData) {
-        // OPTIMIZED: Synchronize currentPlaybackTime directly with the sound card hardware clock
+        // Synchronize playhead directly with the sound card hardware context
         const elapsedRealTime = Tone.now() - audioStartTime;
-        currentPlaybackTime = logicalStartTime + (elapsedRealTime * playbackSpeed);
+        const rawPlaybackTime = logicalStartTime + (elapsedRealTime * playbackSpeed);
+        
+        // COMPENSATE: Subtract processing and hardware output latency so visuals align with sound
+        const rawCtx = Tone.context.rawContext;
+        const totalAudioLatency = (Tone.context.lookAhead || 0) + (rawCtx.baseLatency || 0) + (rawCtx.outputLatency || 0);
+        currentPlaybackTime = Math.max(0, rawPlaybackTime - totalAudioLatency);
         
         if (currentPlaybackTime >= totalDuration) {
             if (isLooping) {
@@ -294,7 +299,7 @@ function renderFrame(now) {
 
         // Audio Note Trigger Scheduler with Hardware-Bound Lookahead (PLL Clock Sync)
         const lookahead = 0.100; // 100ms future queue window
-        const nextWindowTime = currentPlaybackTime + lookahead;
+        const nextWindowTime = rawPlaybackTime + lookahead; // Scheduled head stays raw/ahead
 
         while (playbackNoteIndex < activeNotesMemory.length) {
             const note = activeNotesMemory[playbackNoteIndex];
