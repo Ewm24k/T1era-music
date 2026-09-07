@@ -73,7 +73,9 @@ function renderSheetMusic() {
 
     const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
     const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
-    const svgWidth = totalDurationSecs * pixelsPerSecond + 200; // Offset spacing
+    
+    const startPadding = 50; // Shift note starts to make space for the first-system time signature
+    const svgWidth = totalDurationSecs * pixelsPerSecond + 200 + startPadding; // Offset spacing
     const svgHeight = 320;
 
     // RH and LH staff centerline layouts
@@ -121,10 +123,33 @@ function renderSheetMusic() {
         <circle cx="16" cy="-5" r="2.5" fill="#fbbf24" stroke="none" />
     </g>`;
 
+    // Robust Time Signature Parsing from MIDI Header
+    let timeSignatureNum = 4;
+    let timeSignatureDen = 4;
+    if (midiData && midiData.header && midiData.header.timeSignatures && midiData.header.timeSignatures.length > 0) {
+        const ts = midiData.header.timeSignatures[0].timeSignature;
+        if (Array.isArray(ts) && ts.length === 2) {
+            timeSignatureNum = ts[0];
+            timeSignatureDen = ts[1];
+        }
+    }
+
+    // Render Time Signature inside Section 1 staff
+    const tsX = 115;
+    svgContent += `
+    <g id="horizontal-time-signature-treble" fill="#9ca3af" stroke="none">
+        <text x="${tsX}" y="${rhStaffCenterY - 6}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureNum}</text>
+        <text x="${tsX}" y="${rhStaffCenterY + 18}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureDen}</text>
+    </g>
+    <g id="horizontal-time-signature-bass" fill="#9ca3af" stroke="none">
+        <text x="${tsX}" y="${lhStaffCenterY - 6}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureNum}</text>
+        <text x="${tsX}" y="${lhStaffCenterY + 18}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureDen}</text>
+    </g>`;
+
     // 5. Render notes row-by-row strictly matching the raw activeNotesMemory log
     activeNotesMemory.forEach((note, index) => {
         const shiftedStart = Math.max(0, note.time - firstNoteTime);
-        const x = shiftedStart * pixelsPerSecond + 100;
+        const x = shiftedStart * pixelsPerSecond + 100 + startPadding;
         const w = Math.max(10, note.duration * pixelsPerSecond); // Ensure a minimal width
         const pitch = note.midi;
 
@@ -201,8 +226,14 @@ function renderSheetMusic() {
         }
     });
 
-    // Playback tracking cursor line
-    svgContent += `<line id="sheet-playback-cursor" x1="100" y1="10" x2="100" y2="290" stroke="#ef4444" stroke-width="2" style="display: none;" />`;
+    // Bold Double Bar Line at the End of Horizontal continuous piece
+    const endX = totalDurationSecs * pixelsPerSecond + 100 + startPadding;
+    svgContent += `<!-- Double Bar Line at the End of Horizontal Piece -->`;
+    svgContent += `<line x1="${endX}" y1="${rhStaffCenterY - 18}" x2="${endX}" y2="${lhStaffCenterY + 21}" stroke="#4b5563" stroke-width="1.5" />`;
+    svgContent += `<line x1="${endX + 4}" y1="${rhStaffCenterY - 18}" x2="${endX + 4}" y2="${lhStaffCenterY + 21}" stroke="#4b5563" stroke-width="3.5" />`;
+
+    // Playback tracking cursor line (offset to starting coordinates)
+    svgContent += `<line id="sheet-playback-cursor" x1="${100 + startPadding}" y1="10" x2="${100 + startPadding}" y2="290" stroke="#ef4444" stroke-width="2" style="display: none;" />`;
 
     // Insert vector graphic content inside the display frame
     const svgString = `<svg width="${svgWidth}" height="${svgHeight}" style="background: #0b0b0f; border-radius: 8px;">${svgContent}</svg>`;
@@ -265,12 +296,24 @@ function renderVerticalSheetMusic(targetContainerId) {
     const showColors = chkShowColors ? chkShowColors.checked : false;
 
     // 2. Proportional Scaling so notes perfectly stretch across dynamically sized staves
-    const localPixelsPerSecond = systemWidth / systemDuration;
+    const startPadding = 45; // Space for the clef and time signatures
+    const localPixelsPerSecond = (systemWidth - startPadding) / systemDuration;
 
     let svgContent = "";
 
     // Copyright marker at top right corner
     svgContent += `<text x="${svgWidth - 150}" y="25" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">© T1ERA Music Ai</text>`;
+
+    // Robust Time Signature Parsing from MIDI Header
+    let timeSignatureNum = 4;
+    let timeSignatureDen = 4;
+    if (midiData && midiData.header && midiData.header.timeSignatures && midiData.header.timeSignatures.length > 0) {
+        const ts = midiData.header.timeSignatures[0].timeSignature;
+        if (Array.isArray(ts) && ts.length === 2) {
+            timeSignatureNum = ts[0];
+            timeSignatureDen = ts[1];
+        }
+    }
 
     for (let i = 0; i < numSystems; i++) {
         const yOffset = i * systemHeight + 40;
@@ -311,6 +354,24 @@ function renderVerticalSheetMusic(targetContainerId) {
             <circle cx="16" cy="-15" r="2.5" fill="#111115" stroke="none" />
             <circle cx="16" cy="-5" r="2.5" fill="#111115" stroke="none" />
         </g>`;
+
+        // Draw Real Time Signature on the First System ONLY (Treble and Bass)
+        if (i === 0) {
+            const tsX = marginLeftValue + 12;
+            // Treble Time Signature (RH)
+            svgContent += `
+            <g id="${targetContainerId}-time-signature-treble" fill="#111115" stroke="none">
+                <text x="${tsX}" y="${yOffset + rhStaffCenterY - 6}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureNum}</text>
+                <text x="${tsX}" y="${yOffset + rhStaffCenterY + 18}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureDen}</text>
+            </g>`;
+
+            // Bass Time Signature (LH)
+            svgContent += `
+            <g id="${targetContainerId}-time-signature-bass" fill="#111115" stroke="none">
+                <text x="${tsX}" y="${yOffset + lhStaffCenterY - 6}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureNum}</text>
+                <text x="${tsX}" y="${yOffset + lhStaffCenterY + 18}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureDen}</text>
+            </g>`;
+        }
     }
 
     // 5. Draw the notes into their corresponding staff systems
@@ -321,7 +382,7 @@ function renderVerticalSheetMusic(targetContainerId) {
 
         const yOffset = systemIdx * systemHeight + 40;
         const systemTimeOffset = shiftedStart - systemIdx * systemDuration;
-        const noteX = systemTimeOffset * localPixelsPerSecond + marginLeftValue;
+        const noteX = systemTimeOffset * localPixelsPerSecond + marginLeftValue + startPadding;
         
         // Prevent horizontal overflow past system bounds dynamically
         const maxAllowedWidth = (marginLeftValue + systemWidth) - noteX;
@@ -385,8 +446,19 @@ function renderVerticalSheetMusic(targetContainerId) {
         }
     });
 
-    // Vertical playback tracking pointer cursor
-    svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeftValue}" y1="10" x2="${marginLeftValue}" y2="${svgHeight - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
+    // Final Bold Double Bar Line (Thin line + Thick line) drawn chronologically at the end of the song
+    const lastNoteTimeShifted = totalDurationSecs;
+    const lastSystemIdx = Math.floor(lastNoteTimeShifted / systemDuration);
+    const lastSystemTimeOffset = lastNoteTimeShifted - lastSystemIdx * systemDuration;
+    const endX = Math.min(lastSystemTimeOffset * localPixelsPerSecond + marginLeftValue + startPadding, marginLeftValue + systemWidth);
+    const lastSystemYOffset = lastSystemIdx * systemHeight + 40;
+
+    svgContent += `<!-- Double Bar Line at the End of Piece -->`;
+    svgContent += `<line x1="${endX}" y1="${lastSystemYOffset + rhStaffCenterY - 18}" x2="${endX}" y2="${lastSystemYOffset + lhStaffCenterY + 21}" stroke="#111115" stroke-width="1.5" />`;
+    svgContent += `<line x1="${endX + 4}" y1="${lastSystemYOffset + rhStaffCenterY - 18}" x2="${endX + 4}" y2="${lastSystemYOffset + lhStaffCenterY + 21}" stroke="#111115" stroke-width="3.5" />`;
+
+    // Vertical playback tracking pointer cursor (aligned to padding bounds)
+    svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeftValue + startPadding}" y1="10" x2="${marginLeftValue + startPadding}" y2="${svgHeight - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
 
     // Draw footer copyright on the bottom center
     svgContent += `<text x="${svgWidth / 2}" y="${svgHeight - 15}" text-anchor="middle" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">© T1ERA Music Ai</text>`;
@@ -450,8 +522,9 @@ function startVerticalPlayback(targetContainerId) {
         localMarginRight = 15;
     }
     
+    const startPadding = 45; // Alignment with staves spacing
     const systemWidth = containerWidth - localMarginLeft - localMarginRight;
-    const localPixelsPerSecond = systemWidth / systemDuration;
+    const localPixelsPerSecond = (systemWidth - startPadding) / systemDuration;
 
     const firstNoteTime = activeNotesMemory.length > 0 ? activeNotesMemory[0].time : 0;
     
@@ -484,7 +557,7 @@ function startVerticalPlayback(targetContainerId) {
         const currentSystemIdx = Math.floor(verticalPlaybackTime / systemDuration);
         const systemTimeOffset = verticalPlaybackTime - currentSystemIdx * systemDuration;
 
-        const cursorX = systemTimeOffset * localPixelsPerSecond + localMarginLeft;
+        const cursorX = systemTimeOffset * localPixelsPerSecond + localMarginLeft + startPadding;
         const yOffset = currentSystemIdx * systemHeight + 40;
 
         if (cursor) {
@@ -520,9 +593,6 @@ function startVerticalPlayback(targetContainerId) {
             const note = activeNotesMemory[verticalPlaybackNoteIndex];
             const shiftedStart = Math.max(0, note.time - firstNoteTime);
             if (shiftedStart < verticalPlaybackTime) {
-                // REMOVED: if (shiftedStart >= prevTime) comparison block.
-                // Catch-up schedule triggers all missed notes caused by sudden page layout lags 
-                // directly rather than dropping them, preventing sudden playback silence.
                 if (notesTriggeredThisFrame < MAX_NOTES_PER_FRAME) {
                     const playDelay = Math.max(0, shiftedStart - prevTime) / playbackSpeed;
                     
@@ -537,9 +607,7 @@ function startVerticalPlayback(targetContainerId) {
                             }
                             // Routed through the shared voice guard: handles same-pitch
                             // choking, overall polyphony stealing, and massive-chord burst
-                            // thinning in one place, instead of an unconditional
-                            // release+attack on every note (extra audio-graph churn that
-                            // was part of what still glitched under dense passages).
+                            // thinning in one place.
                             playNoteSafely(noteName, duration, Tone.now() + playDelay + lookahead, velocity);
                             notesTriggeredThisFrame++;
                         }
@@ -602,10 +670,11 @@ function stopVerticalPlayback() {
     activeInstrument.releaseAll();
 
     if (activeVerticalContainerId) {
+        const startPadding = 45;
         const cursor = document.getElementById(`${activeVerticalContainerId}-playback-cursor`);
         if (cursor) {
-            cursor.setAttribute('x1', 100);
-            cursor.setAttribute('x2', 100);
+            cursor.setAttribute('x1', 100 + startPadding);
+            cursor.setAttribute('x2', 100 + startPadding);
             cursor.style.display = "none";
         }
 
@@ -776,6 +845,8 @@ function startSheetPlayback() {
         sheetPlaybackNoteIndex++;
     }
 
+    const startPadding = 50; // Align cursor movement with shifted notes
+
     // Frame scheduler to drive audio events and follow pointer visual states
     function updateSheetFrame(now) {
         if (!sheetMusicPlaying) return;
@@ -794,7 +865,7 @@ function startSheetPlayback() {
         }
 
         // 1. Move pointer line
-        const cursorX = sheetMusicPlaybackTime * pixelsPerSecond + 100;
+        const cursorX = sheetMusicPlaybackTime * pixelsPerSecond + 100 + startPadding;
         if (cursor) {
             cursor.setAttribute('x1', cursorX);
             cursor.setAttribute('x2', cursorX);
@@ -816,7 +887,6 @@ function startSheetPlayback() {
             const note = activeNotesMemory[sheetPlaybackNoteIndex];
             const shiftedStart = Math.max(0, note.time - firstNoteTime);
             if (shiftedStart < sheetMusicPlaybackTime) {
-                // REMOVED: if (shiftedStart >= prevTime) check block
                 if (notesTriggeredThisFrame < MAX_NOTES_PER_FRAME) {
                     const playDelay = Math.max(0, shiftedStart - prevTime) / playbackSpeed;
                     
@@ -829,10 +899,7 @@ function startSheetPlayback() {
                             if (Tone.context.state === 'suspended') {
                                 Tone.context.resume();
                             }
-                            // Routed through the shared voice guard: handles same-pitch
-                            // choking, overall polyphony stealing, and massive-chord burst
-                            // thinning in one place, instead of an unconditional
-                            // release+attack on every note.
+                            // Routed through the shared voice guard.
                             playNoteSafely(noteName, duration, Tone.now() + playDelay + lookahead, velocity);
                             notesTriggeredThisFrame++;
                         }
@@ -893,10 +960,11 @@ function stopSheetPlayback() {
     sheetMusicPlaybackTime = 0;
     activeInstrument.releaseAll();
 
+    const startPadding = 50;
     const cursor = document.getElementById('sheet-playback-cursor');
     if (cursor) {
-        cursor.setAttribute('x1', 100);
-        cursor.setAttribute('x2', 100);
+        cursor.setAttribute('x1', 100 + startPadding);
+        cursor.setAttribute('x2', 100 + startPadding);
         cursor.style.display = "none";
     }
 
@@ -954,11 +1022,23 @@ function renderStudioSheetMusic(targetContainerId) {
     const showColors = chkShowColors ? chkShowColors.checked : false;
 
     // Proportional Scaling mapping matching studio width parameters
-    const localPixelsPerSecond = systemWidth / systemDuration;
+    const startPadding = 45; // Space for clefs & time signatures
+    const localPixelsPerSecond = (systemWidth - startPadding) / systemDuration;
 
     let svgContent = "";
 
     svgContent += `<text x="${svgWidth - 150}" y="25" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">© T1ERA Studio Ai</text>`;
+
+    // Robust Time Signature Parsing from MIDI Header
+    let timeSignatureNum = 4;
+    let timeSignatureDen = 4;
+    if (midiData && midiData.header && midiData.header.timeSignatures && midiData.header.timeSignatures.length > 0) {
+        const ts = midiData.header.timeSignatures[0].timeSignature;
+        if (Array.isArray(ts) && ts.length === 2) {
+            timeSignatureNum = ts[0];
+            timeSignatureDen = ts[1];
+        }
+    }
 
     for (let i = 0; i < numSystems; i++) {
         const yOffset = i * systemHeight + 40;
@@ -999,6 +1079,24 @@ function renderStudioSheetMusic(targetContainerId) {
             <circle cx="16" cy="-15" r="2.5" fill="#111115" stroke="none" />
             <circle cx="16" cy="-5" r="2.5" fill="#111115" stroke="none" />
         </g>`;
+
+        // Draw Real Time Signature in Studio Mode on the First System
+        if (i === 0) {
+            const tsX = marginLeft + 12;
+            // Treble Time Signature
+            svgContent += `
+            <g id="studio-time-signature-treble" fill="#111115" stroke="none">
+                <text x="${tsX}" y="${yOffset + rhStaffCenterY - 6}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureNum}</text>
+                <text x="${tsX}" y="${yOffset + rhStaffCenterY + 18}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureDen}</text>
+            </g>`;
+
+            // Bass Time Signature
+            svgContent += `
+            <g id="studio-time-signature-bass" fill="#111115" stroke="none">
+                <text x="${tsX}" y="${yOffset + lhStaffCenterY - 6}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureNum}</text>
+                <text x="${tsX}" y="${yOffset + lhStaffCenterY + 18}" font-family="Georgia, serif" font-size="28" font-weight="bold" text-anchor="middle">${timeSignatureDen}</text>
+            </g>`;
+        }
     }
 
     studioNotesMemory.forEach((note, index) => {
@@ -1008,7 +1106,7 @@ function renderStudioSheetMusic(targetContainerId) {
 
         const yOffset = systemIdx * systemHeight + 40;
         const systemTimeOffset = shiftedStart - systemIdx * systemDuration;
-        const noteX = systemTimeOffset * localPixelsPerSecond + marginLeft;
+        const noteX = systemTimeOffset * localPixelsPerSecond + marginLeft + startPadding;
         
         const maxAllowedWidth = (marginLeft + systemWidth) - noteX;
         const noteW = Math.min(Math.max(10, note.duration * localPixelsPerSecond), maxAllowedWidth);
@@ -1068,8 +1166,19 @@ function renderStudioSheetMusic(targetContainerId) {
         }
     });
 
-    // Tracking pointer
-    svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeft}" y1="10" x2="${marginLeft}" y2="${svgHeight - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
+    // Bold Double Bar Line at the End of Studio layout
+    const lastNoteTimeShifted = totalDurationSecs;
+    const lastSystemIdx = Math.floor(lastNoteTimeShifted / systemDuration);
+    const lastSystemTimeOffset = lastNoteTimeShifted - lastSystemIdx * systemDuration;
+    const endX = Math.min(lastSystemTimeOffset * localPixelsPerSecond + marginLeft + startPadding, marginLeft + systemWidth);
+    const lastSystemYOffset = lastSystemIdx * systemHeight + 40;
+
+    svgContent += `<!-- Double Bar Line at the End of Studio Piece -->`;
+    svgContent += `<line x1="${endX}" y1="${lastSystemYOffset + rhStaffCenterY - 18}" x2="${endX}" y2="${lastSystemYOffset + lhStaffCenterY + 21}" stroke="#111115" stroke-width="1.5" />`;
+    svgContent += `<line x1="${endX + 4}" y1="${lastSystemYOffset + rhStaffCenterY - 18}" x2="${endX + 4}" y2="${lastSystemYOffset + lhStaffCenterY + 21}" stroke="#111115" stroke-width="3.5" />`;
+
+    // Tracking pointer cursor
+    svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeft + startPadding}" y1="10" x2="${marginLeft + startPadding}" y2="${svgHeight - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
 
     const svgString = `<svg width="${svgWidth}" height="${svgHeight}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">${svgContent}</svg>`;
     document.getElementById(targetContainerId).innerHTML = svgString;
@@ -1108,6 +1217,17 @@ function startStudioPlayback() {
     const systemHeight = 220;
     const marginLeft = 100;
 
+    // Synchronized width and pacing setup mirroring renderStudioSheetMusic exactly
+    let containerWidth = 950;
+    const parentWidth = document.getElementById('sheet-music-notation-studio')?.parentElement?.clientWidth || window.innerWidth;
+    if (parentWidth < 950) {
+        containerWidth = Math.max(320, parentWidth - 20);
+    }
+    const marginRight = 50;
+    const systemWidth = containerWidth - marginLeft - marginRight;
+    const startPadding = 45;
+    const localPixelsPerSecond = (systemWidth - startPadding) / systemDuration;
+
     const firstNoteTime = studioNotesMemory.length > 0 ? studioNotesMemory[0].time : 0;
     
     // Fast seek of starting studio index
@@ -1138,7 +1258,7 @@ function startStudioPlayback() {
         const currentSystemIdx = Math.floor(studioPlaybackTime / systemDuration);
         const systemTimeOffset = studioPlaybackTime - currentSystemIdx * systemDuration;
 
-        const cursorX = systemTimeOffset * pixelsPerSecond + marginLeft;
+        const cursorX = systemTimeOffset * localPixelsPerSecond + marginLeft + startPadding;
         const yOffset = currentSystemIdx * systemHeight + 40;
 
         if (cursor) {
@@ -1167,7 +1287,6 @@ function startStudioPlayback() {
             const note = studioNotesMemory[studioPlaybackNoteIndex];
             const shiftedStart = Math.max(0, note.time - firstNoteTime);
             if (shiftedStart < studioPlaybackTime) {
-                // REMOVED: if (shiftedStart >= prevTime) check block
                 if (notesTriggeredThisFrame < MAX_NOTES_PER_FRAME) {
                     const playDelay = Math.max(0, shiftedStart - prevTime) / playbackSpeed;
                     
@@ -1180,10 +1299,7 @@ function startStudioPlayback() {
                             if (Tone.context.state === 'suspended') {
                                 Tone.context.resume();
                             }
-                            // Routed through the shared voice guard: handles same-pitch
-                            // choking, overall polyphony stealing, and massive-chord burst
-                            // thinning in one place, instead of an unconditional
-                            // release+attack on every note.
+                            // Routed through the shared voice guard.
                             playNoteSafely(noteName, duration, Tone.now() + playDelay + lookahead, velocity);
                             notesTriggeredThisFrame++;
                         }
@@ -1254,10 +1370,11 @@ function stopStudioPlayback() {
         btnStop.disabled = true;
     }
 
+    const startPadding = 45;
     const cursor = document.getElementById('sheet-music-notation-studio-playback-cursor');
     if (cursor) {
-        cursor.setAttribute('x1', 100);
-        cursor.setAttribute('x2', 100);
+        cursor.setAttribute('x1', 100 + startPadding);
+        cursor.setAttribute('x2', 100 + startPadding);
         cursor.style.display = "none";
     }
 
