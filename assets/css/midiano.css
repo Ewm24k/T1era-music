@@ -1054,6 +1054,100 @@ select {
     #max-modal-scroll-container {
         padding: 10px 5px !important;
     }
+
+    /* ============================================================
+       LOCK SHEET MUSIC POPUP TO VERTICAL SCROLL ONLY (Android/iOS)
+       Prevents the entire popup from being draggable left/right;
+       only individual wide content blocks (tables, Section 1 staff)
+       get their own contained horizontal scroller.
+       ============================================================ */
+    #sheet-modal {
+        overflow-x: hidden;
+    }
+
+    #sheet-content {
+        width: 100%;
+        height: 100%;
+        max-width: 100vw;
+        margin: 0;
+        border-radius: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        touch-action: pan-y;
+        overscroll-behavior-x: contain;
+        overscroll-behavior-y: contain;
+        -webkit-overflow-scrolling: touch;
+        box-sizing: border-box;
+    }
+
+    #sheet-content * {
+        box-sizing: border-box;
+    }
+
+    /* No content block inside the popup may exceed its own width */
+    #sheet-tab-notation-content,
+    #sheet-tab-raw-content,
+    #sheet-tab-studio-content,
+    #second-sheet-section {
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+
+    /* Wide event tables get their OWN contained horizontal scroller,
+       so a sideways swipe there never drags the whole popup */
+    #sheet-tab-raw-content > div,
+    #sheet-tab-studio-content > div {
+        max-width: 100%;
+        overflow-x: auto;
+        touch-action: pan-x pan-y;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #raw-midi-json-view {
+        max-width: 100%;
+    }
+
+    /* Tighter, phone-friendly table cells so more columns fit before scrolling */
+    #sheet-tab-raw-content table th,
+    #sheet-tab-raw-content table td,
+    #sheet-tab-studio-content table th,
+    #sheet-tab-studio-content table td {
+        padding: 8px 6px !important;
+        font-size: 0.72rem !important;
+        white-space: nowrap;
+    }
+
+    /* Studio inline edit inputs: keep compact so table stays usable in its own scroller */
+    #sheet-tab-studio-content input[type="number"] {
+        min-width: 50px !important;
+        max-width: 70px !important;
+    }
+
+    /* Section 1 continuous horizontal staff keeps its own dedicated
+       horizontal scroller (this is intentional, not the popup itself) */
+    #sheet-tab-notation-content > div[style*="overflow-x"] {
+        touch-action: pan-x pan-y;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Studio filter control row wraps cleanly instead of forcing width */
+    #studio-filter-controls {
+        flex-wrap: wrap !important;
+        width: 100%;
+    }
+
+    /* Removal preview pills wrap instead of stretching the popup */
+    #studio-removal-preview-list {
+        max-width: 100%;
+    }
+
+    #studio-removal-preview-list span {
+        max-width: 100%;
+        white-space: normal !important;
+        word-break: break-word;
+    }
 }
 
 /* =========================================================
@@ -1221,6 +1315,20 @@ select {
         justify-content: center;
         box-sizing: border-box !important;
         margin: 0 !important;
+    }
+
+    /* Keep the maximized modal itself locked to vertical scroll too */
+    #second-sheet-max-modal > div {
+        overflow-x: hidden !important;
+        touch-action: pan-y;
+        overscroll-behavior-x: contain;
+    }
+
+    #max-modal-scroll-container {
+        overflow-x: hidden !important;
+        touch-action: pan-y;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
     }
 }
 
