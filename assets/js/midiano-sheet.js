@@ -305,8 +305,17 @@ function renderSheetMusic() {
 
     // 5. Render Starting silence rests if needed before first note triggers
     if (firstNoteActualTime > 0.05) {
-        svgContent = renderRestsForGap(svgContent, 100, firstNoteActualTime * pixelsPerSecond + 100, rhStaffCenterY, true);
-        svgContent = renderRestsForGap(svgContent, 100, firstNoteActualTime * pixelsPerSecond + 100, lhStaffCenterY, false);
+        const restsEndSecs = Math.max(0, firstNoteActualTime - 0.1);
+        if (restsEndSecs > 0.05) {
+            svgContent = renderRestsForGap(svgContent, 100, restsEndSecs * pixelsPerSecond + 100, rhStaffCenterY, true);
+            svgContent = renderRestsForGap(svgContent, 100, restsEndSecs * pixelsPerSecond + 100, lhStaffCenterY, false);
+        }
+
+        // Draw elegant double bar line slightly before the first note (10px margin)
+        const doubleBarX = firstNoteActualTime * pixelsPerSecond + 100 - 10;
+        svgContent += `<!-- Double Bar Line after initial rests -->`;
+        svgContent += `<line x1="${doubleBarX - 3}" y1="${rhStaffCenterY - 18}" x2="${doubleBarX - 3}" y2="${lhStaffCenterY + 21}" stroke="#818cf8" stroke-width="1.2" opacity="0.8" />`;
+        svgContent += `<line x1="${doubleBarX}" y1="${rhStaffCenterY - 18}" x2="${doubleBarX}" y2="${lhStaffCenterY + 21}" stroke="#818cf8" stroke-width="2.8" opacity="0.8" />`;
     }
 
     // 6. Render notes row-by-row strictly matching the raw activeNotesMemory log
@@ -458,8 +467,8 @@ function renderVerticalSheetMusic(targetContainerId) {
 
     let svgContent = "";
 
-    // Copyright marker at top right corner
-    svgContent += `<text x="${svgWidth - 150}" y="25" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">© T1ERA Music Ai</text>`;
+    // Copyright marker at top right corner (Replaced literal non-ASCII character with safe entity)
+    svgContent += `<text x="${svgWidth - 150}" y="25" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">&#169; T1ERA Music Ai</text>`;
 
     // Robust Time Signature Parsing from MIDI Header
     let timeSignatureNum = 4;
@@ -537,11 +546,25 @@ function renderVerticalSheetMusic(targetContainerId) {
 
     // Render starting play rests in wrapped vertical systems if needed
     if (firstNoteActualTime > 0.05) {
-        svgContent = renderRestsForGapVertical(
-            svgContent, 0, firstNoteActualTime, 
-            systemDuration, systemHeight, rhStaffCenterY, lhStaffCenterY, 
-            localPixelsPerSecond, marginLeftValue, startPadding, scale, showColors
-        );
+        const restsEndSecs = Math.max(0, firstNoteActualTime - 0.1);
+        if (restsEndSecs > 0.05) {
+            svgContent = renderRestsForGapVertical(
+                svgContent, 0, restsEndSecs, 
+                systemDuration, systemHeight, rhStaffCenterY, lhStaffCenterY, 
+                localPixelsPerSecond, marginLeftValue, startPadding, scale, showColors
+            );
+        }
+
+        // Draw elegant double bar line slightly before the first note (10px margin-equivalent)
+        const doubleBarTime = Math.max(0, firstNoteActualTime - 0.08);
+        const firstNoteSystemIdx = Math.floor(doubleBarTime / systemDuration);
+        const yOffset = firstNoteSystemIdx * systemHeight + 40;
+        const systemTimeOffset = doubleBarTime - firstNoteSystemIdx * systemDuration;
+        const doubleBarX = systemTimeOffset * localPixelsPerSecond + marginLeftValue + startPadding * scale;
+
+        svgContent += `<!-- Double Bar Line after initial rests (Vertical) -->`;
+        svgContent += `<line x1="${doubleBarX - 3 * scale}" y1="${yOffset + (rhStaffCenterY - 18) * scale}" x2="${doubleBarX - 3 * scale}" y2="${yOffset + (lhStaffCenterY + 21) * scale}" stroke="#111115" stroke-width="${1.0 * scale}" />`;
+        svgContent += `<line x1="${doubleBarX}" y1="${yOffset + (rhStaffCenterY - 18) * scale}" x2="${doubleBarX}" y2="${yOffset + (lhStaffCenterY + 21) * scale}" stroke="#111115" stroke-width="${2.4 * scale}" />`;
     }
 
     // 4. Draw the notes into their corresponding staff systems (Scale-fitted)
@@ -630,8 +653,8 @@ function renderVerticalSheetMusic(targetContainerId) {
     // Vertical playback tracking pointer cursor
     svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeftValue + startPadding * scale}" y1="10" x2="${marginLeftValue + startPadding * scale}" y2="${svgHeight - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
 
-    // Draw footer copyright on the bottom center
-    svgContent += `<text x="${svgWidth / 2}" y="${svgHeight - 15}" text-anchor="middle" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">© T1ERA Music Ai</text>`;
+    // Draw footer copyright on the bottom center (Replaced literal non-ASCII character with safe entity)
+    svgContent += `<text x="${svgWidth / 2}" y="${svgHeight - 15}" text-anchor="middle" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">&#169; T1ERA Music Ai</text>`;
 
     const svgString = `<svg width="${svgWidth}" height="${svgHeight}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">${svgContent}</svg>`;
     document.getElementById(targetContainerId).innerHTML = svgString;
@@ -1238,7 +1261,8 @@ function renderStudioSheetMusic(targetContainerId) {
 
     let svgContent = "";
 
-    svgContent += `<text x="${svgWidth - 150}" y="25" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">© T1ERA Studio Ai</text>`;
+    // Copyright marker at top right corner (Replaced literal non-ASCII character with safe entity)
+    svgContent += `<text x="${svgWidth - 150}" y="25" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">&#169; T1ERA Studio Ai</text>`;
 
     // Robust Time Signature Parsing from MIDI Header
     let timeSignatureNum = 4;
@@ -1308,11 +1332,25 @@ function renderStudioSheetMusic(targetContainerId) {
 
     // Render starting play rests in wrapped studio systems if needed
     if (firstNoteActualTime > 0.05) {
-        svgContent = renderRestsForGapVertical(
-            svgContent, 0, firstNoteActualTime, 
-            systemDuration, systemHeight, rhStaffCenterY, lhStaffCenterY, 
-            localPixelsPerSecond, marginLeft, startPadding, 1.0, showColors
-        );
+        const restsEndSecs = Math.max(0, firstNoteActualTime - 0.1);
+        if (restsEndSecs > 0.05) {
+            svgContent = renderRestsForGapVertical(
+                svgContent, 0, restsEndSecs, 
+                systemDuration, systemHeight, rhStaffCenterY, lhStaffCenterY, 
+                localPixelsPerSecond, marginLeft, startPadding, 1.0, showColors
+            );
+        }
+
+        // Draw elegant double bar line slightly before the first note in Studio
+        const doubleBarTime = Math.max(0, firstNoteActualTime - 0.08);
+        const firstNoteSystemIdx = Math.floor(doubleBarTime / systemDuration);
+        const yOffset = firstNoteSystemIdx * systemHeight + 40;
+        const systemTimeOffset = doubleBarTime - firstNoteSystemIdx * systemDuration;
+        const doubleBarX = systemTimeOffset * localPixelsPerSecond + marginLeft + startPadding;
+
+        svgContent += `<!-- Double Bar Line after initial rests (Studio) -->`;
+        svgContent += `<line x1="${doubleBarX - 3}" y1="${yOffset + rhStaffCenterY - 18}" x2="${doubleBarX - 3}" y2="${yOffset + lhStaffCenterY + 21}" stroke="#111115" stroke-width="1.0" />`;
+        svgContent += `<line x1="${doubleBarX}" y1="${yOffset + rhStaffCenterY - 18}" x2="${doubleBarX}" y2="${yOffset + lhStaffCenterY + 21}" stroke="#111115" stroke-width="2.4" />`;
     }
 
     studioNotesMemory.forEach((note, index) => {
