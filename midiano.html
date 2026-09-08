@@ -10,6 +10,44 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/abcjs/6.3.0/abcjs-basic-min.js"></script>
     <!-- Separated CSS External Link -->
     <link rel="stylesheet" href="assets/css/midiano.css">
+    
+    <!-- Responsive layout overrides specifically for dropdown wrappers inside headers -->
+    <style>
+        /* Symmetrical mobile flex alignment for the new Section 2 dropdown wrapper */
+        @media (max-width: 768px) {
+            div:has(> #btn-play-second) .dropdown-wrapper {
+                flex: 1 1 calc(50% - 6px) !important;
+                display: inline-flex !important;
+            }
+            div:has(> #btn-play-second) .dropdown-wrapper button {
+                width: 100% !important;
+                font-size: 11px !important;
+                height: 32px !important;
+                border-radius: 6px !important;
+                font-weight: 600 !important;
+                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2) !important;
+                border: none !important;
+                margin: 0 !important;
+            }
+            /* Maximized grid dropdown configuration mapping */
+            .max-modal-btn-grid .dropdown-wrapper {
+                width: 100% !important;
+                display: inline-flex !important;
+            }
+            .max-modal-btn-grid .dropdown-wrapper button {
+                width: 100% !important;
+                padding: 10px 4px !important;
+                font-size: 0.75rem !important;
+            }
+            /* Prevent positioning shift for sheet dropdown overlays on mobile */
+            div:has(> #btn-play-second) .dropdown-content,
+            .max-modal-btn-grid .dropdown-content {
+                right: 0 !important;
+                left: auto !important;
+                top: calc(100% + 4px) !important;
+            }
+        }
+    </style>
 </head>
 <body>
 
@@ -180,7 +218,17 @@
                             <button id="btn-play-second" style="background-color: #10b981; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Play Vert. Score</button>
                             <button id="btn-stop-second" disabled style="background-color: #ef4444; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Stop Vert. Score</button>
                             <button id="btn-maximize-second" style="background-color: var(--accent-color); color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Maximize View</button>
-                            <button id="btn-download-second" style="background-color: #4b5563; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Download SVG</button>
+                            
+                            <!-- Updated Download Button to Dropdown Wrapper -->
+                            <div class="dropdown-wrapper" style="position: relative;">
+                                <button id="btn-download-second" style="background-color: #4b5563; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;" type="button">Download</button>
+                                <div id="download-dropdown-second" class="dropdown-content">
+                                    <a href="#" id="down-svg-second">Download SVG Sheet</a>
+                                    <a href="#" id="down-xml-second">Download MusicXML</a>
+                                    <a href="#" id="down-midi-second">Download MIDI File</a>
+                                    <a href="#" id="down-pdf-second">Download PDF Sheet</a>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <!-- Vertical Scroll Frame -->
@@ -296,7 +344,18 @@
                 <div class="max-modal-btn-grid">
                     <button id="btn-play-max" class="btn-primary-action">Play Score</button>
                     <button id="btn-stop-max" class="btn-danger-action" disabled>Stop Score</button>
-                    <button id="btn-download-max" class="btn-muted-action">Download SVG</button>
+                    
+                    <!-- Updated Download SVG Button inside Maximized Modal to Dropdown Wrapper -->
+                    <div class="dropdown-wrapper" style="position: relative;">
+                        <button id="btn-download-max" class="btn-muted-action" type="button">Download</button>
+                        <div id="download-dropdown-max" class="dropdown-content">
+                            <a href="#" id="down-svg-max">Download SVG Sheet</a>
+                            <a href="#" id="down-xml-max">Download MusicXML</a>
+                            <a href="#" id="down-midi-max">Download MIDI File</a>
+                            <a href="#" id="down-pdf-max">Download PDF Sheet</a>
+                        </div>
+                    </div>
+                    
                     <button id="btn-close-max" class="btn-close-action">Close Fullscreen</button>
                 </div>
             </div>
@@ -396,7 +455,7 @@
                             <div class="model-badge bytedance">Ivory-2</div>
                             <div class="model-name">TiERA Ivory-2</div>
                             <p class="model-desc">Dedicated Piano-Only Engine (ByteDance). Purpose-built exclusively for solo piano recordings - captures onsets, offsets, velocity and pedaling directly.</p>
-                            <div class="model-stages best-badge" style="color: #facc15; font-weight: 700;">★ THE BEST FOR PIANO TRANSCRIBE</div>
+                            <div class="model-stages" style="color: #facc15; font-weight: 700;">★ THE BEST FOR PIANO TRANSCRIBE</div>
                         </div>
                     </div>
                 </div>
@@ -419,7 +478,7 @@
                             </div>
                             <div class="web3-input-wrapper">
                                 <input type="url" id="transcribe-youtube-link-input" placeholder="https://www.youtube.com/watch?v=..." class="web3-input" style="width: 100%; padding: 10px; font-family: monospace; font-size: 0.8rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #fff; text-align: center; outline: none;">
-                                <button type="button" id="transcribe-youtube-submit-btn" class="web3-action-btn pulse-glow-blue" style="cursor: pointer; padding: 8px 12px; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 6px; background: rgba(255, 255, 255, 0.05); color: #fff; font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase;">Import Stream</button>
+                                <button type="button" id="transcribe-youtube-submit-btn" class="web3-action-btn" style="cursor: pointer; padding: 8px 12px; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 6px; background: rgba(255, 255, 255, 0.05); color: #fff; font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase;">Import Stream</button>
                             </div>
                         </div>
 
