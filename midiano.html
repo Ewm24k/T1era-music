@@ -39,12 +39,42 @@
                 padding: 10px 4px !important;
                 font-size: 0.75rem !important;
             }
-            /* Prevent positioning shift for sheet dropdown overlays on mobile */
-            div:has(> #btn-play-second) .dropdown-content,
-            .max-modal-btn-grid .dropdown-content {
-                right: 0 !important;
-                left: auto !important;
-                top: calc(100% + 4px) !important;
+            
+            /* Sleek centered overlay card pop-up on mobile portrait screens (Android & iOS) */
+            .dropdown-content {
+                display: none;
+                position: fixed !important;
+                top: 50% !important;
+                left: 50% !important;
+                transform: translate(-50%, -45%) scale(0.95) !important;
+                opacity: 0 !important;
+                transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease !important;
+            }
+            .dropdown-content.show {
+                display: block !important;
+                position: fixed !important;
+                top: 50% !important;
+                left: 50% !important;
+                transform: translate(-50%, -50%) scale(1) !important;
+                min-width: 280px !important;
+                max-width: 90% !important;
+                background: rgba(22, 22, 30, 0.98) !important;
+                border: 1px solid rgba(255, 255, 255, 0.15) !important;
+                border-radius: 12px !important;
+                box-shadow: 0 25px 65px rgba(0, 0, 0, 0.95) !important;
+                z-index: 9999 !important; /* Ensure it stays fully above all canvases and popup container structures */
+                pointer-events: auto !important;
+                opacity: 1 !important;
+            }
+            .dropdown-content a {
+                padding: 14px 20px !important;
+                font-size: 0.9rem !important;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+                justify-content: center !important;
+                text-align: center !important;
+            }
+            .dropdown-content a:last-child {
+                border-bottom: none !important;
             }
         }
     </style>
