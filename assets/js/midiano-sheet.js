@@ -13,6 +13,86 @@ let studioLogicalStartTime = 0;
 let resolvedSheetTitle = "";
 let currentHeaderOffset = 110; // Dynamic vertical spacer margin
 
+// Inject modern responsive layout CSS for Section 2 controls inside the sheet music popup (iOS & Android optimized)
+const styleNode = document.createElement('style');
+styleNode.innerHTML = `
+    /* Pinned Sticky Header Wrapper with Glassmorphic styling for Section 2 controls */
+    div:has(> #btn-play-second) {
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 50 !important;
+        background: rgba(11, 11, 15, 0.94) !important;
+        backdrop-filter: blur(12px) !important;
+        -webkit-backdrop-filter: blur(12px) !important;
+        padding: 10px 16px !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 100% !important;
+        margin-bottom: 14px !important;
+    }
+
+    /* Standard desktop overrides */
+    #btn-play-second, #btn-stop-second, #btn-maximize-second, #btn-download-second {
+        font-family: inherit !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+    }
+
+    /* High-density, professional mobile viewport styling (iOS & Android) */
+    @media (max-width: 768px) {
+        /* Align parent sticky panel on mobile */
+        div:has(> #btn-play-second) {
+            padding: 8px 12px !important;
+            gap: 6px !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+            margin-bottom: 8px !important;
+        }
+
+        /* Forces a neat 2x2 grid on narrow mobile screens so buttons never overflow */
+        #btn-play-second, #btn-stop-second, #btn-maximize-second, #btn-download-second {
+            font-size: 11px !important;
+            padding: 0 8px !important;
+            height: 32px !important;
+            border-radius: 6px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-weight: 600 !important;
+            border: none !important;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2) !important;
+            margin: 0 !important;
+            flex: 1 1 calc(50% - 6px) !important;
+            white-space: nowrap !important;
+        }
+
+        /* Force show colors checkbox to center nicely below the button grid */
+        label[for="chk-show-colors"], 
+        div:has(> #chk-show-colors) {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100% !important;
+            margin-top: 6px !important;
+            font-size: 11.5px !important;
+            color: rgba(255, 255, 255, 0.6) !important;
+        }
+
+        /* Fix scroll containers heights inside popup on phone devices */
+        #sheet-tab-notation-content-vertical,
+        #sheet-tab-studio-content-vertical {
+            max-height: calc(100vh - 230px - env(safe-area-inset-bottom)) !important;
+            overflow-y: auto !important;
+            padding-bottom: 60px !important;
+            -webkit-overflow-scrolling: touch !important;
+        }
+    }
+`;
+document.head.appendChild(styleNode);
+
 // Intelligent SVG text wrapper helper
 function wrapSvgText(text, maxCharsPerLine) {
     if (!text) return [];
@@ -589,7 +669,7 @@ function renderVerticalSheetMusic(targetContainerId) {
 
     let svgContent = "";
 
-    // 4. Dynamic Multi-Line Header Rendering (Strictly inside Section 2 SVG Canvas) [1]
+    // 4. Centered Track Title & Subtitle inside the Sheet Music (Strictly inside Section 2 SVG Canvas) [1]
     if (titleLines.length === 1) {
         svgContent += `<text x="${svgWidth / 2}" y="45" text-anchor="middle" fill="#111115" font-size="20" font-weight="700" font-family="Georgia, serif">${titleLines[0]}</text>`;
         svgContent += `<text x="${svgWidth / 2}" y="65" text-anchor="middle" fill="#66666e" font-size="11" font-weight="500" font-family="-apple-system, sans-serif">(c) T1ERA Music Ai</text>`;
@@ -611,7 +691,7 @@ function renderVerticalSheetMusic(targetContainerId) {
     }
 
     for (let i = 0; i < numSystems; i++) {
-        // Systems yOffset dynamically aligned
+        // Systems yOffset dynamically aligned [1]
         const yOffset = i * systemHeight + currentHeaderOffset;
 
         // Draw Treble staff lines
@@ -1263,6 +1343,11 @@ function startSheetPlayback() {
         sheetVisualNoteIndex++;
     }
 
+    const bpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0]) 
+        ? midiData.header.tempos[0].bpm 
+        : 120;
+    const beatDuration = 60 / bpm;
+
     // Frame scheduler to drive audio events and follow pointer visual states
     function updateSheetFrame(now) {
         if (!sheetMusicPlaying) return;
@@ -1465,7 +1550,6 @@ function renderStudioSheetMusic(targetContainerId) {
     }
 
     const firstNoteTime = 0;
-    const firstNoteActualTime = studioNotesMemory.length > 0 ? studioNotesMemory[0].time : 0;
     const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
 
     const marginLeft = 100;
@@ -1529,7 +1613,7 @@ function renderStudioSheetMusic(targetContainerId) {
 
     for (let i = 0; i < numSystems; i++) {
         // Systems yOffset dynamically aligned [1]
-        const yOffset = i * systemHeight + currentHeaderOffset;
+        const yOffset = i * systemHeight + 110;
 
         // Draw Treble (RH) Staves
         const rhLines = [64, 67, 71, 74, 77];
@@ -1597,7 +1681,7 @@ function renderStudioSheetMusic(targetContainerId) {
 
         // Calculate system index based on actual gap end (first note start) to avoid system splits
         const firstNoteSystemIdx = Math.floor(gap.end / systemDuration);
-        const yOffset = firstNoteSystemIdx * systemHeight + currentHeaderOffset; // Aligned dynamically [1]
+        const yOffset = firstNoteSystemIdx * systemHeight + 110; // Shifted to 110px
         const systemTimeOffset = gap.end - firstNoteSystemIdx * systemDuration;
         
         // Compute exact x position slightly before the note center
@@ -1622,7 +1706,7 @@ function renderStudioSheetMusic(targetContainerId) {
         const systemIdx = Math.floor(shiftedStart / systemDuration);
         if (systemIdx >= numSystems) return;
 
-        const yOffset = systemIdx * systemHeight + currentHeaderOffset; // Aligned dynamically [1]
+        const yOffset = systemIdx * systemHeight + 110; // Shifted to 110px
         const systemTimeOffset = shiftedStart - systemIdx * systemDuration;
         const noteX = systemTimeOffset * localPixelsPerSecond + marginLeft + startPadding;
         
@@ -1706,7 +1790,7 @@ function renderStudioSheetMusic(targetContainerId) {
     const lastSystemIdx = Math.floor(lastNoteTimeShifted / systemDuration);
     const lastSystemTimeOffset = lastNoteTimeShifted - lastSystemIdx * systemDuration;
     const endX = Math.min(lastSystemTimeOffset * localPixelsPerSecond + marginLeft + startPadding, marginLeft + systemWidth);
-    const lastSystemYOffset = lastSystemIdx * systemHeight + currentHeaderOffset;
+    const lastSystemYOffset = lastSystemIdx * systemHeight + 110;
 
     svgContent += `<!-- Double Bar Line at the End of Studio Piece -->`;
     svgContent += `<line x1="${endX}" y1="${lastSystemYOffset + rhStaffCenterY - 18}" x2="${endX}" y2="${lastSystemYOffset + lhStaffCenterY + 21}" stroke="#111115" stroke-width="1.5" />`;
@@ -1809,7 +1893,7 @@ function startStudioPlayback() {
         const systemTimeOffset = studioPlaybackTime - currentSystemIdx * systemDuration;
 
         const cursorX = systemTimeOffset * localPixelsPerSecond + marginLeft + startPadding;
-        const yOffset = currentSystemIdx * activeSystemHeight + currentHeaderOffset; // Aligned dynamically [1]
+        const yOffset = currentSystemIdx * activeSystemHeight + 110; // Shifted to 110px
 
         if (cursor) {
             cursor.setAttribute('x1', cursorX);
