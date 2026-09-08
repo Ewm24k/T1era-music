@@ -6,13 +6,28 @@ document.addEventListener("DOMContentLoaded", () => {
     const downSvg = document.getElementById("down-svg");
     const downXml = document.getElementById("down-xml");
 
-    // Dynamic enable observer loop targeting loaded midi state
+    // Section 2 - Dropdown Actions [Added]
+    const downSvgSecond = document.getElementById("down-svg-second");
+    const downXmlSecond = document.getElementById("down-xml-second");
+    const downMidiSecond = document.getElementById("down-midi-second");
+    const downPdfSecond = document.getElementById("down-pdf-second");
+
+    // Maximized View - Dropdown Actions [Added]
+    const downSvgMax = document.getElementById("down-svg-max");
+    const downXmlMax = document.getElementById("down-xml-max");
+    const downMidiMax = document.getElementById("down-midi-max");
+    const downPdfMax = document.getElementById("down-pdf-max");
+
+    // Dynamic enable observer loop targeting loaded midi state [Modified to support all download wrappers]
     const checkLoadInterval = setInterval(() => {
-        if (typeof midiData !== 'undefined' && midiData !== null) {
-            btnDownloadMenu.disabled = false;
-        } else {
-            btnDownloadMenu.disabled = true;
-        }
+        const hasData = typeof midiData !== 'undefined' && midiData !== null;
+        if (btnDownloadMenu) btnDownloadMenu.disabled = !hasData;
+        
+        const btnDownloadSecond = document.getElementById("btn-download-second");
+        if (btnDownloadSecond) btnDownloadSecond.disabled = !hasData;
+        
+        const btnDownloadMax = document.getElementById("btn-download-max");
+        if (btnDownloadMax) btnDownloadMax.disabled = !hasData;
     }, 1000);
 
     // Toggle Dropdown Menu Visibility
@@ -22,20 +37,30 @@ document.addEventListener("DOMContentLoaded", () => {
             alert("Please choose and load a MIDI file first.");
             return;
         }
+        const dropdownSecond = document.getElementById("download-dropdown-second");
+        if (dropdownSecond) dropdownSecond.classList.remove("show");
+        const dropdownMax = document.getElementById("download-dropdown-max");
+        if (dropdownMax) dropdownMax.classList.remove("show");
+
         downloadDropdown.classList.toggle("show");
     });
 
-    // Close Dropdown Menu when clicking anywhere else on page
+    // Close Dropdown Menus when clicking anywhere else on page [Modified]
     document.addEventListener("click", () => {
-        downloadDropdown.classList.remove("show");
+        if (downloadDropdown) downloadDropdown.classList.remove("show");
+        
+        const dropdownSecond = document.getElementById("download-dropdown-second");
+        if (dropdownSecond) dropdownSecond.classList.remove("show");
+        
+        const dropdownMax = document.getElementById("download-dropdown-max");
+        if (dropdownMax) dropdownMax.classList.remove("show");
     });
 
     // 1. DOWNLOAD MIDI FILE (Re-serializes live sequencer memory map)
-    downMidi.addEventListener("click", (e) => {
+    const handleMidiDownload = (e) => {
         e.preventDefault();
         try {
             if (!midiData) return;
-            // Compile parsed memory array back into a standard binary .mid buffer
             const midiArray = midiData.toArray();
             const blob = new Blob([midiArray], { type: "audio/midi" });
             const url = URL.createObjectURL(blob);
@@ -45,7 +70,10 @@ document.addEventListener("DOMContentLoaded", () => {
             console.error("MIDI Re-serialization buffer download failed:", err);
             alert("Could not serialize track. Ensure a valid file has been imported.");
         }
-    });
+    };
+    downMidi.addEventListener("click", handleMidiDownload);
+    if (downMidiSecond) downMidiSecond.addEventListener("click", handleMidiDownload);
+    if (downMidiMax) downMidiMax.addEventListener("click", handleMidiDownload);
 
     // 2. DOWNLOAD JSON STRUCTURE (Saves chronological event blocks)
     downJson.addEventListener("click", (e) => {
@@ -66,7 +94,6 @@ document.addEventListener("DOMContentLoaded", () => {
     downSvg.addEventListener("click", (e) => {
         e.preventDefault();
         try {
-            // Evaluates if the sheet music has been generated inside the modal target first
             const svgElement = document.querySelector("#sheet-music-notation-vertical svg") || 
                                document.querySelector("#sheet-music-notation svg");
                                
@@ -84,8 +111,26 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    // Custom bindings for Section 2 and Max view SVG downloads [Added]
+    if (downSvgSecond) {
+        downSvgSecond.addEventListener("click", (e) => {
+            e.preventDefault();
+            if (typeof downloadVerticalSVG === 'function') {
+                downloadVerticalSVG('sheet-music-notation-vertical');
+            }
+        });
+    }
+    if (downSvgMax) {
+        downSvgMax.addEventListener("click", (e) => {
+            e.preventDefault();
+            if (typeof downloadVerticalSVG === 'function') {
+                downloadVerticalSVG('sheet-music-notation-max');
+            }
+        });
+    }
+
     // 4. DOWNLOAD MusicXML SHEET (Procedurally converts notes array into structured XML staves)
-    downXml.addEventListener("click", (e) => {
+    const handleXmlDownload = (e) => {
         e.preventDefault();
         try {
             if (!activeNotesMemory || activeNotesMemory.length === 0) return;
@@ -97,7 +142,86 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (err) {
             console.error("MusicXML compilation failed:", err);
         }
-    });
+    };
+    downXml.addEventListener("click", handleXmlDownload);
+    if (downXmlSecond) downXmlSecond.addEventListener("click", handleXmlDownload);
+    if (downXmlMax) downXmlMax.addEventListener("click", handleXmlDownload);
+
+    // 5. HIGH-FIDELITY VECTOR PDF DOWNLOAD ENGINE [Added]
+    const handlePdfDownload = (containerId) => {
+        return (e) => {
+            e.preventDefault();
+            try {
+                const svgElement = document.querySelector(`#${containerId} svg`);
+                if (!svgElement) {
+                    alert("Please pre-render the sheet music notation first.");
+                    return;
+                }
+                
+                // Create an invisible iframe to isolate the SVG element and trigger print mapping natively
+                const iframe = document.createElement('iframe');
+                iframe.style.position = 'absolute';
+                iframe.style.width = '0px';
+                iframe.style.height = '0px';
+                iframe.style.border = 'none';
+                document.body.appendChild(iframe);
+                
+                const doc = iframe.contentWindow.document;
+                const svgString = new XMLSerializer().serializeToString(svgElement);
+                const docTitle = (typeof midiData !== 'undefined' && midiData && midiData.name) ? midiData.name : 'sheet_music';
+                
+                doc.write(`
+                    <html>
+                    <head>
+                        <title>${docTitle}</title>
+                        <style>
+                            body {
+                                margin: 0;
+                                padding: 0;
+                                display: flex;
+                                justify-content: center;
+                                background-color: #ffffff;
+                            }
+                            svg {
+                                width: 100%;
+                                height: auto;
+                                max-width: 100%;
+                            }
+                            @media print {
+                                body, html {
+                                    background-color: #ffffff !important;
+                                    -webkit-print-color-adjust: exact;
+                                    print-color-adjust: exact;
+                                }
+                                svg {
+                                    page-break-inside: avoid;
+                                }
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        ${svgString}
+                        <script>
+                            window.onload = function() {
+                                setTimeout(function() {
+                                    window.print();
+                                    setTimeout(function() {
+                                        window.frameElement.remove();
+                                    }, 100);
+                                }, 300);
+                            };
+                        </script>
+                    </body>
+                    </html>
+                `);
+                doc.close();
+            } catch (err) {
+                console.error("PDF print generation failed:", err);
+            }
+        };
+    };
+    if (downPdfSecond) downPdfSecond.addEventListener("click", handlePdfDownload('sheet-music-notation-vertical'));
+    if (downPdfMax) downPdfMax.addEventListener("click", handlePdfDownload('sheet-music-notation-max'));
 
     // Helper: Browser Download Dispatcher
     function triggerBrowserDownload(url, filename) {
@@ -125,7 +249,6 @@ document.addEventListener("DOMContentLoaded", () => {
         xml += '  </part-list>\n';
         xml += '  <part id="P1">\n';
         
-        // Groups active track notes chronologically into structured measures (4.0 seconds / measure default)
         const measureDuration = 4.0; 
         const measuresMap = {};
         
@@ -143,7 +266,6 @@ document.addEventListener("DOMContentLoaded", () => {
         for (let i = 1; i <= totalMeasuresCount; i++) {
             xml += `    <measure number="${i}">\n`;
             
-            // Inject structural measure configuration on Measure 1
             if (i === 1) {
                 xml += '      <attributes>\n';
                 xml += '        <divisions>256</divisions>\n';
@@ -163,7 +285,6 @@ document.addEventListener("DOMContentLoaded", () => {
             
             const currentMeasureNotes = measuresMap[i] || [];
             currentMeasureNotes.forEach((note) => {
-                // Parse step characters and accidentals
                 const stepChar = note.name.charAt(0);
                 const isSharp = note.name.includes('#');
                 const octaveIndex = note.name.match(/\d+/)?.[0] || '4';
@@ -179,7 +300,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 xml += '        </pitch>\n';
                 xml += `        <duration>${xmlDivisionsDuration}</duration>\n`;
                 xml += '        <voice>1</voice>\n';
-                xml += '        <type>quarter</type>\n'; // Default quarter note-heads fallback
+                xml += '        <type>quarter</type>\n';
                 xml += '      </note>\n';
             });
             
