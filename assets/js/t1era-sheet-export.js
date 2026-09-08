@@ -1,4 +1,3 @@
-```javascript
 // ==========================================
 // T1ERA STUDIO - INTEGRATED DOWNLOAD ENGINE
 // ==========================================
@@ -307,7 +306,7 @@ function triggerMidiDownload() {
     const currentMidiUrl = urlParams.get("midi") || localStorage.getItem("t1era_current_midi");
 
     if (currentMidiUrl) {
-        const title = resolvedSheetTitle || "T1ERA_score";
+        const title = window.resolvedSheetTitle || "T1ERA_score";
         const downloadLink = document.createElement("a");
         downloadLink.href = currentMidiUrl;
         downloadLink.download = `${title}.mid`;
@@ -332,10 +331,10 @@ function triggerSvgDownload() {
 // Channel 3 Exporter: Generates standard XML structural partwise notes on the fly
 function triggerXmlDownload() {
     dismissDownloadMenu();
-    const title = resolvedSheetTitle || "MIDI Score";
+    const title = window.resolvedSheetTitle || "MIDI Score";
     
     // Choose appropriate note buffer
-    const sourceNotes = activeDownloadContainerId === "sheet-music-notation-studio" ? studioNotesMemory : activeNotesMemory;
+    const sourceNotes = activeDownloadContainerId === "sheet-music-notation-studio" ? window.studioNotesMemory : window.activeNotesMemory;
     if (!sourceNotes || sourceNotes.length === 0) {
         alert("The active notes buffer is empty.");
         return;
