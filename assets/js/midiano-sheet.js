@@ -651,14 +651,8 @@ function renderVerticalSheetMusic(targetContainerId) {
     }
     
     const systemWidth = svgWidth - marginLeftValue - marginRightValue;
-
-    // Split title intelligently into multiple lines if too long to prevent horizontal overflows [1]
-    const titleText = resolvedSheetTitle || "Loading Score...";
-    const titleLines = wrapSvgText(titleText, containerWidth < 600 ? 25 : 50).slice(0, 2);
-    
-    // Scale system spacer dynamically depending on if title wraps to 2 lines [1]
-    currentHeaderOffset = titleLines.length > 1 ? 135 : 110;
-    const svgHeight = numSystems * systemHeight + currentHeaderOffset + 60; 
+    // Shifted entire layout down by 70px to make room for Title + Subtitle
+    const svgHeight = numSystems * systemHeight + 170; 
 
     const chkShowColors = document.getElementById('chk-show-colors');
     const showColors = chkShowColors ? chkShowColors.checked : false;
@@ -670,6 +664,13 @@ function renderVerticalSheetMusic(targetContainerId) {
     let svgContent = "";
 
     // 4. Centered Track Title & Subtitle inside the Sheet Music (Strictly inside Section 2 SVG Canvas) [1]
+    const titleText = resolvedSheetTitle || "Loading Score...";
+    const titleLines = wrapSvgText(titleText, containerWidth < 600 ? 25 : 50).slice(0, 2);
+    
+    // Scale system spacer dynamically depending on if title wraps to 2 lines [1]
+    currentHeaderOffset = titleLines.length > 1 ? 135 : 110;
+    const svgHeightVal = numSystems * systemHeight + currentHeaderOffset + 60; 
+
     if (titleLines.length === 1) {
         svgContent += `<text x="${svgWidth / 2}" y="45" text-anchor="middle" fill="#111115" font-size="20" font-weight="700" font-family="Georgia, serif">${titleLines[0]}</text>`;
         svgContent += `<text x="${svgWidth / 2}" y="65" text-anchor="middle" fill="#66666e" font-size="11" font-weight="500" font-family="-apple-system, sans-serif">(c) T1ERA Music Ai</text>`;
@@ -692,7 +693,7 @@ function renderVerticalSheetMusic(targetContainerId) {
 
     for (let i = 0; i < numSystems; i++) {
         // Systems yOffset dynamically aligned [1]
-        const yOffset = i * systemHeight + currentHeaderOffset;
+        const yOffset = i * systemHeight + 110;
 
         // Draw Treble staff lines
         const rhLines = [64, 67, 71, 74, 77];
@@ -704,7 +705,8 @@ function renderVerticalSheetMusic(targetContainerId) {
         // Draw Bass staff lines
         const lhLines = [43, 47, 50, 53, 57];
         lhLines.forEach(pitch => {
-            const y = yOffset + lhStaffCenterY - (pitch - 50) * dy;
+            const yOffsetVal = yOffset;
+            const y = yOffsetVal + lhStaffCenterY - (pitch - 50) * dy;
             svgContent += `<line x1="${marginLeftValue}" y1="${y}" x2="${marginLeftValue + systemWidth}" y2="${y}" stroke="#9ca3af" stroke-width="${0.75 * scale}" />`;
         });
 
@@ -887,12 +889,12 @@ function renderVerticalSheetMusic(targetContainerId) {
     svgContent += `<line x1="${endX + 3 * scale}" y1="${lastSystemYOffset + (rhStaffCenterY - 18) * scale}" x2="${endX + 3 * scale}" y2="${lastSystemYOffset + (lhStaffCenterY + 21) * scale}" stroke="#111115" stroke-width="${2.8 * scale}" />`;
 
     // Vertical playback tracking pointer cursor
-    svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeftValue + startPadding * scale}" y1="10" x2="${marginLeftValue + startPadding * scale}" y2="${svgHeight - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
+    svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeftValue + startPadding * scale}" y1="10" x2="${marginLeftValue + startPadding * scale}" y2="${svgHeightVal - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
 
     // Draw footer copyright on the bottom center (Replaced unicode to prevent ?? errors)
     svgContent += `<text x="${svgWidth / 2}" y="${svgHeight - 15}" text-anchor="middle" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">(C) T1ERA Music Ai</text>`;
 
-    const svgString = `<svg width="${svgWidth}" height="${svgHeight}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">${svgContent}</svg>`;
+    const svgString = `<svg width="${svgWidth}" height="${svgHeightVal}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">${svgContent}</svg>`;
     document.getElementById(targetContainerId).innerHTML = svgString;
 }
 
@@ -1550,6 +1552,7 @@ function renderStudioSheetMusic(targetContainerId) {
     }
 
     const firstNoteTime = 0;
+    const firstNoteActualTime = studioNotesMemory.length > 0 ? studioNotesMemory[0].time : 0;
     const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
 
     const marginLeft = 100;
@@ -1573,13 +1576,8 @@ function renderStudioSheetMusic(targetContainerId) {
     const marginRight = 50;
     const systemWidth = containerWidth - marginLeft - marginRight;
     const svgWidth = containerWidth;
-    
-    const titleText = resolvedSheetTitle || "Loading Score...";
-    const titleLines = wrapSvgText(titleText, containerWidth < 600 ? 25 : 50).slice(0, 2);
-    
-    // Scale system spacer dynamically depending on if title wraps to 2 lines [1]
-    currentHeaderOffset = titleLines.length > 1 ? 135 : 110;
-    const svgHeight = numSystems * systemHeight + currentHeaderOffset + 60; 
+    // Shifted entire layout down by 70px to make room for Title + Subtitle
+    const svgHeight = numSystems * systemHeight + 170; 
 
     const chkShowColors = document.getElementById('chk-show-colors');
     const showColors = chkShowColors ? chkShowColors.checked : false;
@@ -1591,6 +1589,13 @@ function renderStudioSheetMusic(targetContainerId) {
     let svgContent = "";
 
     // 4. Centered Track Title & Subtitle inside the Sheet Music (Studio Layout Canvas) [1]
+    const titleText = resolvedSheetTitle || "Loading Score...";
+    const titleLines = wrapSvgText(titleText, containerWidth < 600 ? 25 : 50).slice(0, 2);
+    
+    // Scale system spacer dynamically depending on if title wraps to 2 lines [1]
+    currentHeaderOffset = titleLines.length > 1 ? 135 : 110;
+    const svgHeightVal = numSystems * systemHeight + currentHeaderOffset + 60; 
+
     if (titleLines.length === 1) {
         svgContent += `<text x="${svgWidth / 2}" y="45" text-anchor="middle" fill="#111115" font-size="20" font-weight="700" font-family="Georgia, serif">${titleLines[0]}</text>`;
         svgContent += `<text x="${svgWidth / 2}" y="65" text-anchor="middle" fill="#66666e" font-size="11" font-weight="500" font-family="-apple-system, sans-serif">(c) T1ERA Studio Ai</text>`;
@@ -1797,9 +1802,9 @@ function renderStudioSheetMusic(targetContainerId) {
     svgContent += `<line x1="${endX + 4}" y1="${lastSystemYOffset + rhStaffCenterY - 18}" x2="${endX + 4}" y2="${lastSystemYOffset + lhStaffCenterY + 21}" stroke="#111115" stroke-width="3.5" />`;
 
     // Tracking pointer cursor
-    svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeft + startPadding}" y1="10" x2="${marginLeft + startPadding}" y2="${svgHeight - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
+    svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeft + startPadding}" y1="10" x2="${marginLeft + startPadding}" y2="${svgHeightVal - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
 
-    const svgString = `<svg width="${svgWidth}" height="${svgHeight}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">${svgContent}</svg>`;
+    const svgString = `<svg width="${svgWidth}" height="${svgHeightVal}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">${svgContent}</svg>`;
     document.getElementById(targetContainerId).innerHTML = svgString;
 }
 
