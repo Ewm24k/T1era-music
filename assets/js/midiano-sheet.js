@@ -12,10 +12,31 @@ let studioLogicalStartTime = 0;
 // Global Resolved Title State Cache
 let resolvedSheetTitle = "";
 
-// Algorithmic Title Resolver using the companion details.json parser from dashboard.js
+// Helper to extract clean track title directly from the URL filename as a fast fallback
+function extractTitleFromUrl(url) {
+    if (!url) return "";
+    try {
+        const pathname = new URL(url).pathname;
+        const filename = pathname.substring(pathname.lastIndexOf('/') + 1);
+        let decoded = decodeURIComponent(filename);
+        decoded = decoded.replace(/\.mid(i)?$/i, '');
+        if (decoded.includes('/')) {
+            decoded = decoded.substring(decoded.lastIndexOf('/') + 1);
+        }
+        if (decoded === "final_score" || decoded === "t1era_score" || decoded === "demo1" || decoded === "demo2") {
+            return "";
+        }
+        return decoded;
+    } catch (e) {
+        return "";
+    }
+}
+
+// Algorithmic Title Resolver using URL parameters, localStorage, details.json, and URL-fallback systems
 async function resolveSheetTitle() {
     if (resolvedSheetTitle) return resolvedSheetTitle;
 
+    // Start with a default placeholder
     let title = "Untitled Track";
     if (midiData && midiData.name && midiData.name !== "Untitled" && midiData.name !== "t1era_score.mid") {
         title = midiData.name;
@@ -24,14 +45,17 @@ async function resolveSheetTitle() {
     const urlParams = new URLSearchParams(window.location.search);
     const currentMidiUrl = urlParams.get("midi") || localStorage.getItem("t1era_current_midi");
 
+    // Case-insensitive check to identify generic placeholder names, specifically catching "Untitled Track" [1]
     const isGeneric = !title || 
-                      title === "Untitled" ||
+                      title.toLowerCase().includes("untitled") || 
                       title === "Local Uploaded Track" || 
                       title.startsWith("YouTube Stream Audio") ||
                       title === "t1era_score.mid";
 
+    // Replicate the exact title resolution query from dashboard.js if name is generic [1]
     if (isGeneric && currentMidiUrl) {
         try {
+            // Replicate the exact replacement logic from dashboard.js [1]
             const detailsUrl = currentMidiUrl.replace("final_score.mid", "details.json");
             const response = await fetch(detailsUrl);
             if (response.ok) {
@@ -43,6 +67,13 @@ async function resolveSheetTitle() {
             }
         } catch (e) {
             console.warn("[SHEET TITLE RESOLVE WARNING] Failed fetching details.json:", e);
+        }
+
+        // URL Filename Fallback
+        const urlFilename = extractTitleFromUrl(currentMidiUrl);
+        if (urlFilename) {
+            resolvedSheetTitle = urlFilename;
+            return resolvedSheetTitle;
         }
     }
 
@@ -1199,6 +1230,11 @@ function startSheetPlayback() {
     while (sheetVisualNoteIndex < activeNotesMemory.length && Math.max(0, activeNotesMemory[sheetVisualNoteIndex].time - firstNoteTime) < sheetMusicPlaybackTime) {
         sheetVisualNoteIndex++;
     }
+
+    const bpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0]) 
+        ? midiData.header.tempos[0].bpm 
+        : 120;
+    const beatDuration = 60 / bpm;
 
     // Frame scheduler to drive audio events and follow pointer visual states
     function updateSheetFrame(now) {
