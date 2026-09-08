@@ -306,10 +306,7 @@ function renderSheetMusic() {
         svgContent += `<line x1="${doubleBarX}" y1="${lhStaffCenterY - 7 * dy}" x2="${doubleBarX}" y2="${lhStaffCenterY + 7 * dy}" stroke="#fbbf24" stroke-width="2.8" opacity="0.8" />`;
     });
 
-    const bpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0]) 
-        ? midiData.header.tempos[0].bpm 
-        : 120;
-    const beatDuration = 60 / bpm;
+    const ppq = (midiData && midiData.header) ? midiData.header.ppq : 480;
 
     // 6. Render notes row-by-row strictly matching the raw activeNotesMemory log
     activeNotesMemory.forEach((note, index) => {
@@ -376,18 +373,19 @@ function renderSheetMusic() {
         // Note duration bar
         svgContent += `<rect x="${x}" y="${y - 4}" width="${w}" height="8" rx="4" fill="${color}" opacity="0.6" id="sheet-note-rect-${index}" />`;
 
-        const noteBeats = note.duration / beatDuration;
-        const isWholeNote = noteBeats >= 3.0;
-        const isHalfNote = noteBeats >= 1.5 && noteBeats < 3.0;
+        // Strictly determine beats using the direct tick-level PPQ mappings carried over from core loader
+        const durationTicks = note.durationTicks || (note.duration * 2 * ppq);
+        const isWholeNote = durationTicks >= ppq * 3.2;
+        const isHalfNote = durationTicks >= ppq * 1.6 && durationTicks < ppq * 3.2;
 
-        // Notehead - Hollow open-center with border stroke for whole & half notes, solid fill for quarter notes
+        // Notehead - Hollow open-center with border stroke for whole & half notes, solid fill for quarter notes (reduced stroke weight to 1.3)
         let noteheadFill = color;
         let noteheadStroke = "none";
         let strokeWidthAttr = "";
         if (isWholeNote || isHalfNote) {
             noteheadFill = "#0b0b0f"; // Masks background of horizontal system cleanly
             noteheadStroke = color;
-            strokeWidthAttr = 'stroke-width="2.5"';
+            strokeWidthAttr = 'stroke-width="1.3"';
         }
 
         svgContent += `<ellipse cx="${x}" cy="${y}" rx="7" ry="5" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="sheet-notehead-${index}" transform="rotate(-15, ${x}, ${y})" />`;
@@ -583,10 +581,7 @@ function renderVerticalSheetMusic(targetContainerId) {
         svgContent += `<line x1="${doubleBarX}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="${2.4 * scale}" />`;
     });
 
-    const bpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0]) 
-        ? midiData.header.tempos[0].bpm 
-        : 120;
-    const beatDuration = 60 / bpm;
+    const ppq = (midiData && midiData.header) ? midiData.header.ppq : 480;
 
     // 4. Draw the notes into their corresponding staff systems (Scale-fitted)
     activeNotesMemory.forEach((note, index) => {
@@ -649,18 +644,18 @@ function renderVerticalSheetMusic(targetContainerId) {
             svgContent += `<rect x="${noteX}" y="${y - 3 * scale}" width="${noteW}" height="${6 * scale}" rx="${3 * scale}" fill="${color}" opacity="0.6" id="${targetContainerId}-note-rect-${index}" />`;
         }
 
-        const noteBeats = note.duration / beatDuration;
-        const isWholeNote = noteBeats >= 3.0;
-        const isHalfNote = noteBeats >= 1.5 && noteBeats < 3.0;
+        const durationTicks = note.durationTicks || (note.duration * 2 * ppq);
+        const isWholeNote = durationTicks >= ppq * 3.2;
+        const isHalfNote = durationTicks >= ppq * 1.6 && durationTicks < ppq * 3.2;
 
-        // Notehead
+        // Notehead (reduced stroke-width to 1.3)
         let noteheadFill = color;
         let noteheadStroke = "none";
         let strokeWidthAttr = "";
         if (isWholeNote || isHalfNote) {
             noteheadFill = "#ffffff"; // Masks background cleanly in white portal viewports
             noteheadStroke = color;
-            strokeWidthAttr = `stroke-width="${2.5 * scale}"`;
+            strokeWidthAttr = `stroke-width="${1.3 * scale}"`;
         }
 
         svgContent += `<ellipse cx="${noteX}" cy="${y}" rx="${5.5 * scale}" ry="${3.8 * scale}" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="${targetContainerId}-notehead-${index}" transform="rotate(-15, ${noteX}, ${y})" />`;
@@ -1216,9 +1211,10 @@ function startSheetPlayback() {
                 const noteHead = document.getElementById(`sheet-notehead-${sheetVisualNoteIndex}`);
                 const noteRect = document.getElementById(`sheet-note-rect-${sheetVisualNoteIndex}`);
                 if (noteHead) {
-                    // Outlines border only for open hollow notes, fills standard notes solid
+                    // Outlines border only for open hollow notes, fills standard notes solid (stroke decreased to 1.3)
                     if (noteHead.getAttribute('stroke') !== 'none') {
                         noteHead.setAttribute('stroke', '#e879f9');
+                        noteHead.setAttribute('stroke-width', '1.3');
                     } else {
                         noteHead.setAttribute('fill', '#e879f9');
                     }
@@ -1244,6 +1240,7 @@ function startSheetPlayback() {
                     if (isHollow) {
                         if (noteHead.getAttribute('stroke') === '#e879f9') {
                             noteHead.setAttribute('stroke', note.midi >= 60 ? '#818cf8' : '#fbbf24');
+                            noteHead.setAttribute('stroke-width', '1.3');
                         }
                     } else {
                         if (noteHead.getAttribute('fill') === '#e879f9') {
@@ -1301,11 +1298,29 @@ function stopSheetPlayback() {
 }
 
 function resetSheetNoteHighlights() {
+    const ppq = (midiData && midiData.header) ? midiData.header.ppq : 480;
+
     activeNotesMemory.forEach((note, index) => {
         const noteHead = document.getElementById(`sheet-notehead-${index}`);
         const noteRect = document.getElementById(`sheet-note-rect-${index}`);
-        if (noteHead) noteHead.setAttribute('fill', note.midi >= 60 ? '#818cf8' : '#fbbf24');
-        if (noteRect) noteRect.setAttribute('fill', note.midi >= 60 ? '#818cf8' : '#fbbf24');
+        const defaultColor = note.midi >= 60 ? '#818cf8' : '#fbbf24';
+
+        const durationTicks = note.durationTicks || (note.duration * 2 * ppq);
+        const isWholeNote = durationTicks >= ppq * 3.2;
+        const isHalfNote = durationTicks >= ppq * 1.6 && durationTicks < ppq * 3.2;
+
+        if (noteHead) {
+            if (isWholeNote || isHalfNote) {
+                noteHead.setAttribute('fill', '#0b0b0f');
+                noteHead.setAttribute('stroke', defaultColor);
+                noteHead.setAttribute('stroke-width', '1.3'); // updated to elegant 1.3 stroke
+            } else {
+                noteHead.setAttribute('fill', defaultColor);
+                noteHead.setAttribute('stroke', 'none');
+                noteHead.removeAttribute('stroke-width');
+            }
+        }
+        if (noteRect) noteRect.setAttribute('fill', defaultColor);
     });
 }
 
@@ -1443,7 +1458,7 @@ function renderStudioSheetMusic(targetContainerId) {
 
         svgContent += `<!-- Double Bar Lines strictly fitting inside the 5 lines of each staff (Studio) -->`;
         
-        // Treble staff double bar (dy = 3)
+        // Treble staff double bar (dy = 3, updated to elegant 1.0/2.4 stroke configurations)
         svgContent += `<line x1="${doubleBarX - 3}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX - 3}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="1.0" opacity="0.85" />`;
         svgContent += `<line x1="${doubleBarX}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="2.4" opacity="0.85" />`;
         
@@ -1452,10 +1467,7 @@ function renderStudioSheetMusic(targetContainerId) {
         svgContent += `<line x1="${doubleBarX}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="2.4" opacity="0.85" />`;
     });
 
-    const bpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0]) 
-        ? midiData.header.tempos[0].bpm 
-        : 120;
-    const beatDuration = 60 / bpm;
+    const ppq = (midiData && midiData.header) ? midiData.header.ppq : 480;
 
     studioNotesMemory.forEach((note, index) => {
         const shiftedStart = Math.max(0, note.time - firstNoteTime);
@@ -1515,21 +1527,21 @@ function renderStudioSheetMusic(targetContainerId) {
             svgContent += `<rect x="${noteX}" y="${y - 4}" width="${noteW}" height="8" rx="4" fill="${color}" opacity="0.6" id="${targetContainerId}-note-rect-${index}" />`;
         }
 
-        const noteBeats = note.duration / beatDuration;
-        const isWholeNote = noteBeats >= 3.0;
-        const isHalfNote = noteBeats >= 1.5 && noteBeats < 3.0;
+        const durationTicks = note.durationTicks || (note.duration * 2 * ppq);
+        const isWholeNote = durationTicks >= ppq * 3.2;
+        const isHalfNote = durationTicks >= ppq * 1.6 && durationTicks < ppq * 3.2;
 
-        // Notehead
+        // Notehead (reduced stroke-width to 1.3)
         let noteheadFill = color;
         let noteheadStroke = "none";
         let strokeWidthAttr = "";
         if (isWholeNote || isHalfNote) {
             noteheadFill = "#ffffff"; // Masks background cleanly in white portal viewports
             noteheadStroke = color;
-            strokeWidthAttr = 'stroke-width="2.5"';
+            strokeWidthAttr = 'stroke-width="1.3"';
         }
 
-        svgContent += `<ellipse cx="${noteX}" cy="${y}" rx="7" ry="5" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="${targetContainerId}-notehead-${index}" transform="rotate(-15, ${noteX}, ${y})" />`;
+        svgContent += `<ellipse cx="${noteX}" cy="${y}" rx="${7}" ry="${5}" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="${targetContainerId}-notehead-${index}" transform="rotate(-15, ${noteX}, ${y})" />`;
 
         // Stems standard attachment (No stem for Whole notes)
         if (!isWholeNote) {
@@ -1705,6 +1717,7 @@ function startStudioPlayback() {
                 if (noteHead) {
                     if (noteHead.getAttribute('stroke') !== 'none') {
                         noteHead.setAttribute('stroke', '#db2777');
+                        noteHead.setAttribute('stroke-width', '1.3'); // updated to elegant 1.3 stroke
                     } else {
                         noteHead.setAttribute('fill', '#db2777');
                     }
@@ -1741,6 +1754,7 @@ function startStudioPlayback() {
                     if (isHollow) {
                         if (noteHead.getAttribute('stroke') === '#db2777') {
                             noteHead.setAttribute('stroke', defaultColor);
+                            noteHead.setAttribute('stroke-width', '1.3');
                         }
                     } else {
                         if (noteHead.getAttribute('fill') === '#db2777') {
@@ -1798,10 +1812,7 @@ function resetStudioNoteHighlights() {
     const chkShowColors = document.getElementById('chk-show-colors');
     const showColors = chkShowColors ? chkShowColors.checked : false;
 
-    const bpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0]) 
-        ? midiData.header.tempos[0].bpm 
-        : 120;
-    const beatDuration = 60 / bpm;
+    const ppq = (midiData && midiData.header) ? midiData.header.ppq : 480;
 
     studioNotesMemory.forEach((note, index) => {
         const noteHead = document.getElementById(`sheet-music-notation-studio-notehead-${index}`);
@@ -1814,17 +1825,19 @@ function resetStudioNoteHighlights() {
             defaultColor = showColors ? '#d97706' : '#111115';
         }
 
-        const noteBeats = note.duration / beatDuration;
-        const isWholeNote = noteBeats >= 3.0;
-        const isHalfNote = noteBeats >= 1.5 && noteBeats < 3.0;
+        const durationTicks = note.durationTicks || (note.duration * 2 * ppq);
+        const isWholeNote = durationTicks >= ppq * 3.2;
+        const isHalfNote = durationTicks >= ppq * 1.6 && durationTicks < ppq * 3.2;
 
         if (noteHead) {
             if (isWholeNote || isHalfNote) {
                 noteHead.setAttribute('fill', '#ffffff');
                 noteHead.setAttribute('stroke', defaultColor);
+                noteHead.setAttribute('stroke-width', '1.3'); // updated to elegant 1.3 stroke
             } else {
                 noteHead.setAttribute('fill', defaultColor);
                 noteHead.setAttribute('stroke', 'none');
+                noteHead.removeAttribute('stroke-width');
             }
         }
         if (noteRect) {
