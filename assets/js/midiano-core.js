@@ -502,7 +502,7 @@ function loadMidi(buffer) {
     calculateLayoutMetrics();
     createKeyboard();
 
-    // Populate active playback buffer
+    // Populate active playback buffer (storing ticks and durationTicks directly)
     let noteCount = 0;
     midiData.tracks.forEach(track => {
         track.notes.forEach(note => {
@@ -513,6 +513,8 @@ function loadMidi(buffer) {
                     duration: note.duration,
                     name: note.name,
                     velocity: note.velocity,
+                    ticks: note.ticks,
+                    durationTicks: note.durationTicks
                 });
                 noteCount++;
             }
@@ -1129,4 +1131,4 @@ window.addEventListener("DOMContentLoaded", () => {
         console.error("[T1ERA AUTO-LOAD ERROR] Gagal memuatkan fail MIDI secara automatik:", err);
       });
   }
-})
+});
