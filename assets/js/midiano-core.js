@@ -29,13 +29,7 @@ const RANGE_START = 21; // A0 (Fixed full 88-key layout)
 const RANGE_END = 108;  // C8 (Fixed full 88-key layout)
 const IS_BLACK_KEY = [false, true, false, true, false, false, true, false, true, false, true, false];
 
-// Rough mobile/lower-power-device detection. Phones (and most tablets) have
-// noticeably less per-core CPU throughput than a desktop/laptop, and the
-// reverb/compressor/sampler DSP chain below runs on every audio callback
-// regardless of note count — so the same settings that are comfortable on
-// PC leave much less headroom on a phone. We use this flag to scale voice
-// limits and effect cost down specifically for those devices rather than
-// changing behavior for everyone.
+// Rough mobile/lower-power-device detection.
 const IS_MOBILE_DEVICE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
 // --- Application State ---
@@ -67,46 +61,17 @@ let volNode = null;
 let masterCompressor = null;
 let masterLimiter = null;
 
-// --- Voice Management (added for polyphony / dropout fix) ---
-// Tracks currently-sounding voices so we can gracefully release the quietest
-// one before hitting the polyphony ceiling, instead of letting the sampler
-// hard-cut the oldest voice (which is what produced the audible "choke" /
-// sudden silence when many keys played at once).
-const MAX_ACTIVE_VOICES = IS_MOBILE_DEVICE ? 14 : 32; // lower ceiling on phones — less CPU headroom per voice
-let activeVoiceLog = []; // { note, velocity, releaseTime }
+// --- Voice Management ---
+const MAX_ACTIVE_VOICES = IS_MOBILE_DEVICE ? 14 : 32;
+let activeVoiceLog = [];
+let activeVoiceByPitch = new Map();
 
-// Per-pitch bookkeeping: if the same key is retriggered while its previous
-// hit is still ringing (common in dense/repeated-note passages), calling
-// triggerAttack again on top of it makes two overlapping voices on the same
-// sample, which phases/smears and can sound like a glitch. We release the
-// old one first.
-let activeVoiceByPitch = new Map(); // noteName -> releaseTime
-
-// Mega-chord / massive-burst congestion control: if an unusually large
-// number of note-on events land inside the same short window (e.g. a giant
-// block chord or a dense multi-hand run hits all at once), triggering every
-// single one synchronously is what causes the remaining "bit buggy" stutter
-// even after the voice-guard fix above. We cap how many *new* voices we're
-// willing to start per burst window and silently skip the extra low-velocity
-// ones — visually the keys still light up (that's driven elsewhere), but we
-// stop asking the audio engine to spin up more voices than it can service
-// smoothly in one instant.
-// Mobile browsers throttle requestAnimationFrame more aggressively (screen
-// dimming, battery saver, background tab, thermal throttling), so a single
-// animation frame is more likely to arrive late and have to "catch up" a
-// bigger batch of due notes at once. Widen the burst window slightly and
-// lower the per-burst ceiling on mobile so that catch-up doesn't overwhelm
-// a phone's smaller CPU headroom the way it would on desktop.
-const BURST_WINDOW_SEC = IS_MOBILE_DEVICE ? 0.035 : 0.02;   // ~20-35ms — notes this close together count as one "burst"
-const MAX_TRIGGERS_PER_BURST = IS_MOBILE_DEVICE ? 8 : 18; // hard ceiling on new voices started within a burst
+const BURST_WINDOW_SEC = IS_MOBILE_DEVICE ? 0.035 : 0.02;
+const MAX_TRIGGERS_PER_BURST = IS_MOBILE_DEVICE ? 8 : 18;
 let burstWindowStart = 0;
 let burstTriggerCount = 0;
 
-// Removes a voice log entry by note name via in-place splice instead of
-// array.filter(). filter() allocates a brand-new array on every call — on a
-// phone, calling that on every single note trigger during a dense passage
-// creates enough garbage to cause GC micro-stalls (the "sound drops out for
-// a second then comes back" pattern). Splice mutates in place, no new array.
+// Removes a voice log entry by note name via in-place splice
 function removeVoiceLogEntryByNote(noteName) {
     for (let i = activeVoiceLog.length - 1; i >= 0; i--) {
         if (activeVoiceLog[i].note === noteName) {
@@ -115,8 +80,7 @@ function removeVoiceLogEntryByNote(noteName) {
     }
 }
 
-// Prunes expired voices in place (same allocation-avoidance reasoning as
-// above) instead of activeVoiceLog = activeVoiceLog.filter(...).
+// Prunes expired voices in place
 function pruneExpiredVoiceLog(now) {
     for (let i = activeVoiceLog.length - 1; i >= 0; i--) {
         if (activeVoiceLog[i].releaseTime <= now) {
@@ -132,22 +96,13 @@ function triggerNoteWithVoiceGuard(noteName, duration, time, velocity, strict) {
     const scheduledTime = time || now;
 
     // --- Burst congestion control ---
-    // Skipped entirely in "strict" mode (sheet/score playback): that engine
-    // must sound exactly what's notated, so we never silently drop a note
-    // here — clipping/overload protection is still handled downstream by
-    // the compressor + limiter, and voice-stealing below still applies.
     if (!strict) {
         if (scheduledTime - burstWindowStart > BURST_WINDOW_SEC) {
-            // New burst window
             burstWindowStart = scheduledTime;
             burstTriggerCount = 0;
         }
         burstTriggerCount++;
         if (burstTriggerCount > MAX_TRIGGERS_PER_BURST && (velocity || 0.8) < 0.55) {
-            // We're deep into a massive simultaneous-note burst and this is one
-            // of the quieter notes in it — skip starting a new voice for it
-            // entirely rather than adding more load on top of an already
-            // saturated instant. Louder/melody notes still get through.
             return;
         }
     }
@@ -160,11 +115,9 @@ function triggerNoteWithVoiceGuard(noteName, duration, time, velocity, strict) {
         removeVoiceLogEntryByNote(noteName);
     }
 
-    // --- Overall polyphony guard (existing behavior) ---
+    // --- Overall polyphony guard ---
     pruneExpiredVoiceLog(now);
     if (activeVoiceLog.length >= MAX_ACTIVE_VOICES) {
-        // Release the quietest currently-held voice instead of letting the
-        // engine hard-kill the oldest one — much less audible.
         activeVoiceLog.sort((a, b) => a.velocity - b.velocity);
         const victim = activeVoiceLog.shift();
         if (victim && typeof activeInstrument.triggerRelease === 'function') {
@@ -251,7 +204,6 @@ class SmplrToneWrapper {
         this.smplr = smplrInstance;
     }
     triggerAttackRelease(noteName, duration, time, velocity) {
-        // smplr expects midi-scaled velocity values from 0 to 127
         const midiVelocity = Math.round((velocity || 0.8) * 127);
         this.smplr.start({
             note: noteName,
@@ -260,7 +212,6 @@ class SmplrToneWrapper {
             velocity: midiVelocity
         });
     }
-    // Added specific triggerRelease mapping to stop notes individually and prevent voice stacking
     triggerRelease(noteName, time) {
         try {
             if (this.smplr && typeof this.smplr.stop === 'function') {
@@ -282,68 +233,29 @@ class SmplrToneWrapper {
 
 // --- Audio Synthesizer Construction ---
 function setupAudioEngine() {
-    // 1. Optimize internal latency of Tone scheduler queue to preserve lookahead buffer
-    // Raised from 0.08 -> 0.15: dense chords/runs were blowing past the old
-    // 80ms buffer while the render loop was also doing canvas/particle work
-    // on the same thread, causing the scheduler to fall behind and produce
-    // the "laggy / cuts out for a second" symptom under heavy polyphony.
-    // Phones need a bigger safety margin here: slower per-core CPU means the
-    // scheduler is more likely to fall behind, and a throttled rAF frame can
-    // dump a larger catch-up batch of notes into one instant than on desktop.
     Tone.context.lookAhead = IS_MOBILE_DEVICE ? 0.25 : 0.15;
-    // Smaller scheduler tick so playback stays smoother when many notes
-    // are queued back-to-back. Slightly larger on mobile since a very tight
-    // tick adds its own CPU overhead that a phone can't as easily absorb.
     Tone.context.updateInterval = IS_MOBILE_DEVICE ? 0.05 : 0.03;
-    // "playback" trades a little extra output latency for a larger, more
-    // forgiving audio buffer under the hood — worth it here since this is a
-    // visualizer/player, not a live-input instrument, and it's the setting
-    // that matters most for surviving massive simultaneous-note bursts
-    // without underrunning.
-    try { Tone.context.latencyHint = "playback"; } catch (e) { /* not all contexts allow reassignment after construction; safe to ignore */ }
+    try { Tone.context.latencyHint = "playback"; } catch (e) { }
 
-    // 2. Create a Master Limiter to physically clamp clipping spikes above -1dB
     masterLimiter = new Tone.Limiter(-1).toDestination();
 
-    // 3. Create a Master Compressor to dynamically smooth heavy chords
-    // Softened attack/ratio slightly so sudden bursts of many simultaneous
-    // notes don't get slammed all at once (which read as an abrupt dip/choke).
     masterCompressor = new Tone.Compressor({
-        threshold: -18, // DB compression trigger offset
-        ratio: 3,       // dynamic compression ratio (was 4)
-        attack: 0.03,   // slower attack avoids grabbing every transient (was 0.015)
-        release: 0.25   // release envelope (was 0.12)
+        threshold: -18,
+        ratio: 3,
+        attack: 0.03,
+        release: 0.25
     }).connect(masterLimiter);
 
-    // 4. Connect Reverb Unit to Compressor
-    // Convolution reverb is the single most CPU-expensive node in this
-    // chain — its cost scales with device speed, not note count, so it eats
-    // into a phone's headroom even when nothing else is happening. Smaller
-    // room + lower wet mix on mobile reduces that fixed cost.
     reverbNode = new Tone.Reverb({
-        roomSize: IS_MOBILE_DEVICE ? 0.5 : 0.8,  // Clean decay width
-        wet: IS_MOBILE_DEVICE ? 0.15 : 0.25      // Lower wet mix slightly to preserve transient attacks
+        roomSize: IS_MOBILE_DEVICE ? 0.5 : 0.8,
+        wet: IS_MOBILE_DEVICE ? 0.15 : 0.25
     }).connect(masterCompressor);
 
-    // 5. Connect Master Volume to Reverb
-    // Convolution reverb runs continuously regardless of note count or even
-    // "wet" mix level — lowering wet blends the output but doesn't stop the
-    // convolution itself from computing every sample. That's a fixed CPU
-    // tax a phone can't spare, so on mobile we skip the reverb node
-    // entirely and route straight to the compressor instead.
     volNode = IS_MOBILE_DEVICE
         ? new Tone.Volume(-12).connect(masterCompressor)
-        : new Tone.Volume(-12).connect(reverbNode); // Lowered baseline output level to preserve digital headroom
+        : new Tone.Volume(-12).connect(reverbNode);
 
-    // Initiate loading of sampled piano assets asynchronously immediately
     loadSampledPiano();
-
-    // Set initial fallback/dynamic instrument. Real piano samples are much
-    // more expensive to mix per-voice than a synthesized oscillator (each
-    // voice is a decoded audio buffer being resampled/mixed vs. a simple
-    // waveform), so phones default to a light synthesized piano instead —
-    // the sampler still loads in the background if the user switches to it
-    // manually, just isn't the default under load.
     setInstrument(IS_MOBILE_DEVICE ? 'grand' : 'sampled');
 }
 
@@ -365,19 +277,14 @@ function loadSampledPiano() {
             "A6": "A6.mp3", "C7": "C7.mp3", "D#7": "Ds7.mp3", "F#7": "Fs7.mp3",
             "A7": "A7.mp3", "C8": "C8.mp3"
         },
-        // Lowered from 1.5 -> 1.1 previously; lowered further to 0.7 here.
-        // A long release keeps voices "held" long after a note visually ends,
-        // which fills the polyphony ceiling much faster during dense passages
-        // and triggers voice-stealing sooner than it looks like it should.
         release: 0.7,
-        maxPolyphony: IS_MOBILE_DEVICE ? 16 : 32, // lower ceiling on phones; still enough for dense chords/runs
+        maxPolyphony: IS_MOBILE_DEVICE ? 16 : 32,
         baseUrl: "https://tonejs.github.io/audio/salamander/",
         onload: () => {
             samplerLoaded = true;
             elSamplerStatus.textContent = "• Ready";
             elSamplerStatus.style.color = "#10b981";
             
-            // If the active dropdown choice is 'sampled', smoothly route it live
             if (selectInstrument.value === 'sampled') {
                 if (activeInstrument && activeInstrument !== samplerPiano) {
                     activeInstrument.releaseAll();
@@ -396,18 +303,13 @@ function loadSampledPiano() {
 }
 
 async function setInstrument(type) {
-    // Stop prior notes
     if (activeInstrument) {
         activeInstrument.releaseAll();
-        // Avoid disposing of our premium sample node or splendid wrapper
         if (activeInstrument !== samplerPiano && activeInstrument !== splendidPiano) {
             activeInstrument.dispose();
         }
     }
 
-    // Clear voice-guard state whenever the instrument changes so stale
-    // entries from the previous instrument don't cause unnecessary early
-    // releases or bogus burst-window counts.
     activeVoiceLog = [];
     activeVoiceByPitch.clear();
     burstWindowStart = 0;
@@ -419,7 +321,6 @@ async function setInstrument(type) {
             elSamplerStatus.style.color = "#fbbf24";
 
             try {
-                // Dynamically import the ES module directly from the browser CDN
                 const { SplendidGrandPiano } = await import("https://unpkg.com/smplr/dist/index.mjs");
                 
                 const inst = new SplendidGrandPiano(Tone.context.rawContext, {
@@ -453,22 +354,21 @@ async function setInstrument(type) {
             activeInstrument = samplerPiano;
             activeInstrument.connect(volNode);
         } else {
-            // Temporary warm synth fallback while downloading (Optimized with voice caps)
             activeInstrument = new Tone.PolySynth(Tone.Synth, {
-                maxPolyphony: IS_MOBILE_DEVICE ? 16 : 32, // lower ceiling on phones
+                maxPolyphony: IS_MOBILE_DEVICE ? 16 : 32,
                 oscillator: { type: "sine" },
                 envelope: { attack: 0.005, decay: 1.2, sustain: 0.1, release: 0.8 }
             }).connect(volNode);
         }
     } else if (type === 'grand') {
         activeInstrument = new Tone.PolySynth(Tone.Synth, {
-            maxPolyphony: IS_MOBILE_DEVICE ? 16 : 32, // lower ceiling on phones
+            maxPolyphony: IS_MOBILE_DEVICE ? 16 : 32,
             oscillator: { type: "sine" },
             envelope: { attack: 0.005, decay: 1.2, sustain: 0.1, release: 0.8 }
         }).connect(volNode);
     } else if (type === 'rhodes') {
         activeInstrument = new Tone.PolySynth(Tone.FMSynth, {
-            maxPolyphony: IS_MOBILE_DEVICE ? 16 : 32, // lower ceiling on phones
+            maxPolyphony: IS_MOBILE_DEVICE ? 16 : 32,
             harmonicity: 3.05,
             modulationIndex: 10,
             oscillator: { type: "sine" },
@@ -478,13 +378,13 @@ async function setInstrument(type) {
         }).connect(volNode);
     } else if (type === 'ambient') {
         activeInstrument = new Tone.PolySynth(Tone.Synth, {
-            maxPolyphony: IS_MOBILE_DEVICE ? 10 : 16, // Capped lower to prevent CPU buffer underruns
+            maxPolyphony: IS_MOBILE_DEVICE ? 10 : 16,
             oscillator: { type: "triangle" },
             envelope: { attack: 0.15, decay: 2.0, sustain: 0.5, release: 2.0 }
         }).connect(volNode);
     } else if (type === 'chiptune') {
         activeInstrument = new Tone.PolySynth(Tone.Synth, {
-            maxPolyphony: IS_MOBILE_DEVICE ? 16 : 32, // lower ceiling on phones
+            maxPolyphony: IS_MOBILE_DEVICE ? 16 : 32,
             oscillator: { type: "square" },
             envelope: { attack: 0.002, decay: 0.3, sustain: 0.15, release: 0.3 }
         }).connect(volNode);
@@ -498,11 +398,9 @@ function loadMidi(buffer) {
     midiData = new Midi(buffer);
     activeNotesMemory = [];
 
-    // Rebuild Graphics & Keys matching 88 standard keys
     calculateLayoutMetrics();
     createKeyboard();
 
-    // Populate active playback buffer (storing ticks and durationTicks directly)
     let noteCount = 0;
     midiData.tracks.forEach(track => {
         track.notes.forEach(note => {
@@ -526,17 +424,13 @@ function loadMidi(buffer) {
     totalDuration = midiData.duration;
     lastTriggeredTime = 0;
 
-    // Extract maximum length parameters to dynamically calculate visual canvas boundaries
     maxNoteDuration = activeNotesMemory.reduce((max, n) => Math.max(max, n.duration), 2);
-    if (maxNoteDuration > 15) maxNoteDuration = 15; // Cap to keep render checks small
+    if (maxNoteDuration > 15) maxNoteDuration = 15;
 
-    // Seeding dynamic non-destructive studio database immediately
     initStudioData();
 
-    // KEY SIGNATURE RESOLUTION: Extract native metadata directly from file
     const detectedKeyName = getMidiKeySignature();
 
-    // Populate DOM elements instantly
     document.getElementById('stat-name').textContent = midiData.name || "Untitled";
     document.getElementById('stat-duration').textContent = Math.round(totalDuration) + "s";
     document.getElementById('stat-tempo').textContent = Math.round(midiData.header.tempos[0]?.bpm || 120) + " BPM";
@@ -544,13 +438,11 @@ function loadMidi(buffer) {
     document.getElementById('stat-notes').textContent = noteCount;
     document.getElementById('stat-key').textContent = detectedKeyName;
 
-    // Timeline ranges update
     elTimeline.max = totalDuration;
     elTimeline.value = 0;
     currentPlaybackTime = 0;
     updateTimeDisplay();
 
-    // Enable Interactive states
     btnPlay.disabled = false;
     btnStop.disabled = false;
     btnRestart.disabled = false;
@@ -570,7 +462,6 @@ function startPlayback() {
     isPlaying = true;
     lastFrameTime = performance.now();
     
-    // Anchor the Phase-Locked Loop Hardware Clocks
     audioStartTime = Tone.now();
     logicalStartTime = currentPlaybackTime;
     
@@ -579,7 +470,6 @@ function startPlayback() {
     updatePlaybackNoteIndex();
 }
 
-// Pause operation
 function pausePlayback() {
     isPlaying = false;
     btnPlay.disabled = false;
@@ -589,7 +479,6 @@ function pausePlayback() {
     activeVoiceByPitch.clear();
 }
 
-// Stop operation
 function stopPlayback() {
     isPlaying = false;
     currentPlaybackTime = 0;
@@ -625,7 +514,6 @@ function seekTo(time) {
     currentPlaybackTime = Math.max(0, Math.min(time, totalDuration));
     lastTriggeredTime = currentPlaybackTime;
     
-    // Re-Anchor the Phase-Locked Loop Clocks on seek
     audioStartTime = Tone.now();
     logicalStartTime = currentPlaybackTime;
     
@@ -648,11 +536,9 @@ function updateTimeDisplay() {
 // --- Studio Initialization and Rendering Handlers ---
 function initStudioData() {
     if (!activeNotesMemory) return;
-    // Create a local deep copy of notes to avoid mutating live data before save
     studioNotesMemory = activeNotesMemory.map(note => ({ ...note }));
     isStudioUnlocked = false;
 
-    // Hide/Lock filter controls by default
     document.getElementById('studio-filter-controls').style.display = 'none';
     document.getElementById('studio-removal-preview-container').style.display = 'none';
     
@@ -676,7 +562,6 @@ function updateStudioPreview() {
     const previewContainer = document.getElementById('studio-removal-preview-container');
     const previewList = document.getElementById('studio-removal-preview-list');
 
-    // Find all elements configured to be removed (velocity <= threshold value)
     const toRemove = studioNotesMemory.filter(note => (note.velocity || 0.8) <= threshold);
 
     if (toRemove.length > 0 && isStudioUnlocked) {
@@ -706,14 +591,12 @@ function updateStudioTable() {
         const inputStyle = "background: transparent; border: none; color: inherit; font-family: inherit; font-size: inherit; width: 60px; outline: none; padding: 2px;";
         const editableInputStyle = "background: #20202c; border: 1px solid var(--panel-border); color: #fff; font-family: inherit; font-size: inherit; width: 65px; border-radius: 4px; padding: 2px;";
 
-        // # Index
         const tdIndex = document.createElement('td');
         tdIndex.style.padding = '10px 12px';
         tdIndex.style.color = 'var(--text-muted)';
         tdIndex.textContent = index + 1;
         tr.appendChild(tdIndex);
 
-        // Time (s)
         const tdTime = document.createElement('td');
         tdTime.style.padding = '10px 12px';
         const inputTime = document.createElement('input');
@@ -731,7 +614,6 @@ function updateStudioTable() {
         tdTime.appendChild(inputTime);
         tr.appendChild(tdTime);
 
-        // Pitch (MIDI)
         const tdPitch = document.createElement('td');
         tdPitch.style.padding = '10px 12px';
         const inputPitch = document.createElement('input');
@@ -751,7 +633,6 @@ function updateStudioTable() {
         tdPitch.appendChild(inputPitch);
         tr.appendChild(tdPitch);
 
-        // Name
         const tdName = document.createElement('td');
         tdName.style.padding = '10px 12px';
         tdName.style.fontWeight = '600';
@@ -759,7 +640,6 @@ function updateStudioTable() {
         tdName.textContent = note.name;
         tr.appendChild(tdName);
 
-        // Duration (s)
         const tdDuration = document.createElement('td');
         tdDuration.style.padding = '10px 12px';
         const inputDuration = document.createElement('input');
@@ -775,7 +655,6 @@ function updateStudioTable() {
         tdDuration.appendChild(inputDuration);
         tr.appendChild(tdDuration);
 
-        // Velocity
         const tdVelocity = document.createElement('td');
         tdVelocity.style.padding = '10px 12px';
         const inputVelocity = document.createElement('input');
@@ -793,7 +672,6 @@ function updateStudioTable() {
         tdVelocity.appendChild(inputVelocity);
         tr.appendChild(tdVelocity);
 
-        // Actions (Single manual delete column)
         const tdActions = document.createElement('td');
         tdActions.style.padding = '10px 12px';
         const btnDelete = document.createElement('button');
@@ -829,7 +707,6 @@ function setupEventListeners() {
     btnStop.addEventListener('click', stopPlayback);
     btnRestart.addEventListener('click', () => { seekTo(0); startPlayback(); });
 
-    // Tab interface handlers inside the Sheet Music Modal
     const btnTabNotation = document.getElementById('btn-tab-notation');
     const btnTabRaw = document.getElementById('btn-tab-raw');
     const btnTabStudio = document.getElementById('btn-tab-studio');
@@ -838,25 +715,21 @@ function setupEventListeners() {
     const contentRaw = document.getElementById('sheet-tab-raw-content');
     const contentStudio = document.getElementById('sheet-tab-studio-content');
 
-    // Sheet Playback Controls
     const btnPlaySheet = document.getElementById('btn-play-sheet');
     const btnStopSheet = document.getElementById('btn-stop-sheet');
 
-    // Embedded Section 2 Controls
     const btnPlaySecond = document.getElementById('btn-play-second');
     const btnStopSecond = document.getElementById('btn-stop-second');
     const btnMaximizeSecond = document.getElementById('btn-maximize-second');
     const btnDownloadSecond = document.getElementById('btn-download-second');
     const chkShowColors = document.getElementById('chk-show-colors');
 
-    // Maximized Popup Modal Elements
     const secondSheetMaxModal = document.getElementById('second-sheet-max-modal');
     const btnPlayMax = document.getElementById('btn-play-max');
     const btnStopMax = document.getElementById('btn-stop-max');
     const btnDownloadMax = document.getElementById('btn-download-max');
     const btnCloseMax = document.getElementById('btn-close-max');
 
-    // Custom studio nodes
     const btnStudioUnlock = document.getElementById('btn-studio-unlock');
     const studioFilterControls = document.getElementById('studio-filter-controls');
     const btnStudioApplyFilter = document.getElementById('btn-studio-apply-filter');
@@ -930,7 +803,6 @@ function setupEventListeners() {
 
     btnStopSheet.addEventListener('click', stopSheetPlayback);
 
-    // Embedded Section 2 Control bindings
     btnPlaySecond.addEventListener('click', () => {
         if (isVerticalPlaying && activeVerticalContainerId === 'sheet-music-notation-vertical') {
             stopVerticalPlayback();
@@ -939,9 +811,21 @@ function setupEventListeners() {
         }
     });
     btnStopSecond.addEventListener('click', stopVerticalPlayback);
-    btnDownloadSecond.addEventListener('click', () => downloadVerticalSVG('sheet-music-notation-vertical'));
 
-    // Toggle show colors
+    // Dynamic dropdown toggling behavior for Section 2 Download Menu [Modified]
+    const downloadDropdownSecond = document.getElementById("download-dropdown-second");
+    if (btnDownloadSecond && downloadDropdownSecond) {
+        btnDownloadSecond.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const dropdownMax = document.getElementById("download-dropdown-max");
+            if (dropdownMax) dropdownMax.classList.remove("show");
+            const mainDropdown = document.getElementById("download-dropdown");
+            if (mainDropdown) mainDropdown.classList.remove("show");
+            
+            downloadDropdownSecond.classList.toggle("show");
+        });
+    }
+
     chkShowColors.addEventListener('change', () => {
         renderVerticalSheetMusic('sheet-music-notation-vertical');
         renderStudioSheetMusic('sheet-music-notation-studio');
@@ -950,7 +834,6 @@ function setupEventListeners() {
         }
     });
 
-    // Maximized Score Modal controls and triggers
     btnMaximizeSecond.addEventListener('click', () => {
         stopSheetPlayback();
         stopVerticalPlayback();
@@ -973,9 +856,21 @@ function setupEventListeners() {
         }
     });
     btnStopMax.addEventListener('click', stopVerticalPlayback);
-    btnDownloadMax.addEventListener('click', () => downloadVerticalSVG('sheet-music-notation-max'));
 
-    // Studio editing and saving systems listeners
+    // Dynamic dropdown toggling behavior for Maximize view Download Menu [Modified]
+    const downloadDropdownMax = document.getElementById("download-dropdown-max");
+    if (btnDownloadMax && downloadDropdownMax) {
+        btnDownloadMax.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const dropdownSecond = document.getElementById("download-dropdown-second");
+            if (dropdownSecond) dropdownSecond.classList.remove("show");
+            const mainDropdown = document.getElementById("download-dropdown");
+            if (mainDropdown) mainDropdown.classList.remove("show");
+            
+            downloadDropdownMax.classList.toggle("show");
+        });
+    }
+
     btnStudioUnlock.addEventListener('click', () => {
         isStudioUnlocked = !isStudioUnlocked;
         if (isStudioUnlocked) {
@@ -999,7 +894,6 @@ function setupEventListeners() {
 
     btnStudioApplyFilter.addEventListener('click', () => {
         const threshold = parseFloat(inputStudioCutVelo.value) || 0.48;
-        // Keep only notes that have velocity strictly greater than the threshold value
         studioNotesMemory = studioNotesMemory.filter(note => (note.velocity || 0.8) > threshold);
         
         updateStudioTable();
@@ -1011,13 +905,8 @@ function setupEventListeners() {
         if (!confirm("Overwrite the original sequencer notes with your Studio workspace changes?")) {
             return;
         }
-        // Overwrite master notes database array with modified sequence
         activeNotesMemory = studioNotesMemory.map(note => ({ ...note }));
-        
-        // Update note counts on master stats bar
         document.getElementById('stat-notes').textContent = activeNotesMemory.length;
-
-        // Re-render master sheet notation displays
         renderSheetMusic();
         alert("Changes successfully saved and applied to the main sequencer and staves.");
     });
@@ -1025,7 +914,6 @@ function setupEventListeners() {
     btnStudioPlayScore.addEventListener('click', startStudioPlayback);
     btnStudioStopScore.addEventListener('click', stopStudioPlayback);
 
-    // Popup Sheet Music Event Handlers
     btnSheet.addEventListener('click', () => {
         if (!midiData) return;
         pausePlayback();
@@ -1082,44 +970,34 @@ function init() {
 
 // Auto-Load Hook for External Storage Systems
 window.addEventListener("DOMContentLoaded", () => {
-  // 1. Ekstrak URL fail MIDI daripada parameter URL (?midi=...) atau Storage tempatan
   const urlParams = new URLSearchParams(window.location.search);
   const midiUrl = urlParams.get("midi") || localStorage.getItem("t1era_current_midi");
 
   if (midiUrl) {
     console.log("[T1ERA AUTO-LOAD] Aliran fail MIDI dikesan:", midiUrl);
     
-    // 2. Muat turun fail MIDI asal sebagai data binari (ArrayBuffer)
     fetch(midiUrl)
       .then(res => {
         if (!res.ok) throw new Error("Gagal mengambil fail MIDI dari Firebase Storage.");
         return res.arrayBuffer();
       })
       .then(arrayBuffer => {
-        // 3. Masukkan data binari fail ke dalam sistem pemain Midiano anda
-        
-        // KES A: Jika Midiano sedia ada anda mendedahkan fungsi pemuatan ArrayBuffer global
         if (window.midiano && typeof window.midiano.loadArrayBuffer === "function") {
           window.midiano.loadArrayBuffer(arrayBuffer, "t1era_score.mid");
           console.log("[T1ERA AUTO-LOAD] Fail MIDI berjaya disuap ke objek midiano.");
         } 
-        // KES B: Jika menggunakan fungsi tersuai
         else if (typeof window.loadMidiArrayBuffer === "function") {
           window.loadMidiArrayBuffer(arrayBuffer);
           console.log("[T1ERA AUTO-LOAD] Fail MIDI berjaya disuap ke fungsi global.");
         } 
-        // KES C (Fail-Safe): Mensimulasikan kemasukan fail terus ke dalam kotak input fail <input type="file">
-        // yang biasa digunakan oleh pelantar asal Midiano untuk memuat turun fail
         else {
           const file = new File([arrayBuffer], "t1era_score.mid", { type: "audio/midi" });
           const container = new DataTransfer();
           container.items.add(file);
           
-          // Cari input fail asli di halaman midiano.html anda
           const fileInput = document.querySelector("input[type='file']");
           if (fileInput) {
             fileInput.files = container.files;
-            // Cetuskan acara tukar (change event) supaya Midiano sedar fail baru telah dimasukkan
             fileInput.dispatchEvent(new Event("change", { bubbles: true }));
             console.log("[T1ERA AUTO-LOAD] Fail MIDI disimulasikan ke input fail Midiano.");
           } else {
