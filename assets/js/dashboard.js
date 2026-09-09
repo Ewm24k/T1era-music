@@ -2,50 +2,16 @@ import { auth, db, storage } from "./firebase-config.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { 
     collection, 
-    onSnapshot
+    query, 
+    where, 
+    onSnapshot,
+    doc,
+    deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { 
     ref as sRef, 
-    getBytes, 
-    getDownloadURL 
+    getMetadata 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
-
-// ==========================================
-// INDEXEDDB DIRECT DATA BRIDGE
-// ==========================================
-const DB_NAME = "T1ERA_STUDIO_DB";
-const STORE_NAME = "midi_transfer";
-
-function openMidiDB() {
-    return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 1);
-        req.onupgradeneeded = (e) => {
-            const idb = e.target.result;
-            if (!idb.objectStoreNames.contains(STORE_NAME)) {
-                idb.createObjectStore(STORE_NAME);
-            }
-        };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-    });
-}
-
-async function saveMidiToBridge(arrayBuffer, title) {
-    try {
-        const idb = await openMidiDB();
-        return new Promise((resolve, reject) => {
-            const tx = idb.transaction(STORE_NAME, "readwrite");
-            const store = tx.objectStore(STORE_NAME);
-            store.put(arrayBuffer, "pending_midi");
-            store.put(title, "pending_title");
-            tx.oncomplete = () => resolve(true);
-            tx.onerror = () => reject(tx.error);
-        });
-    } catch (e) {
-        console.warn("[BRIDGE] IndexedDB write fallback:", e);
-        return false;
-    }
-}
 
 // ==========================================
 // CONFIGURATION & GLOBAL CONSTANTS
@@ -55,8 +21,10 @@ const pauseIconSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="curr
 
 const youtubeIconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="#ff4d4d" style="display:block;"><path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.517 3.545 12 3.545 12 3.545s-7.517 0-9.388.508a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.871.508 9.388.508 9.388.508s7.517 0 9.388-.508a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>`;
 const uploadIconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#00df89" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>`;
-const midiIconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#e9af51" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>`;
-const studioIconSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M6 3v11"/><path d="M10 3v11"/><path d="M14 3v11"/><path d="M18 3v11"/><path d="M2 14h20"/></svg>`;
+const studioIconSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:2px;"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M6 3v11"/><path d="M10 3v11"/><path d="M14 3v11"/><path d="M18 3v11"/><path d="M2 14h20"/></svg>`;
+
+const resolvedTitleCache = new Map();
+const validatedMidiCache = new Set();
 
 const popularTracksDataMockFallback = [
     { id: 1, title: "Golden Days", artist: "Felix Carter", duration: "3:12", art: "https://picsum.photos/id/65/300/300" },
@@ -90,6 +58,7 @@ const volumeTrack = document.getElementById("volume-track");
 const volumeFill = document.getElementById("volume-fill");
 const volumeThumb = document.getElementById("volume-thumb");
 
+// Tab Navigation Elements
 const navHome = document.getElementById("nav-home");
 const navTranscriptions = document.getElementById("nav-transcriptions");
 const mobileNavHome = document.getElementById("mobile-nav-home");
@@ -99,6 +68,7 @@ const homeView = document.getElementById("home-view");
 const transcriptionsView = document.getElementById("transcriptions-view");
 const transcriptionsList = document.getElementById("transcriptions-list");
 
+// Audio States
 const audioPlayer = new Audio();
 let isPlaying = false;
 let isRealPlayback = false; 
@@ -115,6 +85,9 @@ if (volumeFill && volumeThumb) {
     audioPlayer.volume = currentVolume;
 }
 
+// ==========================================
+// UNIFIED DESKTOP & MOBILE TAB NAVIGATION
+// ==========================================
 function syncActiveNav(tabId) {
     document.querySelectorAll(".nav-item").forEach(item => item.classList.remove("active"));
     document.querySelectorAll(".mobile-nav-item").forEach(item => item.classList.remove("active"));
@@ -122,35 +95,57 @@ function syncActiveNav(tabId) {
     if (tabId === "home") {
         if (navHome) navHome.classList.add("active");
         if (mobileNavHome) mobileNavHome.classList.add("active");
-        if (homeView) homeView.style.display = "block";
-        if (transcriptionsView) transcriptionsView.style.display = "none";
+        homeView.style.display = "block";
+        transcriptionsView.style.display = "none";
     } else if (tabId === "transcriptions") {
         if (navTranscriptions) navTranscriptions.classList.add("active");
         if (mobileNavTranscriptions) mobileNavTranscriptions.classList.add("active");
-        if (homeView) homeView.style.display = "none";
-        if (transcriptionsView) transcriptionsView.style.display = "block";
+        homeView.style.display = "none";
+        transcriptionsView.style.display = "block";
         loadUserTranscriptions();
     }
 }
 
-if (navHome) navHome.addEventListener("click", (e) => { e.preventDefault(); syncActiveNav("home"); });
-if (mobileNavHome) mobileNavHome.addEventListener("click", (e) => { e.preventDefault(); syncActiveNav("home"); });
-if (navTranscriptions) navTranscriptions.addEventListener("click", (e) => { e.preventDefault(); syncActiveNav("transcriptions"); });
-if (mobileNavTranscriptions) mobileNavTranscriptions.addEventListener("click", (e) => { e.preventDefault(); syncActiveNav("transcriptions"); });
+if (navHome) {
+    navHome.addEventListener("click", (e) => {
+        e.preventDefault();
+        syncActiveNav("home");
+    });
+}
+if (mobileNavHome) {
+    mobileNavHome.addEventListener("click", (e) => {
+        e.preventDefault();
+        syncActiveNav("home");
+    });
+}
 
+if (navTranscriptions) {
+    navTranscriptions.addEventListener("click", (e) => {
+        e.preventDefault();
+        syncActiveNav("transcriptions");
+    });
+}
+if (mobileNavTranscriptions) {
+    mobileNavTranscriptions.addEventListener("click", (e) => {
+        e.preventDefault();
+        syncActiveNav("transcriptions");
+    });
+}
+
+// ==========================================
+// AUTHENTICATION SECURE STATE CONTROL
+// ==========================================
 let currentUser = null;
-let isAuthReady = false;
 
 if (auth) {
   onAuthStateChanged(auth, (user) => {
-    isAuthReady = true;
     if (user) {
       currentUser = user;
       const profileName = document.getElementById("profile-name");
       const profileAvatar = document.getElementById("profile-avatar");
       
       if (profileName) {
-        profileName.textContent = user.displayName || user.email?.split("@")[0] || "Studio Creator";
+        profileName.textContent = user.displayName || "Studio Creator";
       }
       
       if (profileAvatar) {
@@ -164,191 +159,154 @@ if (auth) {
           profileAvatar.style.color = "rgba(255,255,255,0.7)";
         }
       }
-
-      if (transcriptionsView && transcriptionsView.style.display !== "none") {
-          loadUserTranscriptions();
-      }
     } else {
       window.location.href = "index.html";
     }
   });
 }
 
-function isValidTitle(val) {
-    if (!val || typeof val !== "string") return false;
-    const clean = val.trim().toLowerCase();
-    if (!clean) return false;
-    if (["local uploaded track", "uploaded track", "audio", "untitled", "youtube track asset"].includes(clean)) return false;
-    if (clean.startsWith("youtube stream audio")) return false;
-    return true;
-}
-
-function cleanTitleFormat(name) {
-    if (!name) return "";
-    let clean = name.trim();
-    clean = clean.replace(/\.(mid|midi|mp3|wav|m4a|ogg|aac|flac|json)$/i, "");
-    clean = clean.replace(/[-_]+/g, " ");
-    clean = clean.replace(/\s+/g, " ").trim();
-    return clean.split(" ")
-        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(" ");
-}
-
-function extractFilenameFromUrl(url) {
-    if (!url) return "";
-    try {
-        const decoded = decodeURIComponent(url);
-        const withoutQuery = decoded.split("?")[0];
-        const segments = withoutQuery.split("/").filter(Boolean);
-        if (segments.length === 0) return "";
-        
-        let file = segments[segments.length - 1];
-        if (["final_score.mid", "score.mid", "output.mid"].includes(file.toLowerCase())) {
-            if (segments.length >= 2) {
-                const folderName = segments[segments.length - 2];
-                if (folderName && !["midi_jobs", "midi", "uploads", "transcriptions"].includes(folderName.toLowerCase())) {
-                    return folderName;
-                }
-            }
-        }
-        return file;
-    } catch (e) {
-        return "";
-    }
-}
-
-function extractYouTubeVideoId(url) {
-    if (!url) return null;
-    try {
-        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|[?&]v=)([^#&?]*).*/;
-        const match = url.match(regExp);
-        if (match && match[2].length === 11) return match[2];
-    } catch (e) {}
-    return null;
-}
-
-function resolveJobTitle(data, docId) {
-    if (isValidTitle(data.title)) return cleanTitleFormat(data.title);
-    if (isValidTitle(data.songTitle)) return cleanTitleFormat(data.songTitle);
-    if (isValidTitle(data.trackTitle)) return cleanTitleFormat(data.trackTitle);
-    if (isValidTitle(data.trackName)) return cleanTitleFormat(data.trackName);
-    
-    const directFile = data.fileName || data.originalFileName || data.filename || data.name || data.audioFileName;
-    if (isValidTitle(directFile)) return cleanTitleFormat(directFile);
-
-    if (isValidTitle(data.youtubeTitle)) return cleanTitleFormat(data.youtubeTitle);
-    if (isValidTitle(data.videoTitle)) return cleanTitleFormat(data.videoTitle);
-
-    const urlCandidate = data.midiUrl || data.originalMidiUrl || data.audioUrl || data.sourceUrl;
-    if (urlCandidate) {
-        const parsedFile = extractFilenameFromUrl(urlCandidate);
-        if (isValidTitle(parsedFile)) return cleanTitleFormat(parsedFile);
-    }
-
-    if (data.youtubeUrl) {
-        const ytId = extractYouTubeVideoId(data.youtubeUrl);
-        if (ytId) return `YouTube Video (${ytId})`;
-    }
-
-    return `Transcription Track #${docId ? docId.substring(0, 6) : "Studio"}`;
-}
-
+// ==========================================
+// FIRESTORE TRANSCRIPTIONS SYNC
+// ==========================================
 let snapshotUnsubscribe = null;
 
 function loadUserTranscriptions() {
-    if (!transcriptionsList) return;
-
-    if (!isAuthReady) {
-        transcriptionsList.innerHTML = `<div style="text-align:center; color:rgba(255,255,255,0.4); font-size:0.85rem; padding:40px 0;">Authenticating user session...</div>`;
-        return;
-    }
-
     if (!currentUser || !db) {
-        renderEmptyTranscriptions();
+        renderTranscriptionsList(getMockTranscriptions());
         return;
     }
 
-    transcriptionsList.innerHTML = `<div style="text-align:center; color:rgba(255,255,255,0.4); font-size:0.85rem; padding:40px 0;">Loading your transcriptions...</div>`;
+    if (!transcriptionsList.children.length) {
+        transcriptionsList.innerHTML = `<div style="text-align:center; color:rgba(255,255,255,0.4); font-size:0.85rem; padding:40px 0;">Loading transcriptions database...</div>`;
+    }
 
     if (snapshotUnsubscribe) {
         snapshotUnsubscribe();
     }
 
     const jobsRef = collection(db, "users", currentUser.uid, "midi_jobs");
+    const q = query(jobsRef, where("status", "==", "COMPLETED"));
 
-    snapshotUnsubscribe = onSnapshot(jobsRef, async (snapshot) => {
-        const userJobs = [];
+    snapshotUnsubscribe = onSnapshot(q, async (snapshot) => {
+        const rawJobs = [];
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            const fallbackTitle = data.youtubeUrl ? extractYouTubeTitle(data.youtubeUrl) : "Local Uploaded Track";
+            
+            rawJobs.push({
+                id: doc.id,
+                title: data.title || fallbackTitle, 
+                fallbackTitle: fallbackTitle,
+                source: data.youtubeUrl ? "YOUTUBE" : "UPLOAD",
+                midiUrl: data.midiUrl, 
+                originalMidiUrl: data.originalMidiUrl || null, 
+                completedAt: data.completedAt || null,
+                date: data.completedAt ? new Date(data.completedAt.seconds * 1000).toLocaleDateString() : "Just Now"
+            });
+        });
 
-        snapshot.forEach((docSnap) => {
-            const data = docSnap.data();
-            const rawStatus = (data.status || "").toString().toUpperCase();
-            const isCompleted = !data.status || ["COMPLETED", "READY", "DONE", "SUCCESS", "FINISHED"].includes(rawStatus);
-            const midiUrl = data.midiUrl || data.midi_url || data.downloadUrl || data.url || data.originalMidiUrl;
-
-            if (isCompleted && midiUrl) {
-                const resolvedTitle = resolveJobTitle(data, docSnap.id);
-                
-                let source = "UPLOAD";
-                if (data.youtubeUrl || data.source === "YOUTUBE") {
-                    source = "YOUTUBE";
-                } else if (resolvedTitle.endsWith(".mid") || (data.mimeType && data.mimeType.includes("midi"))) {
-                    source = "MIDI";
-                }
-
-                userJobs.push({
-                    id: docSnap.id,
-                    title: resolvedTitle,
-                    source: source,
-                    midiUrl: midiUrl,
-                    originalMidiUrl: data.originalMidiUrl || null,
-                    completedAt: data.completedAt || data.createdAt || null,
-                    date: data.completedAt 
-                        ? new Date(data.completedAt.seconds * 1000).toLocaleDateString() 
-                        : (data.createdAt ? new Date(data.createdAt.seconds * 1000).toLocaleDateString() : "Ready")
-                });
+        const resolveTitlesPromises = rawJobs.map(async (job) => {
+            if (resolvedTitleCache.has(job.id)) {
+                job.title = resolvedTitleCache.get(job.id);
+                return job;
             }
+
+            const isGeneric = !job.title || 
+                              job.title === "Local Uploaded Track" || 
+                              job.title.startsWith("YouTube Stream Audio");
+            
+            if (isGeneric && job.midiUrl) {
+                try {
+                    const detailsUrl = job.midiUrl.replace("final_score.mid", "details.json");
+                    const response = await fetch(detailsUrl);
+                    if (response.ok) {
+                        const jsonDetails = await response.json();
+                        if (jsonDetails && jsonDetails.title) {
+                            job.title = jsonDetails.title;
+                            resolvedTitleCache.set(job.id, jsonDetails.title);
+                            return job;
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`[STORAGE TITLE RESOLVE WARNING] Failed details fetch for ${job.id}:`, e);
+                }
+            }
+
+            resolvedTitleCache.set(job.id, job.title);
+            return job;
         });
 
-        if (userJobs.length === 0) {
-            renderEmptyTranscriptions();
-            return;
+        const resolvedJobs = await Promise.all(resolveTitlesPromises);
+
+        if (storage && resolvedJobs.length > 0) {
+            const validationPromises = resolvedJobs.map(async (job) => {
+                if (!job.midiUrl) return null;
+                
+                if (validatedMidiCache.has(job.midiUrl)) {
+                    return job;
+                }
+                
+                try {
+                    const fileRef = sRef(storage, job.midiUrl);
+                    await getMetadata(fileRef);
+                    validatedMidiCache.add(job.midiUrl);
+                    return job; 
+                } catch (error) {
+                    if (error.code === 'storage/object-not-found' || error.message.includes('not found')) {
+                        console.warn(`[DATA SELF-HEAL] Purging metadata missing remote storage job: ${job.id}`);
+                        try {
+                            await deleteDoc(doc(db, "users", currentUser.uid, "midi_jobs", job.id));
+                        } catch (fs_err) {
+                            console.error("[DATA SELF-HEAL ERROR] Cleanup failed:", fs_err);
+                        }
+                    }
+                    return null; 
+                }
+            });
+
+            const results = await Promise.all(validationPromises);
+            const validatedJobs = results.filter(job => job !== null);
+
+            if (validatedJobs.length === 0) {
+                renderTranscriptionsList(getMockTranscriptions());
+            } else {
+                validatedJobs.sort((a, b) => {
+                    const timeA = a.completedAt ? a.completedAt.seconds : 0;
+                    const timeB = b.completedAt ? b.completedAt.seconds : 0;
+                    return timeB - timeA; 
+                });
+                renderTranscriptionsList(validatedJobs);
+            }
+        } else {
+            if (resolvedJobs.length === 0) {
+                renderTranscriptionsList(getMockTranscriptions());
+            } else {
+                resolvedJobs.sort((a, b) => {
+                    const timeA = a.completedAt ? a.completedAt.seconds : 0;
+                    const timeB = b.completedAt ? b.completedAt.seconds : 0;
+                    return timeB - timeA;
+                });
+                renderTranscriptionsList(resolvedJobs);
+            }
         }
-
-        userJobs.sort((a, b) => {
-            const timeA = a.completedAt?.seconds || 0;
-            const timeB = b.completedAt?.seconds || 0;
-            return timeB - timeA;
-        });
-
-        renderTranscriptionsList(userJobs);
-
     }, (error) => {
-        console.error("[FIRESTORE SYNC ERROR] Failed to fetch midi_jobs:", error);
-        renderEmptyTranscriptions();
+        console.error("Firestore read failure:", error);
+        renderTranscriptionsList(getMockTranscriptions());
     });
 }
 
-function renderEmptyTranscriptions() {
-    if (!transcriptionsList) return;
-    transcriptionsList.innerHTML = `
-        <div class="trans-empty-state">
-            <div class="trans-empty-icon">
-                <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="2" y="3" width="20" height="18" rx="2"/>
-                    <path d="M6 3v11"/><path d="M10 3v11"/><path d="M14 3v11"/><path d="M18 3v11"/><path d="M2 14h20"/>
-                </svg>
-            </div>
-            <h4 class="trans-empty-title">No Transcriptions Found</h4>
-            <p class="trans-empty-desc">You haven't converted any tracks yet. Transcribe a YouTube video or upload audio files to access interactive piano sheet music.</p>
-            <a href="midiano.html" class="trans-empty-btn">
-                Launch Piano Studio
-            </a>
-        </div>
-    `;
+function extractYouTubeTitle(url) {
+    try {
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+        const match = url.match(regExp);
+        if (match && match[2].length === 11) {
+            return `YouTube Stream Audio (${match[2]})`;
+        }
+    } catch (e) {}
+    return "YouTube Track Asset";
 }
 
 function renderTranscriptionsList(list) {
-    if (!transcriptionsList) return;
     transcriptionsList.innerHTML = "";
     const fragment = document.createDocumentFragment();
 
@@ -357,29 +315,18 @@ function renderTranscriptionsList(list) {
         const row = document.createElement("div");
         row.className = "trans-row";
         
-        let artClass = "upload";
-        let artIcon = uploadIconSvg;
-        let badgeLabel = "Audio Upload";
-        let badgeClass = "upload";
-
-        if (track.source === "YOUTUBE") {
-            artClass = "youtube";
-            artIcon = youtubeIconSvg;
-            badgeLabel = "YouTube";
-            badgeClass = "youtube";
-        } else if (track.source === "MIDI") {
-            artClass = "midi";
-            artIcon = midiIconSvg;
-            badgeLabel = "MIDI File";
-            badgeClass = "midi";
-        }
+        const isYT = track.source === "YOUTUBE";
+        const artClass = isYT ? "youtube" : "upload";
+        const artIcon = isYT ? youtubeIconSvg : uploadIconSvg;
+        const badgeLabel = isYT ? "YouTube" : "Upload";
+        const badgeClass = isYT ? "youtube" : "upload";
 
         row.innerHTML = `
             <div class="trans-row__left">
                 <span class="trans-row__index">${indexStr}</span>
                 <div class="trans-row__art-wrap ${artClass}">${artIcon}</div>
                 <div class="trans-row__meta">
-                    <span class="trans-row__title" title="${track.title}">${track.title}</span>
+                    <span class="trans-row__title">${track.title}</span>
                     <span class="trans-row__artist">${track.date || 'T1ERA Studio'}</span>
                 </div>
             </div>
@@ -392,8 +339,7 @@ function renderTranscriptionsList(list) {
         `;
 
         row.addEventListener("click", () => {
-            const actionBtn = row.querySelector(".trans-row__action");
-            openStudioWithTrack(track, actionBtn);
+            openStudioWithMidi(track.midiUrl);
         });
 
         fragment.appendChild(row);
@@ -402,109 +348,20 @@ function renderTranscriptionsList(list) {
     transcriptionsList.appendChild(fragment);
 }
 
-// ==========================================
-// SEAMLESS ARCHITECTURAL MIDI TRANSFER
-// ==========================================
-async function openStudioWithTrack(track, clickedBtn) {
-    if (!track || !track.midiUrl) {
-        alert("MIDI file URL not available for this track.");
-        return;
-    }
+function openStudioWithMidi(midiUrl) {
+    localStorage.setItem("t1era_current_midi", midiUrl);
+    window.location.href = "midiano.html?midi=" + encodeURIComponent(midiUrl);
+}
 
-    if (clickedBtn) {
-        clickedBtn.innerHTML = `Loading...`;
-        clickedBtn.style.opacity = "0.7";
-        clickedBtn.disabled = true;
-    }
-
-    let arrayBuffer = null;
-    let finalUrl = track.midiUrl;
-    let fileRef = null;
-
-    // Build a Storage ref up front (works for both gs:// URIs and Storage download URLs)
-    if (storage) {
-        try {
-            let refPath = finalUrl;
-            if (refPath.startsWith("gs://")) {
-                refPath = refPath.replace(/^gs:\/\/[^\/]+\//, "");
-            }
-            fileRef = sRef(storage, refPath);
-        } catch (refErr) {
-            console.warn("[T1ERA BRIDGE] Could not create Storage ref:", refErr.message);
-            fileRef = null;
-        }
-    }
-
-    // STEP 1: If Storage is available, acquire binary ArrayBuffer directly with auth SDK
-    if (fileRef) {
-        try {
-            arrayBuffer = await getBytes(fileRef);
-            console.log("[T1ERA BRIDGE] Acquired MIDI bytes via Storage SDK:", arrayBuffer.byteLength, "bytes");
-        } catch (storageErr) {
-            console.warn("[T1ERA BRIDGE] Storage getBytes bypassed or failed:", storageErr.message);
-        }
-    }
-
-    // STEP 1b: A raw gs:// URI is not fetchable over HTTP. If that's what we started with,
-    // resolve it to a real https download URL so midiano.html always gets a usable link,
-    // even when the byte-bridge above fails or is unavailable.
-    if (finalUrl.startsWith("gs://") && fileRef) {
-        try {
-            finalUrl = await getDownloadURL(fileRef);
-        } catch (urlErr) {
-            console.warn("[T1ERA BRIDGE] Could not resolve gs:// to a download URL:", urlErr.message);
-        }
-    }
-
-    // STEP 2: Fallback to direct HTTP fetch if getBytes was not applicable
-    if (!arrayBuffer && (finalUrl.startsWith("http://") || finalUrl.startsWith("https://") || finalUrl.startsWith("blob:"))) {
-        try {
-            const res = await fetch(finalUrl);
-            if (res.ok) {
-                arrayBuffer = await res.arrayBuffer();
-                console.log("[T1ERA BRIDGE] Acquired MIDI bytes via fetch:", arrayBuffer.byteLength, "bytes");
-            }
-        } catch (fetchErr) {
-            console.warn("[T1ERA BRIDGE] Direct fetch failed (likely CORS on storage):", fetchErr.message);
-        }
-    }
-
-    // STEP 3: Write the ArrayBuffer into IndexedDB Bridge
-    if (arrayBuffer && arrayBuffer.byteLength > 0) {
-        try {
-            await saveMidiToBridge(arrayBuffer, track.title);
-            console.log("[T1ERA BRIDGE] MIDI written to IndexedDB. Studio will load with 0 network latency.");
-        } catch (idbErr) {
-            console.warn("[T1ERA BRIDGE] IndexedDB bridge save failed:", idbErr);
-        }
-    } else if (finalUrl.startsWith("gs://")) {
-        // Neither the byte-bridge nor a download URL resolution worked - a gs:// URI
-        // cannot be handed to midiano.html as-is, so stop here instead of redirecting to a dead link.
-        console.error("[T1ERA BRIDGE] Unable to resolve a usable MIDI source for this track.");
-        if (clickedBtn) {
-            clickedBtn.innerHTML = `${studioIconSvg} Open Studio`;
-            clickedBtn.style.opacity = "1";
-            clickedBtn.disabled = false;
-        }
-        alert("This track's MIDI file couldn't be loaded. Please try again.");
-        return;
-    }
-
-    // STEP 4: Store metadata fallbacks
-    localStorage.setItem("t1era_current_midi", finalUrl);
-    localStorage.setItem("t1era_current_title", track.title);
-
-    const queryParams = new URLSearchParams({
-        source: arrayBuffer ? "bridge" : "url",
-        midi: finalUrl,
-        title: track.title
-    });
-
-    window.location.href = "midiano.html?" + queryParams.toString();
+function getMockTranscriptions() {
+    return [
+        { id: "mock_1", title: "Scorpions - Still Loving You (Piano Arr.)", source: "YOUTUBE", midiUrl: "https://example.com/demo1.mid", date: "2026-08-30" },
+        { id: "mock_2", title: "Custom Golden Days Session.wav", source: "UPLOAD", midiUrl: "https://example.com/demo2.mid", date: "2026-08-28" }
+    ];
 }
 
 // =======================================================
-// DEEZER MUSIC API VIA JSONP
+// DEEZER MUSIC API VIA JSONP (KEYLESS COR BYPASS)
 // =======================================================
 function makeDeezerJSONPRequest(endpoint, params) {
     return new Promise((resolve, reject) => {
@@ -547,9 +404,10 @@ function makeDeezerJSONPRequest(endpoint, params) {
     });
 }
 
+// ==========================================
+// CORE DATA FETCH CONTROL
+// ==========================================
 async function fetchDeezerTracks(params = {}) {
-    if (!popularGrid) return;
-
     popularGrid.innerHTML = `
         <div style="grid-column: 1 / -1; text-align: center; color: rgba(255,255,255,0.4); padding: 40px 0; font-size: 11.5px; font-weight: 500;">
             Retrieving songs from Deezer...
@@ -577,7 +435,7 @@ async function fetchDeezerTracks(params = {}) {
             `;
         }
     } catch (error) {
-        console.warn("[HYBRID DATA RESOLVER] Routing locally:", error.message);
+        console.warn("[HYBRID DATA RESOLVER] Routing locally. Reason:", error.message);
         
         if (params.q) {
             const searchFiltered = searchLocalMockTracks(params.q);
@@ -613,8 +471,10 @@ function formatDuration(seconds) {
     return `${mins}:${secs}`;
 }
 
+// ==========================================
+// POPULAR SONGS RENDERING
+// ==========================================
 function renderPopularTracks(tracks) {
-    if (!popularGrid) return;
     popularGrid.innerHTML = "";
     const fragment = document.createDocumentFragment();
 
@@ -648,11 +508,14 @@ function renderPopularTracks(tracks) {
     popularGrid.appendChild(fragment);
 }
 
+// ==========================================
+// STREAMS PLAYER
+// ==========================================
 function selectAndPlayTrack(track) {
     activeTrack = track;
-    if (playerAlbumArt) playerAlbumArt.src = track.art;
-    if (playerTrackTitle) playerTrackTitle.textContent = track.title;
-    if (playerTrackArtist) playerTrackArtist.textContent = track.artist;
+    playerAlbumArt.src = track.art;
+    playerTrackTitle.textContent = track.title;
+    playerTrackArtist.textContent = track.artist;
     
     audioPlayer.pause();
     if (tickerInterval) {
@@ -667,49 +530,47 @@ function selectAndPlayTrack(track) {
         audioPlayer.play()
             .then(() => {
                 isPlaying = true;
-                if (playPauseIcon) playPauseIcon.innerHTML = pauseIconSvg;
-                if (playPauseBtn) playPauseBtn.style.transform = "scale(1.05)";
+                playPauseIcon.innerHTML = pauseIconSvg;
+                playPauseBtn.style.transform = "scale(1.05)";
             })
             .catch(err => {
                 console.warn("[PLAYBACK INTERRUPTED] Playback halted:", err);
             });
     } else {
         isRealPlayback = false;
-        if (trackLength) trackLength.textContent = track.duration;
+        trackLength.textContent = track.duration;
         currentSeconds = 0;
-        if (currentTime) currentTime.textContent = "0:00";
-        if (timelineFill) timelineFill.style.width = "0%";
-        if (timelineThumb) timelineThumb.style.left = "0%";
+        currentTime.textContent = "0:00";
+        timelineFill.style.width = "0%";
+        timelineThumb.style.left = "0%";
         startPlaybackState();
     }
 }
 
-if (playPauseBtn) {
-    playPauseBtn.addEventListener("click", () => {
-        if (isRealPlayback) {
-            if (isPlaying) {
-                audioPlayer.pause();
-                isPlaying = false;
-                playPauseIcon.innerHTML = playIconSvg;
-                playPauseBtn.style.transform = "";
-            } else {
-                audioPlayer.play()
-                    .then(() => {
-                        isPlaying = true;
-                        playPauseIcon.innerHTML = pauseIconSvg;
-                        playPauseBtn.style.transform = "scale(1.05)";
-                    })
-                    .catch(err => console.warn("Failed play track preview:", err));
-            }
+playPauseBtn.addEventListener("click", () => {
+    if (isRealPlayback) {
+        if (isPlaying) {
+            audioPlayer.pause();
+            isPlaying = false;
+            playPauseIcon.innerHTML = playIconSvg;
+            playPauseBtn.style.transform = "";
         } else {
-            if (isPlaying) {
-                pausePlaybackState();
-            } else {
-                startPlaybackState();
-            }
+            audioPlayer.play()
+                .then(() => {
+                    isPlaying = true;
+                    playPauseIcon.innerHTML = pauseIconSvg;
+                    playPauseBtn.style.transform = "scale(1.05)";
+                })
+                .catch(err => console.warn("Failed play track preview:", err));
         }
-    });
-}
+    } else {
+        if (isPlaying) {
+            pausePlaybackState();
+        } else {
+            startPlaybackState();
+        }
+    }
+});
 
 if (prevBtn) {
     prevBtn.addEventListener("click", () => {
@@ -731,8 +592,8 @@ if (nextBtn) {
 
 function startPlaybackState() {
     isPlaying = true;
-    if (playPauseIcon) playPauseIcon.innerHTML = pauseIconSvg;
-    if (playPauseBtn) playPauseBtn.style.transform = "scale(1.05)";
+    playPauseIcon.innerHTML = pauseIconSvg;
+    playPauseBtn.style.transform = "scale(1.05)";
     
     if (tickerInterval) clearInterval(tickerInterval);
     tickerInterval = setInterval(updatePlayerTick, 1000);
@@ -740,8 +601,8 @@ function startPlaybackState() {
 
 function pausePlaybackState() {
     isPlaying = false;
-    if (playPauseIcon) playPauseIcon.innerHTML = playIconSvg;
-    if (playPauseBtn) playPauseBtn.style.transform = "";
+    playPauseIcon.innerHTML = playIconSvg;
+    playPauseBtn.style.transform = "";
     if (tickerInterval) clearInterval(tickerInterval);
 }
 
@@ -758,27 +619,30 @@ function updatePlayerTick() {
 
     const minutes = Math.floor(currentSeconds / 60);
     const seconds = (currentSeconds % 60).toString().padStart(2, "0");
-    if (currentTime) currentTime.textContent = `${minutes}:${seconds}`;
+    currentTime.textContent = `${minutes}:${seconds}`;
 
     const percentage = (currentSeconds / totalDurationSeconds) * 100;
-    if (timelineFill) timelineFill.style.width = `${percentage}%`;
-    if (timelineThumb) timelineThumb.style.left = `${percentage}%`;
+    timelineFill.style.width = `${percentage}%`;
+    timelineThumb.style.left = `${percentage}%`;
 }
 
+// ==========================================
+// AUDIO PROGRESS TRACKERS
+// ==========================================
 audioPlayer.addEventListener("timeupdate", () => {
     if (!isRealPlayback) return;
     const current = audioPlayer.currentTime;
     const duration = audioPlayer.duration || activeTrack.duration_seconds || 1;
     
-    if (currentTime) currentTime.textContent = formatDuration(current);
+    currentTime.textContent = formatDuration(current);
     const percentage = (current / duration) * 100;
-    if (timelineFill) timelineFill.style.width = `${percentage}%`;
-    if (timelineThumb) timelineThumb.style.left = `${percentage}%`;
+    timelineFill.style.width = `${percentage}%`;
+    timelineThumb.style.left = `${percentage}%`;
 });
 
 audioPlayer.addEventListener("loadedmetadata", () => {
     if (!isRealPlayback) return;
-    if (trackLength) trackLength.textContent = formatDuration(audioPlayer.duration);
+    trackLength.textContent = formatDuration(audioPlayer.duration);
 });
 
 audioPlayer.addEventListener("ended", () => {
@@ -788,57 +652,54 @@ audioPlayer.addEventListener("ended", () => {
         selectAndPlayTrack(currentTrackList[currentTrackIndex]);
     } else {
         isPlaying = false;
-        if (playPauseIcon) playPauseIcon.innerHTML = playIconSvg;
-        if (playPauseBtn) playPauseBtn.style.transform = "";
+        playPauseIcon.innerHTML = playIconSvg;
+        playPauseBtn.style.transform = "";
     }
 });
 
-if (timelineTrack) {
-    timelineTrack.addEventListener("click", (e) => {
-        const rect = timelineTrack.getBoundingClientRect();
-        const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+timelineTrack.addEventListener("click", (e) => {
+    const rect = timelineTrack.getBoundingClientRect();
+    const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+    
+    if (isRealPlayback && audioPlayer.duration) {
+        audioPlayer.currentTime = percent * audioPlayer.duration;
+    } else if (!isRealPlayback) {
+        const lengthParts = activeTrack.duration.split(":");
+        const totalDurationSeconds = parseInt(lengthParts[0]) * 60 + parseInt(lengthParts[1]);
+        currentSeconds = Math.floor(percent * totalDurationSeconds);
         
-        if (isRealPlayback && audioPlayer.duration) {
-            audioPlayer.currentTime = percent * audioPlayer.duration;
-        } else if (!isRealPlayback) {
-            const lengthParts = activeTrack.duration.split(":");
-            const totalDurationSeconds = parseInt(lengthParts[0]) * 60 + parseInt(lengthParts[1]);
-            currentSeconds = Math.floor(percent * totalDurationSeconds);
-            
-            const minutes = Math.floor(currentSeconds / 60);
-            const seconds = (currentSeconds % 60).toString().padStart(2, "0");
-            if (currentTime) currentTime.textContent = `${minutes}:${seconds}`;
-            if (timelineFill) timelineFill.style.width = `${percent * 100}%`;
-            if (timelineThumb) timelineThumb.style.left = `${percent * 100}%`;
-        }
-    });
-}
+        const minutes = Math.floor(currentSeconds / 60);
+        const seconds = (currentSeconds % 60).toString().padStart(2, "0");
+        currentTime.textContent = `${minutes}:${seconds}`;
+        timelineFill.style.width = `${percent * 100}%`;
+        timelineThumb.style.left = `${percent * 100}%`;
+    }
+});
 
-if (volumeTrack) {
-    volumeTrack.addEventListener("click", (e) => {
-        const rect = volumeTrack.getBoundingClientRect();
-        const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
-        currentVolume = percent;
-        if (volumeFill) volumeFill.style.width = `${percent * 100}%`;
-        if (volumeThumb) volumeThumb.style.left = `${percent * 100}%`;
+volumeTrack.addEventListener("click", (e) => {
+    const rect = volumeTrack.getBoundingClientRect();
+    const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+    currentVolume = percent;
+    volumeFill.style.width = `${percent * 100}%`;
+    volumeThumb.style.left = `${percent * 100}%`;
+    
+    audioPlayer.volume = percent;
+});
+
+// ==========================================
+// FILTERS & GENRE MAPPING
+// ==========================================
+categoriesRow.addEventListener("click", (e) => {
+    if (e.target.classList.contains("capsule")) {
+        document.querySelectorAll(".capsule").forEach(c => c.classList.remove("active"));
+        e.target.classList.add("active");
         
-        audioPlayer.volume = percent;
-    });
-}
-
-if (categoriesRow) {
-    categoriesRow.addEventListener("click", (e) => {
-        if (e.target.classList.contains("capsule")) {
-            document.querySelectorAll(".capsule").forEach(c => c.classList.remove("active"));
-            e.target.classList.add("active");
-            
-            if (searchInput) searchInput.value = "";
-            
-            const genre = e.target.dataset.genre;
-            fetchDeezerTracksByGenre(genre);
-        }
-    });
-}
+        if (searchInput) searchInput.value = "";
+        
+        const genre = e.target.dataset.genre;
+        fetchDeezerTracksByGenre(genre);
+    }
+});
 
 let searchTimeout = null;
 if (searchInput) {
@@ -858,6 +719,9 @@ if (searchInput) {
     });
 }
 
+// ==========================================
+// DISCLAIMER MODAL STATE CONTROL
+// ==========================================
 const disclaimerModal = document.getElementById("disclaimer-modal");
 const closeDisclaimerBtn = document.getElementById("close-disclaimer-btn");
 const acknowledgeDisclaimerBtn = document.getElementById("acknowledge-disclaimer-btn");
@@ -873,33 +737,40 @@ if (disclaimerModal) {
         localStorage.setItem("t1era_disclaimer_acknowledged", "true");
     };
 
-    if (closeDisclaimerBtn) closeDisclaimerBtn.addEventListener("click", closePopup);
-    if (acknowledgeDisclaimerBtn) acknowledgeDisclaimerBtn.addEventListener("click", closePopup);
+    if (closeDisclaimerBtn) {
+        closeDisclaimerBtn.addEventListener("click", closePopup);
+    }
+    if (acknowledgeDisclaimerBtn) {
+        acknowledgeDisclaimerBtn.addEventListener("click", closePopup);
+    }
 }
 
-const logoutBtn = document.getElementById("dashboard-logout-btn");
-if (logoutBtn) {
-    logoutBtn.addEventListener("click", () => {
-        if (confirm("Disconnect session?")) {
-            audioPlayer.pause();
-            if (snapshotUnsubscribe) snapshotUnsubscribe();
-
-            if (auth) {
-              signOut(auth)
-                .then(() => {
-                    localStorage.removeItem("t1era_logged_in");
-                    window.location.href = "index.html";
-                })
-                .catch((err) => {
-                    console.error("Logout failed:", err);
-                    alert("Session disconnect failed. Try again.");
-                });
-            } else {
-              localStorage.removeItem("t1era_logged_in");
-              window.location.href = "index.html";
-            }
+// ==========================================
+// LOGOUT PROCESS
+// ==========================================
+document.getElementById("dashboard-logout-btn").addEventListener("click", () => {
+    if (confirm("Disconnect session?")) {
+        audioPlayer.pause();
+        if (snapshotUnsubscribe) {
+            snapshotUnsubscribe();
         }
-    });
-}
 
+        if (auth) {
+          signOut(auth)
+            .then(() => {
+                localStorage.removeItem("t1era_logged_in");
+                window.location.href = "index.html";
+            })
+            .catch((err) => {
+                console.error("Logout failed:", err);
+                alert("Session disconnect failed. Try again.");
+            });
+        } else {
+          localStorage.removeItem("t1era_logged_in");
+          window.location.href = "index.html";
+        }
+    }
+});
+
+// Boot logic
 fetchDeezerTracksByGenre("all");
