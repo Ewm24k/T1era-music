@@ -1,17 +1,9 @@
-import { auth, db, storage } from "./firebase-config.js";
+import { auth, db } from "./firebase-config.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { 
     collection, 
-    query, 
-    where, 
-    onSnapshot,
-    doc,
-    deleteDoc
+    onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-import { 
-    ref as sRef, 
-    getMetadata 
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 // ==========================================
 // CONFIGURATION & GLOBAL CONSTANTS
@@ -21,10 +13,10 @@ const pauseIconSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="curr
 
 const youtubeIconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="#ff4d4d" style="display:block;"><path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.517 3.545 12 3.545 12 3.545s-7.517 0-9.388.508a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.871.508 9.388.508 9.388.508s7.517 0 9.388-.508a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>`;
 const uploadIconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#00df89" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>`;
-const studioIconSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:2px;"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M6 3v11"/><path d="M10 3v11"/><path d="M14 3v11"/><path d="M18 3v11"/><path d="M2 14h20"/></svg>`;
+const midiIconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#e9af51" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>`;
+const studioIconSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M6 3v11"/><path d="M10 3v11"/><path d="M14 3v11"/><path d="M18 3v11"/><path d="M2 14h20"/></svg>`;
 
 const resolvedTitleCache = new Map();
-const validatedMidiCache = new Set();
 
 const popularTracksDataMockFallback = [
     { id: 1, title: "Golden Days", artist: "Felix Carter", duration: "3:12", art: "https://picsum.photos/id/65/300/300" },
@@ -95,13 +87,13 @@ function syncActiveNav(tabId) {
     if (tabId === "home") {
         if (navHome) navHome.classList.add("active");
         if (mobileNavHome) mobileNavHome.classList.add("active");
-        homeView.style.display = "block";
-        transcriptionsView.style.display = "none";
+        if (homeView) homeView.style.display = "block";
+        if (transcriptionsView) transcriptionsView.style.display = "none";
     } else if (tabId === "transcriptions") {
         if (navTranscriptions) navTranscriptions.classList.add("active");
         if (mobileNavTranscriptions) mobileNavTranscriptions.classList.add("active");
-        homeView.style.display = "none";
-        transcriptionsView.style.display = "block";
+        if (homeView) homeView.style.display = "none";
+        if (transcriptionsView) transcriptionsView.style.display = "block";
         loadUserTranscriptions();
     }
 }
@@ -136,16 +128,18 @@ if (mobileNavTranscriptions) {
 // AUTHENTICATION SECURE STATE CONTROL
 // ==========================================
 let currentUser = null;
+let isAuthReady = false;
 
 if (auth) {
   onAuthStateChanged(auth, (user) => {
+    isAuthReady = true;
     if (user) {
       currentUser = user;
       const profileName = document.getElementById("profile-name");
       const profileAvatar = document.getElementById("profile-avatar");
       
       if (profileName) {
-        profileName.textContent = user.displayName || "Studio Creator";
+        profileName.textContent = user.displayName || user.email?.split("@")[0] || "Studio Creator";
       }
       
       if (profileAvatar) {
@@ -159,10 +153,105 @@ if (auth) {
           profileAvatar.style.color = "rgba(255,255,255,0.7)";
         }
       }
+
+      // If user is already on the transcriptions tab upon auth resolution, sync list
+      if (transcriptionsView && transcriptionsView.style.display !== "none") {
+          loadUserTranscriptions();
+      }
     } else {
       window.location.href = "index.html";
     }
   });
+}
+
+// ==========================================
+// TITLE RESOLUTION & SANITIZATION ENGINE
+// ==========================================
+function isValidTitle(val) {
+    if (!val || typeof val !== "string") return false;
+    const clean = val.trim().toLowerCase();
+    if (!clean) return false;
+    if (clean === "local uploaded track" || clean === "uploaded track" || clean === "audio" || clean === "untitled") return false;
+    if (clean.startsWith("youtube stream audio") || clean === "youtube track asset") return false;
+    return true;
+}
+
+function cleanTitleFormat(name) {
+    if (!name) return "";
+    let clean = name.trim();
+    clean = clean.replace(/\.(mid|midi|mp3|wav|m4a|ogg|aac|flac|json)$/i, "");
+    clean = clean.replace(/[-_]+/g, " ");
+    clean = clean.replace(/\s+/g, " ").trim();
+    // Capitalize words appropriately
+    return clean.split(" ")
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+}
+
+function extractFilenameFromUrl(url) {
+    if (!url) return "";
+    try {
+        const decoded = decodeURIComponent(url);
+        const withoutQuery = decoded.split("?")[0];
+        const segments = withoutQuery.split("/").filter(Boolean);
+        if (segments.length === 0) return "";
+        
+        let file = segments[segments.length - 1];
+        if (file.toLowerCase() === "final_score.mid" || file.toLowerCase() === "score.mid" || file.toLowerCase() === "output.mid") {
+            if (segments.length >= 2) {
+                const folderName = segments[segments.length - 2];
+                if (folderName && !["midi_jobs", "midi", "uploads", "transcriptions"].includes(folderName.toLowerCase())) {
+                    return folderName;
+                }
+            }
+        }
+        return file;
+    } catch (e) {
+        return "";
+    }
+}
+
+function extractYouTubeVideoId(url) {
+    if (!url) return null;
+    try {
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|[?&]v=)([^#&?]*).*/;
+        const match = url.match(regExp);
+        if (match && match[2].length === 11) {
+            return match[2];
+        }
+    } catch (e) {}
+    return null;
+}
+
+function resolveJobTitle(data, docId) {
+    // 1. Check direct metadata titles
+    if (isValidTitle(data.title)) return cleanTitleFormat(data.title);
+    if (isValidTitle(data.songTitle)) return cleanTitleFormat(data.songTitle);
+    if (isValidTitle(data.trackTitle)) return cleanTitleFormat(data.trackTitle);
+    if (isValidTitle(data.trackName)) return cleanTitleFormat(data.trackName);
+    
+    // 2. Check original filename fields
+    const directFile = data.fileName || data.originalFileName || data.filename || data.name || data.audioFileName;
+    if (isValidTitle(directFile)) return cleanTitleFormat(directFile);
+
+    // 3. Check YouTube titles
+    if (isValidTitle(data.youtubeTitle)) return cleanTitleFormat(data.youtubeTitle);
+    if (isValidTitle(data.videoTitle)) return cleanTitleFormat(data.videoTitle);
+
+    // 4. Extract from midiUrl, originalMidiUrl, or audioUrl
+    const urlCandidate = data.midiUrl || data.originalMidiUrl || data.audioUrl || data.sourceUrl;
+    if (urlCandidate) {
+        const parsedFile = extractFilenameFromUrl(urlCandidate);
+        if (isValidTitle(parsedFile)) return cleanTitleFormat(parsedFile);
+    }
+
+    // 5. YouTube video ID representation
+    if (data.youtubeUrl) {
+        const ytId = extractYouTubeVideoId(data.youtubeUrl);
+        if (ytId) return `YouTube Video (${ytId})`;
+    }
+
+    return `Transcription Track #${docId ? docId.substring(0, 6) : "Studio"}`;
 }
 
 // ==========================================
@@ -171,142 +260,102 @@ if (auth) {
 let snapshotUnsubscribe = null;
 
 function loadUserTranscriptions() {
-    if (!currentUser || !db) {
-        renderTranscriptionsList(getMockTranscriptions());
+    if (!transcriptionsList) return;
+
+    if (!isAuthReady) {
+        transcriptionsList.innerHTML = `<div style="text-align:center; color:rgba(255,255,255,0.4); font-size:0.85rem; padding:40px 0;">Authenticating user session...</div>`;
         return;
     }
 
-    if (!transcriptionsList.children.length) {
-        transcriptionsList.innerHTML = `<div style="text-align:center; color:rgba(255,255,255,0.4); font-size:0.85rem; padding:40px 0;">Loading transcriptions database...</div>`;
+    if (!currentUser || !db) {
+        renderEmptyTranscriptions();
+        return;
     }
+
+    transcriptionsList.innerHTML = `<div style="text-align:center; color:rgba(255,255,255,0.4); font-size:0.85rem; padding:40px 0;">Loading your transcriptions...</div>`;
 
     if (snapshotUnsubscribe) {
         snapshotUnsubscribe();
     }
 
     const jobsRef = collection(db, "users", currentUser.uid, "midi_jobs");
-    const q = query(jobsRef, where("status", "==", "COMPLETED"));
 
-    snapshotUnsubscribe = onSnapshot(q, async (snapshot) => {
-        const rawJobs = [];
-        snapshot.forEach((doc) => {
-            const data = doc.data();
-            const fallbackTitle = data.youtubeUrl ? extractYouTubeTitle(data.youtubeUrl) : "Local Uploaded Track";
+    snapshotUnsubscribe = onSnapshot(jobsRef, async (snapshot) => {
+        const userJobs = [];
+
+        snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
             
-            rawJobs.push({
-                id: doc.id,
-                title: data.title || fallbackTitle, 
-                fallbackTitle: fallbackTitle,
-                source: data.youtubeUrl ? "YOUTUBE" : "UPLOAD",
-                midiUrl: data.midiUrl, 
-                originalMidiUrl: data.originalMidiUrl || null, 
-                completedAt: data.completedAt || null,
-                date: data.completedAt ? new Date(data.completedAt.seconds * 1000).toLocaleDateString() : "Just Now"
-            });
+            // Accept any completed status, case-insensitive, or any entry having a valid MIDI download URL
+            const rawStatus = (data.status || "").toString().toUpperCase();
+            const isCompleted = !data.status || ["COMPLETED", "READY", "DONE", "SUCCESS", "FINISHED"].includes(rawStatus);
+            const midiUrl = data.midiUrl || data.midi_url || data.downloadUrl || data.url || data.originalMidiUrl;
+
+            if (isCompleted && midiUrl) {
+                const resolvedTitle = resolveJobTitle(data, docSnap.id);
+                
+                let source = "UPLOAD";
+                if (data.youtubeUrl || data.source === "YOUTUBE") {
+                    source = "YOUTUBE";
+                } else if (resolvedTitle.endsWith(".mid") || (data.mimeType && data.mimeType.includes("midi"))) {
+                    source = "MIDI";
+                }
+
+                userJobs.push({
+                    id: docSnap.id,
+                    title: resolvedTitle,
+                    source: source,
+                    midiUrl: midiUrl,
+                    originalMidiUrl: data.originalMidiUrl || null,
+                    completedAt: data.completedAt || data.createdAt || null,
+                    date: data.completedAt 
+                        ? new Date(data.completedAt.seconds * 1000).toLocaleDateString() 
+                        : (data.createdAt ? new Date(data.createdAt.seconds * 1000).toLocaleDateString() : "Ready")
+                });
+            }
         });
 
-        const resolveTitlesPromises = rawJobs.map(async (job) => {
-            if (resolvedTitleCache.has(job.id)) {
-                job.title = resolvedTitleCache.get(job.id);
-                return job;
-            }
-
-            const isGeneric = !job.title || 
-                              job.title === "Local Uploaded Track" || 
-                              job.title.startsWith("YouTube Stream Audio");
-            
-            if (isGeneric && job.midiUrl) {
-                try {
-                    const detailsUrl = job.midiUrl.replace("final_score.mid", "details.json");
-                    const response = await fetch(detailsUrl);
-                    if (response.ok) {
-                        const jsonDetails = await response.json();
-                        if (jsonDetails && jsonDetails.title) {
-                            job.title = jsonDetails.title;
-                            resolvedTitleCache.set(job.id, jsonDetails.title);
-                            return job;
-                        }
-                    }
-                } catch (e) {
-                    console.warn(`[STORAGE TITLE RESOLVE WARNING] Failed details fetch for ${job.id}:`, e);
-                }
-            }
-
-            resolvedTitleCache.set(job.id, job.title);
-            return job;
-        });
-
-        const resolvedJobs = await Promise.all(resolveTitlesPromises);
-
-        if (storage && resolvedJobs.length > 0) {
-            const validationPromises = resolvedJobs.map(async (job) => {
-                if (!job.midiUrl) return null;
-                
-                if (validatedMidiCache.has(job.midiUrl)) {
-                    return job;
-                }
-                
-                try {
-                    const fileRef = sRef(storage, job.midiUrl);
-                    await getMetadata(fileRef);
-                    validatedMidiCache.add(job.midiUrl);
-                    return job; 
-                } catch (error) {
-                    if (error.code === 'storage/object-not-found' || error.message.includes('not found')) {
-                        console.warn(`[DATA SELF-HEAL] Purging metadata missing remote storage job: ${job.id}`);
-                        try {
-                            await deleteDoc(doc(db, "users", currentUser.uid, "midi_jobs", job.id));
-                        } catch (fs_err) {
-                            console.error("[DATA SELF-HEAL ERROR] Cleanup failed:", fs_err);
-                        }
-                    }
-                    return null; 
-                }
-            });
-
-            const results = await Promise.all(validationPromises);
-            const validatedJobs = results.filter(job => job !== null);
-
-            if (validatedJobs.length === 0) {
-                renderTranscriptionsList(getMockTranscriptions());
-            } else {
-                validatedJobs.sort((a, b) => {
-                    const timeA = a.completedAt ? a.completedAt.seconds : 0;
-                    const timeB = b.completedAt ? b.completedAt.seconds : 0;
-                    return timeB - timeA; 
-                });
-                renderTranscriptionsList(validatedJobs);
-            }
-        } else {
-            if (resolvedJobs.length === 0) {
-                renderTranscriptionsList(getMockTranscriptions());
-            } else {
-                resolvedJobs.sort((a, b) => {
-                    const timeA = a.completedAt ? a.completedAt.seconds : 0;
-                    const timeB = b.completedAt ? b.completedAt.seconds : 0;
-                    return timeB - timeA;
-                });
-                renderTranscriptionsList(resolvedJobs);
-            }
+        if (userJobs.length === 0) {
+            renderEmptyTranscriptions();
+            return;
         }
+
+        // Sort descending by completion/creation date
+        userJobs.sort((a, b) => {
+            const timeA = a.completedAt?.seconds || 0;
+            const timeB = b.completedAt?.seconds || 0;
+            return timeB - timeA;
+        });
+
+        renderTranscriptionsList(userJobs);
+
     }, (error) => {
-        console.error("Firestore read failure:", error);
-        renderTranscriptionsList(getMockTranscriptions());
+        console.error("[FIRESTORE SYNC ERROR] Failed to fetch midi_jobs:", error);
+        renderEmptyTranscriptions();
     });
 }
 
-function extractYouTubeTitle(url) {
-    try {
-        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-        const match = url.match(regExp);
-        if (match && match[2].length === 11) {
-            return `YouTube Stream Audio (${match[2]})`;
-        }
-    } catch (e) {}
-    return "YouTube Track Asset";
+function renderEmptyTranscriptions() {
+    if (!transcriptionsList) return;
+    transcriptionsList.innerHTML = `
+        <div class="trans-empty-state">
+            <div class="trans-empty-icon">
+                <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="3" width="20" height="18" rx="2"/>
+                    <path d="M6 3v11"/><path d="M10 3v11"/><path d="M14 3v11"/><path d="M18 3v11"/><path d="M2 14h20"/>
+                </svg>
+            </div>
+            <h4 class="trans-empty-title">No Transcriptions Found</h4>
+            <p class="trans-empty-desc">You haven't converted any tracks yet. Transcribe a YouTube video or upload audio files to access interactive piano sheet music.</p>
+            <a href="midiano.html" class="trans-empty-btn">
+                Launch Piano Studio
+            </a>
+        </div>
+    `;
 }
 
 function renderTranscriptionsList(list) {
+    if (!transcriptionsList) return;
     transcriptionsList.innerHTML = "";
     const fragment = document.createDocumentFragment();
 
@@ -315,18 +364,29 @@ function renderTranscriptionsList(list) {
         const row = document.createElement("div");
         row.className = "trans-row";
         
-        const isYT = track.source === "YOUTUBE";
-        const artClass = isYT ? "youtube" : "upload";
-        const artIcon = isYT ? youtubeIconSvg : uploadIconSvg;
-        const badgeLabel = isYT ? "YouTube" : "Upload";
-        const badgeClass = isYT ? "youtube" : "upload";
+        let artClass = "upload";
+        let artIcon = uploadIconSvg;
+        let badgeLabel = "Audio Upload";
+        let badgeClass = "upload";
+
+        if (track.source === "YOUTUBE") {
+            artClass = "youtube";
+            artIcon = youtubeIconSvg;
+            badgeLabel = "YouTube";
+            badgeClass = "youtube";
+        } else if (track.source === "MIDI") {
+            artClass = "midi";
+            artIcon = midiIconSvg;
+            badgeLabel = "MIDI File";
+            badgeClass = "midi";
+        }
 
         row.innerHTML = `
             <div class="trans-row__left">
                 <span class="trans-row__index">${indexStr}</span>
                 <div class="trans-row__art-wrap ${artClass}">${artIcon}</div>
                 <div class="trans-row__meta">
-                    <span class="trans-row__title">${track.title}</span>
+                    <span class="trans-row__title" title="${track.title}">${track.title}</span>
                     <span class="trans-row__artist">${track.date || 'T1ERA Studio'}</span>
                 </div>
             </div>
@@ -349,19 +409,13 @@ function renderTranscriptionsList(list) {
 }
 
 function openStudioWithMidi(midiUrl) {
+    if (!midiUrl) return;
     localStorage.setItem("t1era_current_midi", midiUrl);
     window.location.href = "midiano.html?midi=" + encodeURIComponent(midiUrl);
 }
 
-function getMockTranscriptions() {
-    return [
-        { id: "mock_1", title: "Scorpions - Still Loving You (Piano Arr.)", source: "YOUTUBE", midiUrl: "https://example.com/demo1.mid", date: "2026-08-30" },
-        { id: "mock_2", title: "Custom Golden Days Session.wav", source: "UPLOAD", midiUrl: "https://example.com/demo2.mid", date: "2026-08-28" }
-    ];
-}
-
 // =======================================================
-// DEEZER MUSIC API VIA JSONP (KEYLESS COR BYPASS)
+// DEEZER MUSIC API VIA JSONP (KEYLESS CORS BYPASS)
 // =======================================================
 function makeDeezerJSONPRequest(endpoint, params) {
     return new Promise((resolve, reject) => {
@@ -408,6 +462,8 @@ function makeDeezerJSONPRequest(endpoint, params) {
 // CORE DATA FETCH CONTROL
 // ==========================================
 async function fetchDeezerTracks(params = {}) {
+    if (!popularGrid) return;
+
     popularGrid.innerHTML = `
         <div style="grid-column: 1 / -1; text-align: center; color: rgba(255,255,255,0.4); padding: 40px 0; font-size: 11.5px; font-weight: 500;">
             Retrieving songs from Deezer...
@@ -475,6 +531,7 @@ function formatDuration(seconds) {
 // POPULAR SONGS RENDERING
 // ==========================================
 function renderPopularTracks(tracks) {
+    if (!popularGrid) return;
     popularGrid.innerHTML = "";
     const fragment = document.createDocumentFragment();
 
@@ -513,9 +570,9 @@ function renderPopularTracks(tracks) {
 // ==========================================
 function selectAndPlayTrack(track) {
     activeTrack = track;
-    playerAlbumArt.src = track.art;
-    playerTrackTitle.textContent = track.title;
-    playerTrackArtist.textContent = track.artist;
+    if (playerAlbumArt) playerAlbumArt.src = track.art;
+    if (playerTrackTitle) playerTrackTitle.textContent = track.title;
+    if (playerTrackArtist) playerTrackArtist.textContent = track.artist;
     
     audioPlayer.pause();
     if (tickerInterval) {
@@ -530,47 +587,49 @@ function selectAndPlayTrack(track) {
         audioPlayer.play()
             .then(() => {
                 isPlaying = true;
-                playPauseIcon.innerHTML = pauseIconSvg;
-                playPauseBtn.style.transform = "scale(1.05)";
+                if (playPauseIcon) playPauseIcon.innerHTML = pauseIconSvg;
+                if (playPauseBtn) playPauseBtn.style.transform = "scale(1.05)";
             })
             .catch(err => {
                 console.warn("[PLAYBACK INTERRUPTED] Playback halted:", err);
             });
     } else {
         isRealPlayback = false;
-        trackLength.textContent = track.duration;
+        if (trackLength) trackLength.textContent = track.duration;
         currentSeconds = 0;
-        currentTime.textContent = "0:00";
-        timelineFill.style.width = "0%";
-        timelineThumb.style.left = "0%";
+        if (currentTime) currentTime.textContent = "0:00";
+        if (timelineFill) timelineFill.style.width = "0%";
+        if (timelineThumb) timelineThumb.style.left = "0%";
         startPlaybackState();
     }
 }
 
-playPauseBtn.addEventListener("click", () => {
-    if (isRealPlayback) {
-        if (isPlaying) {
-            audioPlayer.pause();
-            isPlaying = false;
-            playPauseIcon.innerHTML = playIconSvg;
-            playPauseBtn.style.transform = "";
+if (playPauseBtn) {
+    playPauseBtn.addEventListener("click", () => {
+        if (isRealPlayback) {
+            if (isPlaying) {
+                audioPlayer.pause();
+                isPlaying = false;
+                playPauseIcon.innerHTML = playIconSvg;
+                playPauseBtn.style.transform = "";
+            } else {
+                audioPlayer.play()
+                    .then(() => {
+                        isPlaying = true;
+                        playPauseIcon.innerHTML = pauseIconSvg;
+                        playPauseBtn.style.transform = "scale(1.05)";
+                    })
+                    .catch(err => console.warn("Failed play track preview:", err));
+            }
         } else {
-            audioPlayer.play()
-                .then(() => {
-                    isPlaying = true;
-                    playPauseIcon.innerHTML = pauseIconSvg;
-                    playPauseBtn.style.transform = "scale(1.05)";
-                })
-                .catch(err => console.warn("Failed play track preview:", err));
+            if (isPlaying) {
+                pausePlaybackState();
+            } else {
+                startPlaybackState();
+            }
         }
-    } else {
-        if (isPlaying) {
-            pausePlaybackState();
-        } else {
-            startPlaybackState();
-        }
-    }
-});
+    });
+}
 
 if (prevBtn) {
     prevBtn.addEventListener("click", () => {
@@ -592,8 +651,8 @@ if (nextBtn) {
 
 function startPlaybackState() {
     isPlaying = true;
-    playPauseIcon.innerHTML = pauseIconSvg;
-    playPauseBtn.style.transform = "scale(1.05)";
+    if (playPauseIcon) playPauseIcon.innerHTML = pauseIconSvg;
+    if (playPauseBtn) playPauseBtn.style.transform = "scale(1.05)";
     
     if (tickerInterval) clearInterval(tickerInterval);
     tickerInterval = setInterval(updatePlayerTick, 1000);
@@ -601,8 +660,8 @@ function startPlaybackState() {
 
 function pausePlaybackState() {
     isPlaying = false;
-    playPauseIcon.innerHTML = playIconSvg;
-    playPauseBtn.style.transform = "";
+    if (playPauseIcon) playPauseIcon.innerHTML = playIconSvg;
+    if (playPauseBtn) playPauseBtn.style.transform = "";
     if (tickerInterval) clearInterval(tickerInterval);
 }
 
@@ -619,11 +678,11 @@ function updatePlayerTick() {
 
     const minutes = Math.floor(currentSeconds / 60);
     const seconds = (currentSeconds % 60).toString().padStart(2, "0");
-    currentTime.textContent = `${minutes}:${seconds}`;
+    if (currentTime) currentTime.textContent = `${minutes}:${seconds}`;
 
     const percentage = (currentSeconds / totalDurationSeconds) * 100;
-    timelineFill.style.width = `${percentage}%`;
-    timelineThumb.style.left = `${percentage}%`;
+    if (timelineFill) timelineFill.style.width = `${percentage}%`;
+    if (timelineThumb) timelineThumb.style.left = `${percentage}%`;
 }
 
 // ==========================================
@@ -634,15 +693,15 @@ audioPlayer.addEventListener("timeupdate", () => {
     const current = audioPlayer.currentTime;
     const duration = audioPlayer.duration || activeTrack.duration_seconds || 1;
     
-    currentTime.textContent = formatDuration(current);
+    if (currentTime) currentTime.textContent = formatDuration(current);
     const percentage = (current / duration) * 100;
-    timelineFill.style.width = `${percentage}%`;
-    timelineThumb.style.left = `${percentage}%`;
+    if (timelineFill) timelineFill.style.width = `${percentage}%`;
+    if (timelineThumb) timelineThumb.style.left = `${percentage}%`;
 });
 
 audioPlayer.addEventListener("loadedmetadata", () => {
     if (!isRealPlayback) return;
-    trackLength.textContent = formatDuration(audioPlayer.duration);
+    if (trackLength) trackLength.textContent = formatDuration(audioPlayer.duration);
 });
 
 audioPlayer.addEventListener("ended", () => {
@@ -652,54 +711,60 @@ audioPlayer.addEventListener("ended", () => {
         selectAndPlayTrack(currentTrackList[currentTrackIndex]);
     } else {
         isPlaying = false;
-        playPauseIcon.innerHTML = playIconSvg;
-        playPauseBtn.style.transform = "";
+        if (playPauseIcon) playPauseIcon.innerHTML = playIconSvg;
+        if (playPauseBtn) playPauseBtn.style.transform = "";
     }
 });
 
-timelineTrack.addEventListener("click", (e) => {
-    const rect = timelineTrack.getBoundingClientRect();
-    const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
-    
-    if (isRealPlayback && audioPlayer.duration) {
-        audioPlayer.currentTime = percent * audioPlayer.duration;
-    } else if (!isRealPlayback) {
-        const lengthParts = activeTrack.duration.split(":");
-        const totalDurationSeconds = parseInt(lengthParts[0]) * 60 + parseInt(lengthParts[1]);
-        currentSeconds = Math.floor(percent * totalDurationSeconds);
+if (timelineTrack) {
+    timelineTrack.addEventListener("click", (e) => {
+        const rect = timelineTrack.getBoundingClientRect();
+        const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
         
-        const minutes = Math.floor(currentSeconds / 60);
-        const seconds = (currentSeconds % 60).toString().padStart(2, "0");
-        currentTime.textContent = `${minutes}:${seconds}`;
-        timelineFill.style.width = `${percent * 100}%`;
-        timelineThumb.style.left = `${percent * 100}%`;
-    }
-});
+        if (isRealPlayback && audioPlayer.duration) {
+            audioPlayer.currentTime = percent * audioPlayer.duration;
+        } else if (!isRealPlayback) {
+            const lengthParts = activeTrack.duration.split(":");
+            const totalDurationSeconds = parseInt(lengthParts[0]) * 60 + parseInt(lengthParts[1]);
+            currentSeconds = Math.floor(percent * totalDurationSeconds);
+            
+            const minutes = Math.floor(currentSeconds / 60);
+            const seconds = (currentSeconds % 60).toString().padStart(2, "0");
+            if (currentTime) currentTime.textContent = `${minutes}:${seconds}`;
+            if (timelineFill) timelineFill.style.width = `${percent * 100}%`;
+            if (timelineThumb) timelineThumb.style.left = `${percent * 100}%`;
+        }
+    });
+}
 
-volumeTrack.addEventListener("click", (e) => {
-    const rect = volumeTrack.getBoundingClientRect();
-    const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
-    currentVolume = percent;
-    volumeFill.style.width = `${percent * 100}%`;
-    volumeThumb.style.left = `${percent * 100}%`;
-    
-    audioPlayer.volume = percent;
-});
+if (volumeTrack) {
+    volumeTrack.addEventListener("click", (e) => {
+        const rect = volumeTrack.getBoundingClientRect();
+        const percent = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+        currentVolume = percent;
+        if (volumeFill) volumeFill.style.width = `${percent * 100}%`;
+        if (volumeThumb) volumeThumb.style.left = `${percent * 100}%`;
+        
+        audioPlayer.volume = percent;
+    });
+}
 
 // ==========================================
 // FILTERS & GENRE MAPPING
 // ==========================================
-categoriesRow.addEventListener("click", (e) => {
-    if (e.target.classList.contains("capsule")) {
-        document.querySelectorAll(".capsule").forEach(c => c.classList.remove("active"));
-        e.target.classList.add("active");
-        
-        if (searchInput) searchInput.value = "";
-        
-        const genre = e.target.dataset.genre;
-        fetchDeezerTracksByGenre(genre);
-    }
-});
+if (categoriesRow) {
+    categoriesRow.addEventListener("click", (e) => {
+        if (e.target.classList.contains("capsule")) {
+            document.querySelectorAll(".capsule").forEach(c => c.classList.remove("active"));
+            e.target.classList.add("active");
+            
+            if (searchInput) searchInput.value = "";
+            
+            const genre = e.target.dataset.genre;
+            fetchDeezerTracksByGenre(genre);
+        }
+    });
+}
 
 let searchTimeout = null;
 if (searchInput) {
@@ -748,29 +813,32 @@ if (disclaimerModal) {
 // ==========================================
 // LOGOUT PROCESS
 // ==========================================
-document.getElementById("dashboard-logout-btn").addEventListener("click", () => {
-    if (confirm("Disconnect session?")) {
-        audioPlayer.pause();
-        if (snapshotUnsubscribe) {
-            snapshotUnsubscribe();
-        }
+const logoutBtn = document.getElementById("dashboard-logout-btn");
+if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+        if (confirm("Disconnect session?")) {
+            audioPlayer.pause();
+            if (snapshotUnsubscribe) {
+                snapshotUnsubscribe();
+            }
 
-        if (auth) {
-          signOut(auth)
-            .then(() => {
-                localStorage.removeItem("t1era_logged_in");
-                window.location.href = "index.html";
-            })
-            .catch((err) => {
-                console.error("Logout failed:", err);
-                alert("Session disconnect failed. Try again.");
-            });
-        } else {
-          localStorage.removeItem("t1era_logged_in");
-          window.location.href = "index.html";
+            if (auth) {
+              signOut(auth)
+                .then(() => {
+                    localStorage.removeItem("t1era_logged_in");
+                    window.location.href = "index.html";
+                })
+                .catch((err) => {
+                    console.error("Logout failed:", err);
+                    alert("Session disconnect failed. Try again.");
+                });
+            } else {
+              localStorage.removeItem("t1era_logged_in");
+              window.location.href = "index.html";
+            }
         }
-    }
-});
+    });
+}
 
 // Boot logic
 fetchDeezerTracksByGenre("all");
