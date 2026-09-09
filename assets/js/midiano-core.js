@@ -18,18 +18,17 @@ const KEY_MAPS = {
     "Ab": ["C", "C", "D", "^D", "=E", "E", "^F", "G", "=A", "A", "B", "=B"],
     "Db": ["C", "C", "D", "^D", "=E", "E", "F", "G", "=A", "A", "B", "=B"]
 };
-// Map minors as aliases to relative major scale sets
+
 KEY_MAPS["Am"] = KEY_MAPS["C"]; KEY_MAPS["Em"] = KEY_MAPS["G"]; KEY_MAPS["Bm"] = KEY_MAPS["D"];
 KEY_MAPS["F#m"] = KEY_MAPS["A"]; KEY_MAPS["C#m"] = KEY_MAPS["E"]; KEY_MAPS["G#m"] = KEY_MAPS["B"];
 KEY_MAPS["Dm"] = KEY_MAPS["F"]; KEY_MAPS["Gm"] = KEY_MAPS["Bb"]; KEY_MAPS["Cm"] = KEY_MAPS["Eb"];
 KEY_MAPS["Fm"] = KEY_MAPS["Ab"]; KEY_MAPS["Bbm"] = KEY_MAPS["Db"];
 
 // --- Layout Range Variables (Standard 88 Keys, Static Keyboard) ---
-const RANGE_START = 21; // A0 (Fixed full 88-key layout)
-const RANGE_END = 108;  // C8 (Fixed full 88-key layout)
+const RANGE_START = 21; // A0
+const RANGE_END = 108;  // C8
 const IS_BLACK_KEY = [false, true, false, true, false, false, true, false, true, false, true, false];
 
-// Rough mobile/lower-power-device detection.
 const IS_MOBILE_DEVICE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
 // --- Application State ---
@@ -37,18 +36,17 @@ let midiData = null;
 let isPlaying = false;
 let isLooping = false;
 let playbackSpeed = 1.0;
-let noteSpeed = 200; // Falling speed in pixels/sec
+let noteSpeed = 200; 
 let totalDuration = 0;
 let currentPlaybackTime = 0;
 let lastFrameTime = performance.now();
 let lastTriggeredTime = 0;
 
-// Optimized Audio Trigger Heads
 let playbackNoteIndex = 0;
 let sheetPlaybackNoteIndex = 0;
 let verticalPlaybackNoteIndex = 0;
 let studioPlaybackNoteIndex = 0;
-let maxNoteDuration = 5; // Updated dynamically upon loading file
+let maxNoteDuration = 5;
 
 // DSP nodes
 let activeInstrument = null;
@@ -57,7 +55,6 @@ let samplerLoaded = false;
 let reverbNode = null;
 let volNode = null;
 
-// Audio Optimization DSP Nodes
 let masterCompressor = null;
 let masterLimiter = null;
 
@@ -71,7 +68,6 @@ const MAX_TRIGGERS_PER_BURST = IS_MOBILE_DEVICE ? 8 : 18;
 let burstWindowStart = 0;
 let burstTriggerCount = 0;
 
-// Removes a voice log entry by note name via in-place splice
 function removeVoiceLogEntryByNote(noteName) {
     for (let i = activeVoiceLog.length - 1; i >= 0; i--) {
         if (activeVoiceLog[i].note === noteName) {
@@ -80,7 +76,6 @@ function removeVoiceLogEntryByNote(noteName) {
     }
 }
 
-// Prunes expired voices in place
 function pruneExpiredVoiceLog(now) {
     for (let i = activeVoiceLog.length - 1; i >= 0; i--) {
         if (activeVoiceLog[i].releaseTime <= now) {
@@ -95,7 +90,6 @@ function triggerNoteWithVoiceGuard(noteName, duration, time, velocity, strict) {
     const now = Tone.now();
     const scheduledTime = time || now;
 
-    // --- Burst congestion control ---
     if (!strict) {
         if (scheduledTime - burstWindowStart > BURST_WINDOW_SEC) {
             burstWindowStart = scheduledTime;
@@ -107,7 +101,6 @@ function triggerNoteWithVoiceGuard(noteName, duration, time, velocity, strict) {
         }
     }
 
-    // --- Same-pitch retrigger guard ---
     if (activeVoiceByPitch.has(noteName) && activeVoiceByPitch.get(noteName) > now) {
         if (typeof activeInstrument.triggerRelease === 'function') {
             activeInstrument.triggerRelease(noteName, now);
@@ -115,7 +108,6 @@ function triggerNoteWithVoiceGuard(noteName, duration, time, velocity, strict) {
         removeVoiceLogEntryByNote(noteName);
     }
 
-    // --- Overall polyphony guard ---
     pruneExpiredVoiceLog(now);
     if (activeVoiceLog.length >= MAX_ACTIVE_VOICES) {
         activeVoiceLog.sort((a, b) => a.velocity - b.velocity);
@@ -132,20 +124,16 @@ function triggerNoteWithVoiceGuard(noteName, duration, time, velocity, strict) {
     activeVoiceByPitch.set(noteName, releaseTime);
 }
 
-// Hardware Clock PLL Synchronization State Anchors
 let audioStartTime = 0;
 let logicalStartTime = 0;
 
-// Setup a global variable for splendid piano
 let splendidPiano = null;
 let splendidLoaded = false;
 
-// Note tracking maps
 let activeNotesMemory = [];
 let pianoKeysMap = new Map();
 let particles = [];
 
-// Layout metrics scaled dynamically
 let totalWhiteKeys = 0;
 let whiteKeyWidth = 0;
 let blackKeyWidth = 0;
@@ -160,7 +148,7 @@ let studioPlaybackTimer = null;
 
 // DOM Elements
 const elCanvas = document.getElementById('visualizer-canvas');
-const ctx = elCanvas.getContext('2d');
+const ctx = elCanvas?.getContext('2d');
 const elKeyboard = document.getElementById('piano-keyboard');
 const elTimeline = document.getElementById('timeline');
 const elTimeDisplay = document.getElementById('time-display');
@@ -184,21 +172,18 @@ const elSheetModal = document.getElementById('sheet-modal');
 const btnCloseSheet = document.getElementById('btn-close-sheet');
 const elSheetMusicNotation = document.getElementById('sheet-music-notation');
 
-// Playback Sync Memory
 let sheetMusicPlaying = false;
 let sheetMusicPlaybackTime = 0;
 let sheetMusicLastFrameTime = 0;
 let sheetMusicPlaybackTimer = null;
-const pixelsPerSecond = 120; // Proportional horizontal scale
+const pixelsPerSecond = 120;
 
-// Vertical Portrait Sheet Playback states
 let isVerticalPlaying = false;
 let verticalPlaybackTime = 0;
 let verticalLastFrameTime = 0;
 let verticalPlaybackTimer = null;
 let activeVerticalContainerId = "";
 
-// Class wrapper to seamlessly connect smplr SplendidGrandPiano with Tone.js syntax
 class SmplrToneWrapper {
     constructor(smplrInstance) {
         this.smplr = smplrInstance;
@@ -217,18 +202,14 @@ class SmplrToneWrapper {
             if (this.smplr && typeof this.smplr.stop === 'function') {
                 this.smplr.stop(noteName, time);
             }
-        } catch (e) {
-            // Safe silent catch
-        }
+        } catch (e) {}
     }
     releaseAll() {
         if (this.smplr && typeof this.smplr.stop === 'function') {
             this.smplr.stop();
         }
     }
-    dispose() {
-        // Kept alive globally to avoid reloading buffers from CDN
-    }
+    dispose() {}
 }
 
 // --- Audio Synthesizer Construction ---
@@ -259,12 +240,13 @@ function setupAudioEngine() {
     setInstrument(IS_MOBILE_DEVICE ? 'grand' : 'sampled');
 }
 
-// Load premium real concert piano samples asynchronously
 function loadSampledPiano() {
     if (samplerPiano) return;
 
-    elSamplerStatus.textContent = "• Loading Samples...";
-    elSamplerStatus.style.color = "#fbbf24";
+    if (elSamplerStatus) {
+        elSamplerStatus.textContent = "• Loading Samples...";
+        elSamplerStatus.style.color = "#fbbf24";
+    }
 
     samplerPiano = new Tone.Sampler({
         urls: {
@@ -282,10 +264,12 @@ function loadSampledPiano() {
         baseUrl: "https://tonejs.github.io/audio/salamander/",
         onload: () => {
             samplerLoaded = true;
-            elSamplerStatus.textContent = "• Ready";
-            elSamplerStatus.style.color = "#10b981";
+            if (elSamplerStatus) {
+                elSamplerStatus.textContent = "• Ready";
+                elSamplerStatus.style.color = "#10b981";
+            }
             
-            if (selectInstrument.value === 'sampled') {
+            if (selectInstrument && selectInstrument.value === 'sampled') {
                 if (activeInstrument && activeInstrument !== samplerPiano) {
                     activeInstrument.releaseAll();
                     activeInstrument.dispose();
@@ -296,8 +280,10 @@ function loadSampledPiano() {
         },
         onerror: (err) => {
             console.warn("Could not load high-def sampler nodes. Falling back to synthesized engines.", err);
-            elSamplerStatus.textContent = "• Error";
-            elSamplerStatus.style.color = "#ef4444";
+            if (elSamplerStatus) {
+                elSamplerStatus.textContent = "• Error";
+                elSamplerStatus.style.color = "#ef4444";
+            }
         }
     });
 }
@@ -317,8 +303,10 @@ async function setInstrument(type) {
 
     if (type === 'splendid') {
         if (!splendidPiano) {
-            elSamplerStatus.textContent = "• Loading HD Steinway...";
-            elSamplerStatus.style.color = "#fbbf24";
+            if (elSamplerStatus) {
+                elSamplerStatus.textContent = "• Loading HD Steinway...";
+                elSamplerStatus.style.color = "#fbbf24";
+            }
 
             try {
                 const { SplendidGrandPiano } = await import("https://unpkg.com/smplr/dist/index.mjs");
@@ -332,19 +320,23 @@ async function setInstrument(type) {
 
                 splendidLoaded = true;
                 splendidPiano = new SmplrToneWrapper(inst);
-                elSamplerStatus.textContent = "• Ready";
-                elSamplerStatus.style.color = "#10b981";
-                if (selectInstrument.value === 'splendid') {
+                if (elSamplerStatus) {
+                    elSamplerStatus.textContent = "• Ready";
+                    elSamplerStatus.style.color = "#10b981";
+                }
+                if (selectInstrument && selectInstrument.value === 'splendid') {
                     activeInstrument = splendidPiano;
                 }
             } catch (err) {
                 console.error("Failed to load Splendid Grand Piano ES Module:", err);
-                elSamplerStatus.textContent = "• Error Loading";
-                elSamplerStatus.style.color = "#ef4444";
+                if (elSamplerStatus) {
+                    elSamplerStatus.textContent = "• Error Loading";
+                    elSamplerStatus.style.color = "#ef4444";
+                }
             }
         } else {
             activeInstrument = splendidPiano;
-            if (splendidLoaded) {
+            if (splendidLoaded && elSamplerStatus) {
                 elSamplerStatus.textContent = "• Ready";
                 elSamplerStatus.style.color = "#10b981";
             }
@@ -391,15 +383,50 @@ async function setInstrument(type) {
     }
 }
 
+// --- Key Finding Logic ---
+function getMidiKeySignature() {
+    if (!activeNotesMemory || activeNotesMemory.length === 0) return "C Major";
+    const pitchCounts = new Array(12).fill(0);
+    activeNotesMemory.forEach(note => {
+        const pitchClass = note.midi % 12;
+        pitchCounts[pitchClass] += (note.duration || 0.5);
+    });
+
+    let bestKey = "C";
+    let bestCorrelation = -Infinity;
+    let isMinor = false;
+
+    for (let root = 0; root < 12; root++) {
+        let corrMajor = 0;
+        let corrMinor = 0;
+        for (let i = 0; i < 12; i++) {
+            const count = pitchCounts[(root + i) % 12];
+            corrMajor += count * K_K_MAJOR[i];
+            corrMinor += count * K_K_MINOR[i];
+        }
+        if (corrMajor > bestCorrelation) {
+            bestCorrelation = corrMajor;
+            bestKey = PITCH_NAMES[root];
+            isMinor = false;
+        }
+        if (corrMinor > bestCorrelation) {
+            bestCorrelation = corrMinor;
+            bestKey = PITCH_NAMES[root] + "m";
+            isMinor = true;
+        }
+    }
+    return isMinor ? `${bestKey}` : `${bestKey} Major`;
+}
+
 // --- Parsing Management Engine ---
-function loadMidi(buffer) {
+function loadMidi(buffer, customTitle) {
     stopPlayback();
     
     midiData = new Midi(buffer);
     activeNotesMemory = [];
 
-    calculateLayoutMetrics();
-    createKeyboard();
+    if (typeof calculateLayoutMetrics === "function") calculateLayoutMetrics();
+    if (typeof createKeyboard === "function") createKeyboard();
 
     let noteCount = 0;
     midiData.tracks.forEach(track => {
@@ -431,27 +458,54 @@ function loadMidi(buffer) {
 
     const detectedKeyName = getMidiKeySignature();
 
-    document.getElementById('stat-name').textContent = midiData.name || "Untitled";
-    document.getElementById('stat-duration').textContent = Math.round(totalDuration) + "s";
-    document.getElementById('stat-tempo').textContent = Math.round(midiData.header.tempos[0]?.bpm || 120) + " BPM";
-    document.getElementById('stat-tracks').textContent = midiData.tracks.length;
-    document.getElementById('stat-notes').textContent = noteCount;
-    document.getElementById('stat-key').textContent = detectedKeyName;
+    const displayTitle = customTitle || (midiData.name && midiData.name !== "Untitled" ? midiData.name : null) || "Studio Transcribed Track";
 
-    elTimeline.max = totalDuration;
-    elTimeline.value = 0;
+    const statNameEl = document.getElementById('stat-name');
+    if (statNameEl) statNameEl.textContent = displayTitle;
+
+    const mobileTrackTitleEl = document.getElementById('mobile-track-title');
+    if (mobileTrackTitleEl) mobileTrackTitleEl.textContent = displayTitle;
+
+    const statDurEl = document.getElementById('stat-duration');
+    if (statDurEl) statDurEl.textContent = Math.round(totalDuration) + "s";
+
+    const statTempoEl = document.getElementById('stat-tempo');
+    if (statTempoEl) statTempoEl.textContent = Math.round(midiData.header.tempos[0]?.bpm || 120) + " BPM";
+
+    const statTracksEl = document.getElementById('stat-tracks');
+    if (statTracksEl) statTracksEl.textContent = midiData.tracks.length;
+
+    const statNotesEl = document.getElementById('stat-notes');
+    if (statNotesEl) statNotesEl.textContent = noteCount;
+
+    const statKeyEl = document.getElementById('stat-key');
+    if (statKeyEl) statKeyEl.textContent = detectedKeyName;
+
+    if (elTimeline) {
+        elTimeline.max = totalDuration;
+        elTimeline.value = 0;
+        elTimeline.disabled = false;
+    }
     currentPlaybackTime = 0;
     updateTimeDisplay();
 
-    btnPlay.disabled = false;
-    btnStop.disabled = false;
-    btnRestart.disabled = false;
-    btnSheet.disabled = false;
-    elTimeline.disabled = false;
+    if (btnPlay) btnPlay.disabled = false;
+    if (btnStop) btnStop.disabled = false;
+    if (btnRestart) btnRestart.disabled = false;
+    if (btnSheet) btnSheet.disabled = false;
+
+    const btnDownloadMenu = document.getElementById('btn-download-menu');
+    if (btnDownloadMenu) btnDownloadMenu.disabled = false;
     
     playbackNoteIndex = 0;
     updatePlaybackNoteIndex();
+
+    console.log(`[MIDIANO CORE] MIDI loaded successfully: "${displayTitle}" (${noteCount} notes, ${Math.round(totalDuration)}s).`);
 }
+
+// Global exposure for programmatic loader access
+window.loadMidi = loadMidi;
+window.loadMidiArrayBuffer = loadMidi;
 
 // --- Audio & Playback Control Operations ---
 function startPlayback() {
@@ -465,16 +519,16 @@ function startPlayback() {
     audioStartTime = Tone.now();
     logicalStartTime = currentPlaybackTime;
     
-    btnPlay.disabled = true;
-    btnPause.disabled = false;
+    if (btnPlay) btnPlay.disabled = true;
+    if (btnPause) btnPause.disabled = false;
     updatePlaybackNoteIndex();
 }
 
 function pausePlayback() {
     isPlaying = false;
-    btnPlay.disabled = false;
-    btnPause.disabled = true;
-    activeInstrument.releaseAll();
+    if (btnPlay) btnPlay.disabled = false;
+    if (btnPause) btnPause.disabled = true;
+    if (activeInstrument) activeInstrument.releaseAll();
     activeVoiceLog = [];
     activeVoiceByPitch.clear();
 }
@@ -484,11 +538,11 @@ function stopPlayback() {
     currentPlaybackTime = 0;
     lastTriggeredTime = 0;
     playbackNoteIndex = 0;
-    elTimeline.value = 0;
+    if (elTimeline) elTimeline.value = 0;
     updateTimeDisplay();
-    btnPlay.disabled = (midiData === null);
-    btnPause.disabled = true;
-    activeInstrument.releaseAll();
+    if (btnPlay) btnPlay.disabled = (midiData === null);
+    if (btnPause) btnPause.disabled = true;
+    if (activeInstrument) activeInstrument.releaseAll();
     activeVoiceLog = [];
     activeVoiceByPitch.clear();
 }
@@ -519,12 +573,13 @@ function seekTo(time) {
     
     updatePlaybackNoteIndex();
     updateTimeDisplay();
-    activeInstrument.releaseAll();
+    if (activeInstrument) activeInstrument.releaseAll();
     activeVoiceLog = [];
     activeVoiceByPitch.clear();
 }
 
 function updateTimeDisplay() {
+    if (!elTimeDisplay) return;
     const format = (t) => {
         const m = Math.floor(t / 60).toString().padStart(2, '0');
         const s = Math.floor(t % 60).toString().padStart(2, '0');
@@ -533,14 +588,17 @@ function updateTimeDisplay() {
     elTimeDisplay.textContent = `${format(currentPlaybackTime)} / ${format(totalDuration)}`;
 }
 
-// --- Studio Initialization and Rendering Handlers ---
+// --- Studio Initialization and Handlers ---
 function initStudioData() {
     if (!activeNotesMemory) return;
     studioNotesMemory = activeNotesMemory.map(note => ({ ...note }));
     isStudioUnlocked = false;
 
-    document.getElementById('studio-filter-controls').style.display = 'none';
-    document.getElementById('studio-removal-preview-container').style.display = 'none';
+    const filterControls = document.getElementById('studio-filter-controls');
+    if (filterControls) filterControls.style.display = 'none';
+
+    const previewContainer = document.getElementById('studio-removal-preview-container');
+    if (previewContainer) previewContainer.style.display = 'none';
     
     const unlockBtn = document.getElementById('btn-studio-unlock');
     if (unlockBtn) {
@@ -551,16 +609,21 @@ function initStudioData() {
 
     updateStudioTable();
     updateStudioPreview();
-    renderStudioSheetMusic('sheet-music-notation-studio');
+    if (typeof renderStudioSheetMusic === "function") {
+        renderStudioSheetMusic('sheet-music-notation-studio');
+    }
 }
 
 function updateStudioPreview() {
     const thresholdInput = document.getElementById('input-studio-cut-velo');
+    if (!thresholdInput) return;
     const threshold = parseFloat(thresholdInput.value) || 0.48;
-    document.getElementById('lbl-studio-current-threshold').textContent = threshold.toFixed(2);
+    const thresholdLbl = document.getElementById('lbl-studio-current-threshold');
+    if (thresholdLbl) thresholdLbl.textContent = threshold.toFixed(2);
 
     const previewContainer = document.getElementById('studio-removal-preview-container');
     const previewList = document.getElementById('studio-removal-preview-list');
+    if (!previewContainer || !previewList) return;
 
     const toRemove = studioNotesMemory.filter(note => (note.velocity || 0.8) <= threshold);
 
@@ -579,6 +642,7 @@ function updateStudioPreview() {
 
 function updateStudioTable() {
     const tableBody = document.getElementById('studio-event-table-body');
+    if (!tableBody) return;
     tableBody.innerHTML = '';
 
     studioNotesMemory.forEach((note, index) => {
@@ -609,7 +673,7 @@ function updateStudioTable() {
             note.time = parseFloat(e.target.value) || 0;
             studioNotesMemory.sort((a, b) => a.time - b.time);
             updateStudioTable();
-            renderStudioSheetMusic('sheet-music-notation-studio');
+            if (typeof renderStudioSheetMusic === "function") renderStudioSheetMusic('sheet-music-notation-studio');
         });
         tdTime.appendChild(inputTime);
         tr.appendChild(tdTime);
@@ -628,7 +692,7 @@ function updateStudioTable() {
             note.midi = Math.max(RANGE_START, Math.min(newMidi, RANGE_END));
             note.name = Tone.Frequency(note.midi, "midi").toNote();
             updateStudioTable();
-            renderStudioSheetMusic('sheet-music-notation-studio');
+            if (typeof renderStudioSheetMusic === "function") renderStudioSheetMusic('sheet-music-notation-studio');
         });
         tdPitch.appendChild(inputPitch);
         tr.appendChild(tdPitch);
@@ -650,7 +714,7 @@ function updateStudioTable() {
         inputDuration.style.cssText = isStudioUnlocked ? editableInputStyle : inputStyle;
         inputDuration.addEventListener('change', (e) => {
             note.duration = Math.max(0.001, parseFloat(e.target.value) || 0.1);
-            renderStudioSheetMusic('sheet-music-notation-studio');
+            if (typeof renderStudioSheetMusic === "function") renderStudioSheetMusic('sheet-music-notation-studio');
         });
         tdDuration.appendChild(inputDuration);
         tr.appendChild(tdDuration);
@@ -683,7 +747,7 @@ function updateStudioTable() {
             studioNotesMemory.splice(index, 1);
             updateStudioTable();
             updateStudioPreview();
-            renderStudioSheetMusic('sheet-music-notation-studio');
+            if (typeof renderStudioSheetMusic === "function") renderStudioSheetMusic('sheet-music-notation-studio');
         });
         tdActions.appendChild(btnDelete);
         tr.appendChild(tdActions);
@@ -694,18 +758,20 @@ function updateStudioTable() {
 
 // --- Event Listener Mapping ---
 function setupEventListeners() {
-    fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => loadMidi(event.target.result);
-        reader.readAsArrayBuffer(file);
-    });
+    if (fileInput) {
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => loadMidi(event.target.result, file.name);
+            reader.readAsArrayBuffer(file);
+        });
+    }
 
-    btnPlay.addEventListener('click', startPlayback);
-    btnPause.addEventListener('click', pausePlayback);
-    btnStop.addEventListener('click', stopPlayback);
-    btnRestart.addEventListener('click', () => { seekTo(0); startPlayback(); });
+    if (btnPlay) btnPlay.addEventListener('click', startPlayback);
+    if (btnPause) btnPause.addEventListener('click', pausePlayback);
+    if (btnStop) btnStop.addEventListener('click', stopPlayback);
+    if (btnRestart) btnRestart.addEventListener('click', () => { seekTo(0); startPlayback(); });
 
     const btnTabNotation = document.getElementById('btn-tab-notation');
     const btnTabRaw = document.getElementById('btn-tab-raw');
@@ -738,81 +804,93 @@ function setupEventListeners() {
     const btnStudioPlayScore = document.getElementById('btn-studio-play-score');
     const btnStudioStopScore = document.getElementById('btn-studio-stop-score');
 
-    btnTabNotation.addEventListener('click', () => {
-        stopSheetPlayback();
-        stopVerticalPlayback();
-        stopStudioPlayback();
-        btnTabNotation.style.backgroundColor = 'var(--accent-color)';
-        btnTabNotation.style.color = 'var(--text-color)';
-        btnTabRaw.style.backgroundColor = '#20202c';
-        btnTabRaw.style.color = 'var(--text-muted)';
-        btnTabStudio.style.backgroundColor = '#20202c';
-        btnTabStudio.style.color = 'var(--text-muted)';
-        contentNotation.style.display = 'block';
-        contentRaw.style.display = 'none';
-        contentStudio.style.display = 'none';
+    if (btnTabNotation && contentNotation && contentRaw && contentStudio) {
+        btnTabNotation.addEventListener('click', () => {
+            if (typeof stopSheetPlayback === "function") stopSheetPlayback();
+            if (typeof stopVerticalPlayback === "function") stopVerticalPlayback();
+            if (typeof stopStudioPlayback === "function") stopStudioPlayback();
+            btnTabNotation.style.backgroundColor = 'var(--accent-color)';
+            btnTabNotation.style.color = 'var(--text-color)';
+            if (btnTabRaw) { btnTabRaw.style.backgroundColor = '#20202c'; btnTabRaw.style.color = 'var(--text-muted)'; }
+            if (btnTabStudio) { btnTabStudio.style.backgroundColor = '#20202c'; btnTabStudio.style.color = 'var(--text-muted)'; }
+            contentNotation.style.display = 'block';
+            contentRaw.style.display = 'none';
+            contentStudio.style.display = 'none';
 
-        btnPlaySheet.style.display = 'inline-block';
-        btnStopSheet.style.display = 'inline-block';
-    });
+            if (btnPlaySheet) btnPlaySheet.style.display = 'inline-block';
+            if (btnStopSheet) btnStopSheet.style.display = 'inline-block';
+        });
+    }
 
-    btnTabRaw.addEventListener('click', () => {
-        stopSheetPlayback();
-        stopVerticalPlayback();
-        stopStudioPlayback();
-        btnTabRaw.style.backgroundColor = 'var(--accent-color)';
-        btnTabRaw.style.color = 'var(--text-color)';
-        btnTabNotation.style.backgroundColor = '#20202c';
-        btnTabNotation.style.color = 'var(--text-muted)';
-        btnTabStudio.style.backgroundColor = '#20202c';
-        btnTabStudio.style.color = 'var(--text-muted)';
-        contentNotation.style.display = 'none';
-        contentRaw.style.display = 'flex';
-        contentStudio.style.display = 'none';
-        populateRawMidiData();
+    if (btnTabRaw && contentNotation && contentRaw && contentStudio) {
+        btnTabRaw.addEventListener('click', () => {
+            if (typeof stopSheetPlayback === "function") stopSheetPlayback();
+            if (typeof stopVerticalPlayback === "function") stopVerticalPlayback();
+            if (typeof stopStudioPlayback === "function") stopStudioPlayback();
+            btnTabRaw.style.backgroundColor = 'var(--accent-color)';
+            btnTabRaw.style.color = 'var(--text-color)';
+            if (btnTabNotation) { btnTabNotation.style.backgroundColor = '#20202c'; btnTabNotation.style.color = 'var(--text-muted)'; }
+            if (btnTabStudio) { btnTabStudio.style.backgroundColor = '#20202c'; btnTabStudio.style.color = 'var(--text-muted)'; }
+            contentNotation.style.display = 'none';
+            contentRaw.style.display = 'flex';
+            contentStudio.style.display = 'none';
+            if (typeof populateRawMidiData === "function") populateRawMidiData();
 
-        btnPlaySheet.style.display = 'none';
-        btnStopSheet.style.display = 'none';
-    });
+            if (btnPlaySheet) btnPlaySheet.style.display = 'none';
+            if (btnStopSheet) btnStopSheet.style.display = 'none';
+        });
+    }
 
-    btnTabStudio.addEventListener('click', () => {
-        stopSheetPlayback();
-        stopVerticalPlayback();
-        stopStudioPlayback();
-        btnTabStudio.style.backgroundColor = 'var(--accent-color)';
-        btnTabStudio.style.color = 'var(--text-color)';
-        btnTabNotation.style.backgroundColor = '#20202c';
-        btnTabNotation.style.color = 'var(--text-muted)';
-        btnTabRaw.style.backgroundColor = '#20202c';
-        btnTabRaw.style.color = 'var(--text-muted)';
-        contentNotation.style.display = 'none';
-        contentRaw.style.display = 'none';
-        contentStudio.style.display = 'flex';
-        
-        updateStudioTable();
-        updateStudioPreview();
-        renderStudioSheetMusic('sheet-music-notation-studio');
+    if (btnTabStudio && contentNotation && contentRaw && contentStudio) {
+        btnTabStudio.addEventListener('click', () => {
+            if (typeof stopSheetPlayback === "function") stopSheetPlayback();
+            if (typeof stopVerticalPlayback === "function") stopVerticalPlayback();
+            if (typeof stopStudioPlayback === "function") stopStudioPlayback();
+            btnTabStudio.style.backgroundColor = 'var(--accent-color)';
+            btnTabStudio.style.color = 'var(--text-color)';
+            if (btnTabNotation) { btnTabNotation.style.backgroundColor = '#20202c'; btnTabNotation.style.color = 'var(--text-muted)'; }
+            if (btnTabRaw) { btnTabRaw.style.backgroundColor = '#20202c'; btnTabRaw.style.color = 'var(--text-muted)'; }
+            contentNotation.style.display = 'none';
+            contentRaw.style.display = 'none';
+            contentStudio.style.display = 'flex';
+            
+            updateStudioTable();
+            updateStudioPreview();
+            if (typeof renderStudioSheetMusic === "function") renderStudioSheetMusic('sheet-music-notation-studio');
 
-        btnPlaySheet.style.display = 'none';
-        btnStopSheet.style.display = 'none';
-    });
+            if (btnPlaySheet) btnPlaySheet.style.display = 'none';
+            if (btnStopSheet) btnStopSheet.style.display = 'none';
+        });
+    }
 
-    btnPlaySheet.addEventListener('click', () => {
-        startSheetPlayback();
-    });
+    if (btnPlaySheet) {
+        btnPlaySheet.addEventListener('click', () => {
+            if (typeof startSheetPlayback === "function") startSheetPlayback();
+        });
+    }
 
-    btnStopSheet.addEventListener('click', stopSheetPlayback);
+    if (btnStopSheet) {
+        btnStopSheet.addEventListener('click', () => {
+            if (typeof stopSheetPlayback === "function") stopSheetPlayback();
+        });
+    }
 
-    btnPlaySecond.addEventListener('click', () => {
-        if (isVerticalPlaying && activeVerticalContainerId === 'sheet-music-notation-vertical') {
-            stopVerticalPlayback();
-        } else {
-            startVerticalPlayback('sheet-music-notation-vertical');
-        }
-    });
-    btnStopSecond.addEventListener('click', stopVerticalPlayback);
+    if (btnPlaySecond) {
+        btnPlaySecond.addEventListener('click', () => {
+            if (isVerticalPlaying && activeVerticalContainerId === 'sheet-music-notation-vertical') {
+                if (typeof stopVerticalPlayback === "function") stopVerticalPlayback();
+            } else {
+                if (typeof startVerticalPlayback === "function") startVerticalPlayback('sheet-music-notation-vertical');
+            }
+        });
+    }
 
-    // Dynamic dropdown toggling behavior for Section 2 Download Menu [Modified]
+    if (btnStopSecond) {
+        btnStopSecond.addEventListener('click', () => {
+            if (typeof stopVerticalPlayback === "function") stopVerticalPlayback();
+        });
+    }
+
     const downloadDropdownSecond = document.getElementById("download-dropdown-second");
     if (btnDownloadSecond && downloadDropdownSecond) {
         btnDownloadSecond.addEventListener('click', (e) => {
@@ -826,38 +904,50 @@ function setupEventListeners() {
         });
     }
 
-    chkShowColors.addEventListener('change', () => {
-        renderVerticalSheetMusic('sheet-music-notation-vertical');
-        renderStudioSheetMusic('sheet-music-notation-studio');
-        if (secondSheetMaxModal.style.display === "flex") {
-            renderVerticalSheetMusic('sheet-music-notation-max');
-        }
-    });
+    if (chkShowColors) {
+        chkShowColors.addEventListener('change', () => {
+            if (typeof renderVerticalSheetMusic === "function") renderVerticalSheetMusic('sheet-music-notation-vertical');
+            if (typeof renderStudioSheetMusic === "function") renderStudioSheetMusic('sheet-music-notation-studio');
+            if (secondSheetMaxModal && secondSheetMaxModal.style.display === "flex") {
+                if (typeof renderVerticalSheetMusic === "function") renderVerticalSheetMusic('sheet-music-notation-max');
+            }
+        });
+    }
 
-    btnMaximizeSecond.addEventListener('click', () => {
-        stopSheetPlayback();
-        stopVerticalPlayback();
-        stopStudioPlayback();
-        secondSheetMaxModal.style.display = "flex";
-        renderVerticalSheetMusic('sheet-music-notation-max');
-    });
+    if (btnMaximizeSecond && secondSheetMaxModal) {
+        btnMaximizeSecond.addEventListener('click', () => {
+            if (typeof stopSheetPlayback === "function") stopSheetPlayback();
+            if (typeof stopVerticalPlayback === "function") stopVerticalPlayback();
+            if (typeof stopStudioPlayback === "function") stopStudioPlayback();
+            secondSheetMaxModal.style.display = "flex";
+            if (typeof renderVerticalSheetMusic === "function") renderVerticalSheetMusic('sheet-music-notation-max');
+        });
+    }
 
-    btnCloseMax.addEventListener('click', () => {
-        stopVerticalPlayback();
-        stopStudioPlayback();
-        secondSheetMaxModal.style.display = "none";
-    });
+    if (btnCloseMax && secondSheetMaxModal) {
+        btnCloseMax.addEventListener('click', () => {
+            if (typeof stopVerticalPlayback === "function") stopVerticalPlayback();
+            if (typeof stopStudioPlayback === "function") stopStudioPlayback();
+            secondSheetMaxModal.style.display = "none";
+        });
+    }
 
-    btnPlayMax.addEventListener('click', () => {
-        if (isVerticalPlaying && activeVerticalContainerId === 'sheet-music-notation-max') {
-            stopVerticalPlayback();
-        } else {
-            startVerticalPlayback('sheet-music-notation-max');
-        }
-    });
-    btnStopMax.addEventListener('click', stopVerticalPlayback);
+    if (btnPlayMax) {
+        btnPlayMax.addEventListener('click', () => {
+            if (isVerticalPlaying && activeVerticalContainerId === 'sheet-music-notation-max') {
+                if (typeof stopVerticalPlayback === "function") stopVerticalPlayback();
+            } else {
+                if (typeof startVerticalPlayback === "function") startVerticalPlayback('sheet-music-notation-max');
+            }
+        });
+    }
 
-    // Dynamic dropdown toggling behavior for Maximize view Download Menu [Modified]
+    if (btnStopMax) {
+        btnStopMax.addEventListener('click', () => {
+            if (typeof stopVerticalPlayback === "function") stopVerticalPlayback();
+        });
+    }
+
     const downloadDropdownMax = document.getElementById("download-dropdown-max");
     if (btnDownloadMax && downloadDropdownMax) {
         btnDownloadMax.addEventListener('click', (e) => {
@@ -871,142 +961,201 @@ function setupEventListeners() {
         });
     }
 
-    btnStudioUnlock.addEventListener('click', () => {
-        isStudioUnlocked = !isStudioUnlocked;
-        if (isStudioUnlocked) {
-            btnStudioUnlock.textContent = "Lock Edit";
-            btnStudioUnlock.style.backgroundColor = "#ef4444";
-            btnStudioUnlock.style.color = "#ffffff";
-            studioFilterControls.style.display = 'flex';
-        } else {
-            btnStudioUnlock.textContent = "Unlock Edit";
-            btnStudioUnlock.style.backgroundColor = "#fbbf24";
-            btnStudioUnlock.style.color = "#111115";
-            studioFilterControls.style.display = 'none';
-        }
-        updateStudioTable();
-        updateStudioPreview();
-    });
+    if (btnStudioUnlock && studioFilterControls) {
+        btnStudioUnlock.addEventListener('click', () => {
+            isStudioUnlocked = !isStudioUnlocked;
+            if (isStudioUnlocked) {
+                btnStudioUnlock.textContent = "Lock Edit";
+                btnStudioUnlock.style.backgroundColor = "#ef4444";
+                btnStudioUnlock.style.color = "#ffffff";
+                studioFilterControls.style.display = 'flex';
+            } else {
+                btnStudioUnlock.textContent = "Unlock Edit";
+                btnStudioUnlock.style.backgroundColor = "#fbbf24";
+                btnStudioUnlock.style.color = "#111115";
+                studioFilterControls.style.display = 'none';
+            }
+            updateStudioTable();
+            updateStudioPreview();
+        });
+    }
 
-    inputStudioCutVelo.addEventListener('input', () => {
-        updateStudioPreview();
-    });
+    if (inputStudioCutVelo) {
+        inputStudioCutVelo.addEventListener('input', () => {
+            updateStudioPreview();
+        });
+    }
 
-    btnStudioApplyFilter.addEventListener('click', () => {
-        const threshold = parseFloat(inputStudioCutVelo.value) || 0.48;
-        studioNotesMemory = studioNotesMemory.filter(note => (note.velocity || 0.8) > threshold);
-        
-        updateStudioTable();
-        updateStudioPreview();
-        renderStudioSheetMusic('sheet-music-notation-studio');
-    });
+    if (btnStudioApplyFilter && inputStudioCutVelo) {
+        btnStudioApplyFilter.addEventListener('click', () => {
+            const threshold = parseFloat(inputStudioCutVelo.value) || 0.48;
+            studioNotesMemory = studioNotesMemory.filter(note => (note.velocity || 0.8) > threshold);
+            
+            updateStudioTable();
+            updateStudioPreview();
+            if (typeof renderStudioSheetMusic === "function") renderStudioSheetMusic('sheet-music-notation-studio');
+        });
+    }
 
-    btnStudioSave.addEventListener('click', () => {
-        if (!confirm("Overwrite the original sequencer notes with your Studio workspace changes?")) {
-            return;
-        }
-        activeNotesMemory = studioNotesMemory.map(note => ({ ...note }));
-        document.getElementById('stat-notes').textContent = activeNotesMemory.length;
-        renderSheetMusic();
-        alert("Changes successfully saved and applied to the main sequencer and staves.");
-    });
+    if (btnStudioSave) {
+        btnStudioSave.addEventListener('click', () => {
+            if (!confirm("Overwrite the original sequencer notes with your Studio workspace changes?")) {
+                return;
+            }
+            activeNotesMemory = studioNotesMemory.map(note => ({ ...note }));
+            const statNotesEl = document.getElementById('stat-notes');
+            if (statNotesEl) statNotesEl.textContent = activeNotesMemory.length;
+            if (typeof renderSheetMusic === "function") renderSheetMusic();
+            alert("Changes successfully saved and applied to the main sequencer and staves.");
+        });
+    }
 
-    btnStudioPlayScore.addEventListener('click', startStudioPlayback);
-    btnStudioStopScore.addEventListener('click', stopStudioPlayback);
+    if (btnStudioPlayScore) {
+        btnStudioPlayScore.addEventListener('click', () => {
+            if (typeof startStudioPlayback === "function") startStudioPlayback();
+        });
+    }
 
-    btnSheet.addEventListener('click', () => {
-        if (!midiData) return;
-        pausePlayback();
-        elSheetModal.style.display = "flex";
-        renderSheetMusic();
-    });
+    if (btnStudioStopScore) {
+        btnStudioStopScore.addEventListener('click', () => {
+            if (typeof stopStudioPlayback === "function") stopStudioPlayback();
+        });
+    }
 
-    btnCloseSheet.addEventListener('click', () => {
-        stopSheetPlayback();
-        stopVerticalPlayback();
-        stopStudioPlayback();
-        elSheetModal.style.display = "none";
-    });
+    if (btnSheet && elSheetModal) {
+        btnSheet.addEventListener('click', () => {
+            if (!midiData) return;
+            pausePlayback();
+            elSheetModal.style.display = "flex";
+            if (typeof renderSheetMusic === "function") renderSheetMusic();
+        });
+    }
 
-    btnLoop.addEventListener('click', () => {
-        isLooping = !isLooping;
-        btnLoop.textContent = `Loop: ${isLooping ? 'On' : 'Off'}`;
-        btnLoop.style.backgroundColor = isLooping ? 'var(--accent-color)' : '#20202c';
-    });
+    if (btnCloseSheet && elSheetModal) {
+        btnCloseSheet.addEventListener('click', () => {
+            if (typeof stopSheetPlayback === "function") stopSheetPlayback();
+            if (typeof stopVerticalPlayback === "function") stopVerticalPlayback();
+            if (typeof stopStudioPlayback === "function") stopStudioPlayback();
+            elSheetModal.style.display = "none";
+        });
+    }
 
-    selectSpeed.addEventListener('change', (e) => {
-        playbackSpeed = parseFloat(e.target.value);
-    });
+    if (btnLoop) {
+        btnLoop.addEventListener('click', () => {
+            isLooping = !isLooping;
+            btnLoop.textContent = `Loop: ${isLooping ? 'On' : 'Off'}`;
+            btnLoop.style.backgroundColor = isLooping ? 'var(--accent-color)' : '#20202c';
+        });
+    }
 
-    sliderZoom.addEventListener('input', (e) => {
-        noteSpeed = parseFloat(e.target.value);
-    });
+    if (selectSpeed) {
+        selectSpeed.addEventListener('change', (e) => {
+            playbackSpeed = parseFloat(e.target.value);
+        });
+    }
 
-    selectInstrument.addEventListener('change', (e) => {
-        setInstrument(e.target.value);
-    });
+    if (sliderZoom) {
+        sliderZoom.addEventListener('input', (e) => {
+            noteSpeed = parseFloat(e.target.value);
+        });
+    }
 
-    sliderVolume.addEventListener('input', (e) => {
-        volNode.volume.value = parseFloat(e.target.value);
-    });
+    if (selectInstrument) {
+        selectInstrument.addEventListener('change', (e) => {
+            setInstrument(e.target.value);
+        });
+    }
 
-    sliderReverb.addEventListener('input', (e) => {
-        reverbNode.wet.value = parseFloat(e.target.value);
-    });
+    if (sliderVolume && volNode) {
+        sliderVolume.addEventListener('input', (e) => {
+            volNode.volume.value = parseFloat(e.target.value);
+        });
+    }
 
-    elTimeline.addEventListener('input', (e) => {
-        seekTo(parseFloat(e.target.value));
-    });
+    if (sliderReverb && reverbNode) {
+        sliderReverb.addEventListener('input', (e) => {
+            reverbNode.wet.value = parseFloat(e.target.value);
+        });
+    }
+
+    if (elTimeline) {
+        elTimeline.addEventListener('input', (e) => {
+            seekTo(parseFloat(e.target.value));
+        });
+    }
 }
 
-// Global initialization starter template
+// Global initialization starter
 function init() {
     setupAudioEngine();
-    handleResize();
+    if (typeof handleResize === "function") handleResize();
     setupEventListeners();
-    window.addEventListener('resize', handleResize);
-    requestAnimationFrame(renderFrame);
+    if (typeof handleResize === "function") window.addEventListener('resize', handleResize);
+    if (typeof renderFrame === "function") requestAnimationFrame(renderFrame);
 }
 
-// Auto-Load Hook for External Storage Systems
-window.addEventListener("DOMContentLoaded", () => {
-  const urlParams = new URLSearchParams(window.location.search);
-  const midiUrl = urlParams.get("midi") || localStorage.getItem("t1era_current_midi");
+// =======================================================
+// BULLETPROOF AUTO-LOAD HOOK FOR EXTERNAL CALLS & DASHBOARD
+// =======================================================
+function executeAutoLoadMidi() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const midiUrl = urlParams.get("midi") || 
+                     urlParams.get("url") || 
+                     urlParams.get("file") || 
+                     localStorage.getItem("t1era_current_midi");
+    const trackTitle = urlParams.get("title") || localStorage.getItem("t1era_current_title") || "";
 
-  if (midiUrl) {
-    console.log("[T1ERA AUTO-LOAD] Aliran fail MIDI dikesan:", midiUrl);
+    if (!midiUrl) return;
+
+    console.log("[T1ERA AUTO-LOAD] Loading MIDI stream:", midiUrl);
     
+    // Set UI placeholder while downloading
+    const statNameEl = document.getElementById("stat-name");
+    if (statNameEl) statNameEl.textContent = trackTitle ? `Loading "${trackTitle}"...` : "Loading MIDI stream...";
+    
+    const mobileTitleEl = document.getElementById("mobile-track-title");
+    if (mobileTitleEl) mobileTitleEl.textContent = trackTitle || "Loading MIDI...";
+
     fetch(midiUrl)
-      .then(res => {
-        if (!res.ok) throw new Error("Gagal mengambil fail MIDI dari Firebase Storage.");
-        return res.arrayBuffer();
-      })
-      .then(arrayBuffer => {
-        if (window.midiano && typeof window.midiano.loadArrayBuffer === "function") {
-          window.midiano.loadArrayBuffer(arrayBuffer, "t1era_score.mid");
-          console.log("[T1ERA AUTO-LOAD] Fail MIDI berjaya disuap ke objek midiano.");
-        } 
-        else if (typeof window.loadMidiArrayBuffer === "function") {
-          window.loadMidiArrayBuffer(arrayBuffer);
-          console.log("[T1ERA AUTO-LOAD] Fail MIDI berjaya disuap ke fungsi global.");
-        } 
-        else {
-          const file = new File([arrayBuffer], "t1era_score.mid", { type: "audio/midi" });
-          const container = new DataTransfer();
-          container.items.add(file);
-          
-          const fileInput = document.querySelector("input[type='file']");
-          if (fileInput) {
-            fileInput.files = container.files;
-            fileInput.dispatchEvent(new Event("change", { bubbles: true }));
-            console.log("[T1ERA AUTO-LOAD] Fail MIDI disimulasikan ke input fail Midiano.");
-          } else {
-            console.warn("[T1ERA AUTO-LOAD] Tiada input fail atau fungsi pemuatan dikesan di midiano.html.");
-          }
-        }
-      })
-      .catch(err => {
-        console.error("[T1ERA AUTO-LOAD ERROR] Gagal memuatkan fail MIDI secara automatik:", err);
-      });
-  }
-});
+        .then(res => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to download MIDI file.`);
+            return res.arrayBuffer();
+        })
+        .then(arrayBuffer => {
+            // Priority 1: Direct function call
+            if (typeof loadMidi === "function") {
+                loadMidi(arrayBuffer, trackTitle);
+            } 
+            // Priority 2: Window-level method call
+            else if (typeof window.loadMidi === "function") {
+                window.loadMidi(arrayBuffer, trackTitle);
+            } 
+            // Priority 3: DataTransfer file simulation fallback
+            else {
+                const file = new File([arrayBuffer], "t1era_score.mid", { type: "audio/midi" });
+                const container = new DataTransfer();
+                container.items.add(file);
+                
+                const fileInputEl = document.querySelector("input[type='file']");
+                if (fileInputEl) {
+                    fileInputEl.files = container.files;
+                    fileInputEl.dispatchEvent(new Event("change", { bubbles: true }));
+                }
+            }
+        })
+        .catch(err => {
+            console.error("[T1ERA AUTO-LOAD ERROR] Failed to fetch and load MIDI file:", err);
+            if (statNameEl) statNameEl.textContent = "Error loading MIDI";
+        });
+}
+
+// Trigger automatically regardless of DOM parsing phase
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+        init();
+        executeAutoLoadMidi();
+    });
+} else {
+    init();
+    executeAutoLoadMidi();
+}
