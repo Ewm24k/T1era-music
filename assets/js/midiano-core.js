@@ -3,7 +3,6 @@ const K_K_MAJOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2
 const K_K_MINOR = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
 const PITCH_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
-// Speller maps for accurate diatonic rendering matching the target Key Signatures
 const KEY_MAPS = {
     "C":  ["C", "^C", "D", "^D", "E", "F", "^F", "G", "^G", "A", "^A", "B"],
     "G":  ["C", "^C", "D", "^D", "E", "=F", "F", "G", "^G", "A", "^A", "B"],
@@ -24,14 +23,12 @@ KEY_MAPS["F#m"] = KEY_MAPS["A"]; KEY_MAPS["C#m"] = KEY_MAPS["E"]; KEY_MAPS["G#m"
 KEY_MAPS["Dm"] = KEY_MAPS["F"]; KEY_MAPS["Gm"] = KEY_MAPS["Bb"]; KEY_MAPS["Cm"] = KEY_MAPS["Eb"];
 KEY_MAPS["Fm"] = KEY_MAPS["Ab"]; KEY_MAPS["Bbm"] = KEY_MAPS["Db"];
 
-// --- Layout Range Variables (Standard 88 Keys, Static Keyboard) ---
 const RANGE_START = 21; // A0
 const RANGE_END = 108;  // C8
 const IS_BLACK_KEY = [false, true, false, true, false, false, true, false, true, false, true, false];
 
 const IS_MOBILE_DEVICE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
-// --- Application State ---
 let midiData = null;
 let isPlaying = false;
 let isLooping = false;
@@ -48,7 +45,6 @@ let verticalPlaybackNoteIndex = 0;
 let studioPlaybackNoteIndex = 0;
 let maxNoteDuration = 5;
 
-// DSP nodes
 let activeInstrument = null;
 let samplerPiano = null;
 let samplerLoaded = false;
@@ -58,7 +54,6 @@ let volNode = null;
 let masterCompressor = null;
 let masterLimiter = null;
 
-// --- Voice Management ---
 const MAX_ACTIVE_VOICES = IS_MOBILE_DEVICE ? 14 : 32;
 let activeVoiceLog = [];
 let activeVoiceByPitch = new Map();
@@ -138,7 +133,6 @@ let totalWhiteKeys = 0;
 let whiteKeyWidth = 0;
 let blackKeyWidth = 0;
 
-// --- Studio State ---
 let studioNotesMemory = [];
 let isStudioUnlocked = false;
 let isStudioPlaying = false;
@@ -146,7 +140,6 @@ let studioPlaybackTime = 0;
 let studioLastFrameTime = 0;
 let studioPlaybackTimer = null;
 
-// DOM Elements
 const elCanvas = document.getElementById('visualizer-canvas');
 const ctx = elCanvas?.getContext('2d');
 const elKeyboard = document.getElementById('piano-keyboard');
@@ -167,7 +160,6 @@ const sliderReverb = document.getElementById('slider-reverb');
 const fileInput = document.getElementById('midi-file');
 const elSamplerStatus = document.getElementById('sampler-status');
 
-// Sheet Music Elements
 const elSheetModal = document.getElementById('sheet-modal');
 const btnCloseSheet = document.getElementById('btn-close-sheet');
 const elSheetMusicNotation = document.getElementById('sheet-music-notation');
@@ -212,7 +204,6 @@ class SmplrToneWrapper {
     dispose() {}
 }
 
-// --- Audio Synthesizer Construction ---
 function setupAudioEngine() {
     Tone.context.lookAhead = IS_MOBILE_DEVICE ? 0.25 : 0.15;
     Tone.context.updateInterval = IS_MOBILE_DEVICE ? 0.05 : 0.03;
@@ -383,7 +374,6 @@ async function setInstrument(type) {
     }
 }
 
-// --- Key Finding Logic ---
 function getMidiKeySignature() {
     if (!activeNotesMemory || activeNotesMemory.length === 0) return "C Major";
     const pitchCounts = new Array(12).fill(0);
@@ -418,7 +408,7 @@ function getMidiKeySignature() {
     return isMinor ? `${bestKey}` : `${bestKey} Major`;
 }
 
-// --- Parsing Management Engine ---
+// --- Parsing & Visualizer Loader ---
 function loadMidi(buffer, customTitle) {
     stopPlayback();
     
@@ -457,7 +447,6 @@ function loadMidi(buffer, customTitle) {
     initStudioData();
 
     const detectedKeyName = getMidiKeySignature();
-
     const displayTitle = customTitle || (midiData.name && midiData.name !== "Untitled" ? midiData.name : null) || "Studio Transcribed Track";
 
     const statNameEl = document.getElementById('stat-name');
@@ -500,14 +489,14 @@ function loadMidi(buffer, customTitle) {
     playbackNoteIndex = 0;
     updatePlaybackNoteIndex();
 
-    console.log(`[MIDIANO CORE] MIDI loaded successfully: "${displayTitle}" (${noteCount} notes, ${Math.round(totalDuration)}s).`);
+    if (typeof handleResize === "function") handleResize();
+
+    console.log(`[MIDIANO CORE] MIDI loaded into visualizer: "${displayTitle}" (${noteCount} notes).`);
 }
 
-// Global exposure for programmatic loader access
 window.loadMidi = loadMidi;
 window.loadMidiArrayBuffer = loadMidi;
 
-// --- Audio & Playback Control Operations ---
 function startPlayback() {
     if (isPlaying) return;
     if (Tone.context.state !== 'running') {
@@ -588,7 +577,6 @@ function updateTimeDisplay() {
     elTimeDisplay.textContent = `${format(currentPlaybackTime)} / ${format(totalDuration)}`;
 }
 
-// --- Studio Initialization and Handlers ---
 function initStudioData() {
     if (!activeNotesMemory) return;
     studioNotesMemory = activeNotesMemory.map(note => ({ ...note }));
@@ -756,7 +744,6 @@ function updateStudioTable() {
     });
 }
 
-// --- Event Listener Mapping ---
 function setupEventListeners() {
     if (fileInput) {
         fileInput.addEventListener('change', (e) => {
@@ -1085,7 +1072,6 @@ function setupEventListeners() {
     }
 }
 
-// Global initialization starter
 function init() {
     setupAudioEngine();
     if (typeof handleResize === "function") handleResize();
@@ -1095,26 +1081,81 @@ function init() {
 }
 
 // =======================================================
-// BULLETPROOF AUTO-LOAD HOOK FOR EXTERNAL CALLS & DASHBOARD
+// INDEXEDDB DIRECT RECEIVER & BULLETPROOF AUTO-LOADER
 // =======================================================
-function executeAutoLoadMidi() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const midiUrl = urlParams.get("midi") || 
-                     urlParams.get("url") || 
-                     urlParams.get("file") || 
-                     localStorage.getItem("t1era_current_midi");
-    const trackTitle = urlParams.get("title") || localStorage.getItem("t1era_current_title") || "";
+const DB_NAME = "T1ERA_STUDIO_DB";
+const STORE_NAME = "midi_transfer";
 
+function openMidiDB() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = (e) => {
+            const idb = e.target.result;
+            if (!idb.objectStoreNames.contains(STORE_NAME)) {
+                idb.createObjectStore(STORE_NAME);
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function loadMidiFromBridge() {
+    try {
+        const idb = await openMidiDB();
+        return new Promise((resolve) => {
+            const tx = idb.transaction(STORE_NAME, "readwrite");
+            const store = tx.objectStore(STORE_NAME);
+            const reqData = store.get("pending_midi");
+            const reqTitle = store.get("pending_title");
+            
+            tx.oncomplete = () => {
+                const buffer = reqData.result || null;
+                const title = reqTitle.result || null;
+                // Clear after consuming so subsequent reloads don't stick
+                try {
+                    const cleanTx = idb.transaction(STORE_NAME, "readwrite");
+                    cleanTx.objectStore(STORE_NAME).clear();
+                } catch(e) {}
+                resolve({ buffer, title });
+            };
+            tx.onerror = () => resolve({ buffer: null, title: null });
+        });
+    } catch (e) {
+        return { buffer: null, title: null };
+    }
+}
+
+async function executeAutoLoadMidi() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const trackTitle = urlParams.get("title") || localStorage.getItem("t1era_current_title") || "";
+    const midiUrl = urlParams.get("midi") || urlParams.get("url") || localStorage.getItem("t1era_current_midi");
+
+    const statNameEl = document.getElementById("stat-name");
+    const mobileTitleEl = document.getElementById("mobile-track-title");
+
+    if (trackTitle) {
+        if (statNameEl) statNameEl.textContent = trackTitle;
+        if (mobileTitleEl) mobileTitleEl.textContent = trackTitle;
+    }
+
+    // PRIORITY 1: Check IndexedDB in-memory bridge (0 network latency, no CORS)
+    try {
+        const bridgeData = await loadMidiFromBridge();
+        if (bridgeData && bridgeData.buffer && bridgeData.buffer.byteLength > 0) {
+            console.log("[T1ERA STUDIO] Loaded MIDI directly from IndexedDB Bridge:", bridgeData.buffer.byteLength, "bytes.");
+            loadMidi(bridgeData.buffer, bridgeData.title || trackTitle);
+            return;
+        }
+    } catch (bridgeErr) {
+        console.warn("[T1ERA STUDIO] Bridge load check passed without result:", bridgeErr);
+    }
+
+    // PRIORITY 2: Fallback to remote URL fetch if bridge was empty
     if (!midiUrl) return;
 
-    console.log("[T1ERA AUTO-LOAD] Loading MIDI stream:", midiUrl);
-    
-    // Set UI placeholder while downloading
-    const statNameEl = document.getElementById("stat-name");
-    if (statNameEl) statNameEl.textContent = trackTitle ? `Loading "${trackTitle}"...` : "Loading MIDI stream...";
-    
-    const mobileTitleEl = document.getElementById("mobile-track-title");
-    if (mobileTitleEl) mobileTitleEl.textContent = trackTitle || "Loading MIDI...";
+    console.log("[T1ERA STUDIO] Bridge empty, fetching remote stream:", midiUrl);
+    if (statNameEl) statNameEl.textContent = "Downloading MIDI stream...";
 
     fetch(midiUrl)
         .then(res => {
@@ -1122,40 +1163,16 @@ function executeAutoLoadMidi() {
             return res.arrayBuffer();
         })
         .then(arrayBuffer => {
-            // Priority 1: Direct function call
-            if (typeof loadMidi === "function") {
-                loadMidi(arrayBuffer, trackTitle);
-            } 
-            // Priority 2: Window-level method call
-            else if (typeof window.loadMidi === "function") {
-                window.loadMidi(arrayBuffer, trackTitle);
-            } 
-            // Priority 3: DataTransfer file simulation fallback
-            else {
-                const file = new File([arrayBuffer], "t1era_score.mid", { type: "audio/midi" });
-                const container = new DataTransfer();
-                container.items.add(file);
-                
-                const fileInputEl = document.querySelector("input[type='file']");
-                if (fileInputEl) {
-                    fileInputEl.files = container.files;
-                    fileInputEl.dispatchEvent(new Event("change", { bubbles: true }));
-                }
-            }
+            loadMidi(arrayBuffer, trackTitle);
         })
         .catch(err => {
-            console.error("[T1ERA AUTO-LOAD ERROR] Failed to fetch and load MIDI file:", err);
+            console.error("[T1ERA STUDIO AUTO-LOAD ERROR] Failed to fetch remote MIDI:", err);
             if (statNameEl) statNameEl.textContent = "Error loading MIDI";
         });
 }
 
-// Trigger automatically regardless of DOM parsing phase
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-        init();
-        executeAutoLoadMidi();
-    });
-} else {
+// Ensure execution occurs AFTER all visualizer engine scripts are fully evaluated
+window.addEventListener("load", () => {
     init();
     executeAutoLoadMidi();
-}
+});
