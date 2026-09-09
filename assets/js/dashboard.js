@@ -1,9 +1,13 @@
-import { auth, db } from "./firebase-config.js";
+import { auth, db, storage } from "./firebase-config.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { 
     collection, 
     onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { 
+    ref as sRef, 
+    getDownloadURL 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
 // ==========================================
 // CONFIGURATION & GLOBAL CONSTANTS
@@ -15,8 +19,6 @@ const youtubeIconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="#f
 const uploadIconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#00df89" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>`;
 const midiIconSvg = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#e9af51" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>`;
 const studioIconSvg = `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M6 3v11"/><path d="M10 3v11"/><path d="M14 3v11"/><path d="M18 3v11"/><path d="M2 14h20"/></svg>`;
-
-const resolvedTitleCache = new Map();
 
 const popularTracksDataMockFallback = [
     { id: 1, title: "Golden Days", artist: "Felix Carter", duration: "3:12", art: "https://picsum.photos/id/65/300/300" },
@@ -125,7 +127,7 @@ if (mobileNavTranscriptions) {
 }
 
 // ==========================================
-// AUTHENTICATION SECURE STATE CONTROL
+// AUTHENTICATION STATE CONTROL
 // ==========================================
 let currentUser = null;
 let isAuthReady = false;
@@ -154,7 +156,6 @@ if (auth) {
         }
       }
 
-      // If user is already on the transcriptions tab upon auth resolution, sync list
       if (transcriptionsView && transcriptionsView.style.display !== "none") {
           loadUserTranscriptions();
       }
@@ -165,7 +166,7 @@ if (auth) {
 }
 
 // ==========================================
-// TITLE RESOLUTION & SANITIZATION ENGINE
+// TITLE SANITIZATION & RESOLUTION ENGINE
 // ==========================================
 function isValidTitle(val) {
     if (!val || typeof val !== "string") return false;
@@ -182,7 +183,6 @@ function cleanTitleFormat(name) {
     clean = clean.replace(/\.(mid|midi|mp3|wav|m4a|ogg|aac|flac|json)$/i, "");
     clean = clean.replace(/[-_]+/g, " ");
     clean = clean.replace(/\s+/g, " ").trim();
-    // Capitalize words appropriately
     return clean.split(" ")
         .map(w => w.charAt(0).toUpperCase() + w.slice(1))
         .join(" ");
@@ -197,7 +197,7 @@ function extractFilenameFromUrl(url) {
         if (segments.length === 0) return "";
         
         let file = segments[segments.length - 1];
-        if (file.toLowerCase() === "final_score.mid" || file.toLowerCase() === "score.mid" || file.toLowerCase() === "output.mid") {
+        if (["final_score.mid", "score.mid", "output.mid"].includes(file.toLowerCase())) {
             if (segments.length >= 2) {
                 const folderName = segments[segments.length - 2];
                 if (folderName && !["midi_jobs", "midi", "uploads", "transcriptions"].includes(folderName.toLowerCase())) {
@@ -224,28 +224,23 @@ function extractYouTubeVideoId(url) {
 }
 
 function resolveJobTitle(data, docId) {
-    // 1. Check direct metadata titles
     if (isValidTitle(data.title)) return cleanTitleFormat(data.title);
     if (isValidTitle(data.songTitle)) return cleanTitleFormat(data.songTitle);
     if (isValidTitle(data.trackTitle)) return cleanTitleFormat(data.trackTitle);
     if (isValidTitle(data.trackName)) return cleanTitleFormat(data.trackName);
     
-    // 2. Check original filename fields
     const directFile = data.fileName || data.originalFileName || data.filename || data.name || data.audioFileName;
     if (isValidTitle(directFile)) return cleanTitleFormat(directFile);
 
-    // 3. Check YouTube titles
     if (isValidTitle(data.youtubeTitle)) return cleanTitleFormat(data.youtubeTitle);
     if (isValidTitle(data.videoTitle)) return cleanTitleFormat(data.videoTitle);
 
-    // 4. Extract from midiUrl, originalMidiUrl, or audioUrl
     const urlCandidate = data.midiUrl || data.originalMidiUrl || data.audioUrl || data.sourceUrl;
     if (urlCandidate) {
         const parsedFile = extractFilenameFromUrl(urlCandidate);
         if (isValidTitle(parsedFile)) return cleanTitleFormat(parsedFile);
     }
 
-    // 5. YouTube video ID representation
     if (data.youtubeUrl) {
         const ytId = extractYouTubeVideoId(data.youtubeUrl);
         if (ytId) return `YouTube Video (${ytId})`;
@@ -286,7 +281,6 @@ function loadUserTranscriptions() {
         snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             
-            // Accept any completed status, case-insensitive, or any entry having a valid MIDI download URL
             const rawStatus = (data.status || "").toString().toUpperCase();
             const isCompleted = !data.status || ["COMPLETED", "READY", "DONE", "SUCCESS", "FINISHED"].includes(rawStatus);
             const midiUrl = data.midiUrl || data.midi_url || data.downloadUrl || data.url || data.originalMidiUrl;
@@ -320,7 +314,6 @@ function loadUserTranscriptions() {
             return;
         }
 
-        // Sort descending by completion/creation date
         userJobs.sort((a, b) => {
             const timeA = a.completedAt?.seconds || 0;
             const timeB = b.completedAt?.seconds || 0;
@@ -399,7 +392,12 @@ function renderTranscriptionsList(list) {
         `;
 
         row.addEventListener("click", () => {
-            openStudioWithMidi(track.midiUrl);
+            const actionBtn = row.querySelector(".trans-row__action");
+            if (actionBtn) {
+                actionBtn.textContent = "Loading...";
+                actionBtn.style.opacity = "0.7";
+            }
+            openStudioWithTrack(track);
         });
 
         fragment.appendChild(row);
@@ -408,10 +406,45 @@ function renderTranscriptionsList(list) {
     transcriptionsList.appendChild(fragment);
 }
 
-function openStudioWithMidi(midiUrl) {
-    if (!midiUrl) return;
-    localStorage.setItem("t1era_current_midi", midiUrl);
-    window.location.href = "midiano.html?midi=" + encodeURIComponent(midiUrl);
+// ==========================================
+// SEAMLESS MIDI STUDIO REDIRECTOR
+// ==========================================
+async function openStudioWithTrack(track) {
+    if (!track || !track.midiUrl) return;
+
+    let finalUrl = track.midiUrl;
+
+    // Resolve storage paths or gs:// URLs to public HTTP download URLs
+    const isStoragePath = finalUrl.startsWith("gs://") || 
+        (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://") && !finalUrl.startsWith("blob:") && !finalUrl.startsWith("data:"));
+
+    if (storage && isStoragePath) {
+        try {
+            const cleanPath = finalUrl.startsWith("gs://") 
+                ? finalUrl.replace(/^gs:\/\/[^\/]+\//, "") 
+                : finalUrl;
+            const fileRef = sRef(storage, cleanPath);
+            finalUrl = await getDownloadURL(fileRef);
+        } catch (err) {
+            console.warn("[STORAGE RESOLVE ERROR] Could not get download URL, using raw URL:", err);
+        }
+    }
+
+    // Persist to localStorage across all common key aliases
+    localStorage.setItem("t1era_current_midi", finalUrl);
+    localStorage.setItem("t1era_current_title", track.title);
+    localStorage.setItem("midiUrl", finalUrl);
+    localStorage.setItem("current_midi", finalUrl);
+
+    // Build URL query string with both MIDI URL and track title
+    const queryParams = new URLSearchParams({
+        midi: finalUrl,
+        url: finalUrl,
+        file: finalUrl,
+        title: track.title
+    });
+
+    window.location.href = "midiano.html?" + queryParams.toString();
 }
 
 // =======================================================
@@ -458,9 +491,6 @@ function makeDeezerJSONPRequest(endpoint, params) {
     });
 }
 
-// ==========================================
-// CORE DATA FETCH CONTROL
-// ==========================================
 async function fetchDeezerTracks(params = {}) {
     if (!popularGrid) return;
 
@@ -527,9 +557,6 @@ function formatDuration(seconds) {
     return `${mins}:${secs}`;
 }
 
-// ==========================================
-// POPULAR SONGS RENDERING
-// ==========================================
 function renderPopularTracks(tracks) {
     if (!popularGrid) return;
     popularGrid.innerHTML = "";
@@ -566,7 +593,7 @@ function renderPopularTracks(tracks) {
 }
 
 // ==========================================
-// STREAMS PLAYER
+// AUDIO PLAYBACK CONTROLS
 // ==========================================
 function selectAndPlayTrack(track) {
     activeTrack = track;
@@ -685,9 +712,6 @@ function updatePlayerTick() {
     if (timelineThumb) timelineThumb.style.left = `${percentage}%`;
 }
 
-// ==========================================
-// AUDIO PROGRESS TRACKERS
-// ==========================================
 audioPlayer.addEventListener("timeupdate", () => {
     if (!isRealPlayback) return;
     const current = audioPlayer.currentTime;
@@ -749,9 +773,6 @@ if (volumeTrack) {
     });
 }
 
-// ==========================================
-// FILTERS & GENRE MAPPING
-// ==========================================
 if (categoriesRow) {
     categoriesRow.addEventListener("click", (e) => {
         if (e.target.classList.contains("capsule")) {
@@ -784,9 +805,6 @@ if (searchInput) {
     });
 }
 
-// ==========================================
-// DISCLAIMER MODAL STATE CONTROL
-// ==========================================
 const disclaimerModal = document.getElementById("disclaimer-modal");
 const closeDisclaimerBtn = document.getElementById("close-disclaimer-btn");
 const acknowledgeDisclaimerBtn = document.getElementById("acknowledge-disclaimer-btn");
@@ -810,9 +828,6 @@ if (disclaimerModal) {
     }
 }
 
-// ==========================================
-// LOGOUT PROCESS
-// ==========================================
 const logoutBtn = document.getElementById("dashboard-logout-btn");
 if (logoutBtn) {
     logoutBtn.addEventListener("click", () => {
@@ -840,5 +855,5 @@ if (logoutBtn) {
     });
 }
 
-// Boot logic
+// Boot initial genre
 fetchDeezerTracksByGenre("all");
