@@ -6,8 +6,46 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { 
     ref as sRef, 
+    getBytes, 
     getDownloadURL 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+
+// ==========================================
+// INDEXEDDB DIRECT DATA BRIDGE
+// ==========================================
+const DB_NAME = "T1ERA_STUDIO_DB";
+const STORE_NAME = "midi_transfer";
+
+function openMidiDB() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = (e) => {
+            const idb = e.target.result;
+            if (!idb.objectStoreNames.contains(STORE_NAME)) {
+                idb.createObjectStore(STORE_NAME);
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+
+async function saveMidiToBridge(arrayBuffer, title) {
+    try {
+        const idb = await openMidiDB();
+        return new Promise((resolve, reject) => {
+            const tx = idb.transaction(STORE_NAME, "readwrite");
+            const store = tx.objectStore(STORE_NAME);
+            store.put(arrayBuffer, "pending_midi");
+            store.put(title, "pending_title");
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => reject(tx.error);
+        });
+    } catch (e) {
+        console.warn("[BRIDGE] IndexedDB write fallback:", e);
+        return false;
+    }
+}
 
 // ==========================================
 // CONFIGURATION & GLOBAL CONSTANTS
@@ -52,7 +90,6 @@ const volumeTrack = document.getElementById("volume-track");
 const volumeFill = document.getElementById("volume-fill");
 const volumeThumb = document.getElementById("volume-thumb");
 
-// Tab Navigation Elements
 const navHome = document.getElementById("nav-home");
 const navTranscriptions = document.getElementById("nav-transcriptions");
 const mobileNavHome = document.getElementById("mobile-nav-home");
@@ -62,7 +99,6 @@ const homeView = document.getElementById("home-view");
 const transcriptionsView = document.getElementById("transcriptions-view");
 const transcriptionsList = document.getElementById("transcriptions-list");
 
-// Audio States
 const audioPlayer = new Audio();
 let isPlaying = false;
 let isRealPlayback = false; 
@@ -79,9 +115,6 @@ if (volumeFill && volumeThumb) {
     audioPlayer.volume = currentVolume;
 }
 
-// ==========================================
-// UNIFIED DESKTOP & MOBILE TAB NAVIGATION
-// ==========================================
 function syncActiveNav(tabId) {
     document.querySelectorAll(".nav-item").forEach(item => item.classList.remove("active"));
     document.querySelectorAll(".mobile-nav-item").forEach(item => item.classList.remove("active"));
@@ -100,35 +133,11 @@ function syncActiveNav(tabId) {
     }
 }
 
-if (navHome) {
-    navHome.addEventListener("click", (e) => {
-        e.preventDefault();
-        syncActiveNav("home");
-    });
-}
-if (mobileNavHome) {
-    mobileNavHome.addEventListener("click", (e) => {
-        e.preventDefault();
-        syncActiveNav("home");
-    });
-}
+if (navHome) navHome.addEventListener("click", (e) => { e.preventDefault(); syncActiveNav("home"); });
+if (mobileNavHome) mobileNavHome.addEventListener("click", (e) => { e.preventDefault(); syncActiveNav("home"); });
+if (navTranscriptions) navTranscriptions.addEventListener("click", (e) => { e.preventDefault(); syncActiveNav("transcriptions"); });
+if (mobileNavTranscriptions) mobileNavTranscriptions.addEventListener("click", (e) => { e.preventDefault(); syncActiveNav("transcriptions"); });
 
-if (navTranscriptions) {
-    navTranscriptions.addEventListener("click", (e) => {
-        e.preventDefault();
-        syncActiveNav("transcriptions");
-    });
-}
-if (mobileNavTranscriptions) {
-    mobileNavTranscriptions.addEventListener("click", (e) => {
-        e.preventDefault();
-        syncActiveNav("transcriptions");
-    });
-}
-
-// ==========================================
-// AUTHENTICATION STATE CONTROL
-// ==========================================
 let currentUser = null;
 let isAuthReady = false;
 
@@ -165,15 +174,12 @@ if (auth) {
   });
 }
 
-// ==========================================
-// TITLE SANITIZATION & RESOLUTION ENGINE
-// ==========================================
 function isValidTitle(val) {
     if (!val || typeof val !== "string") return false;
     const clean = val.trim().toLowerCase();
     if (!clean) return false;
-    if (clean === "local uploaded track" || clean === "uploaded track" || clean === "audio" || clean === "untitled") return false;
-    if (clean.startsWith("youtube stream audio") || clean === "youtube track asset") return false;
+    if (["local uploaded track", "uploaded track", "audio", "untitled", "youtube track asset"].includes(clean)) return false;
+    if (clean.startsWith("youtube stream audio")) return false;
     return true;
 }
 
@@ -216,9 +222,7 @@ function extractYouTubeVideoId(url) {
     try {
         const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|[?&]v=)([^#&?]*).*/;
         const match = url.match(regExp);
-        if (match && match[2].length === 11) {
-            return match[2];
-        }
+        if (match && match[2].length === 11) return match[2];
     } catch (e) {}
     return null;
 }
@@ -249,9 +253,6 @@ function resolveJobTitle(data, docId) {
     return `Transcription Track #${docId ? docId.substring(0, 6) : "Studio"}`;
 }
 
-// ==========================================
-// FIRESTORE TRANSCRIPTIONS SYNC
-// ==========================================
 let snapshotUnsubscribe = null;
 
 function loadUserTranscriptions() {
@@ -280,7 +281,6 @@ function loadUserTranscriptions() {
 
         snapshot.forEach((docSnap) => {
             const data = docSnap.data();
-            
             const rawStatus = (data.status || "").toString().toUpperCase();
             const isCompleted = !data.status || ["COMPLETED", "READY", "DONE", "SUCCESS", "FINISHED"].includes(rawStatus);
             const midiUrl = data.midiUrl || data.midi_url || data.downloadUrl || data.url || data.originalMidiUrl;
@@ -393,11 +393,7 @@ function renderTranscriptionsList(list) {
 
         row.addEventListener("click", () => {
             const actionBtn = row.querySelector(".trans-row__action");
-            if (actionBtn) {
-                actionBtn.textContent = "Loading...";
-                actionBtn.style.opacity = "0.7";
-            }
-            openStudioWithTrack(track);
+            openStudioWithTrack(track, actionBtn);
         });
 
         fragment.appendChild(row);
@@ -407,40 +403,68 @@ function renderTranscriptionsList(list) {
 }
 
 // ==========================================
-// SEAMLESS MIDI STUDIO REDIRECTOR
+// SEAMLESS ARCHITECTURAL MIDI TRANSFER
 // ==========================================
-async function openStudioWithTrack(track) {
-    if (!track || !track.midiUrl) return;
+async function openStudioWithTrack(track, clickedBtn) {
+    if (!track || !track.midiUrl) {
+        alert("MIDI file URL not available for this track.");
+        return;
+    }
 
+    if (clickedBtn) {
+        clickedBtn.innerHTML = `Loading...`;
+        clickedBtn.style.opacity = "0.7";
+        clickedBtn.disabled = true;
+    }
+
+    let arrayBuffer = null;
     let finalUrl = track.midiUrl;
 
-    // Resolve storage paths or gs:// URLs to public HTTP download URLs
-    const isStoragePath = finalUrl.startsWith("gs://") || 
-        (!finalUrl.startsWith("http://") && !finalUrl.startsWith("https://") && !finalUrl.startsWith("blob:") && !finalUrl.startsWith("data:"));
-
-    if (storage && isStoragePath) {
+    // STEP 1: If Storage is available, acquire binary ArrayBuffer directly with auth SDK
+    if (storage) {
         try {
-            const cleanPath = finalUrl.startsWith("gs://") 
-                ? finalUrl.replace(/^gs:\/\/[^\/]+\//, "") 
-                : finalUrl;
+            let cleanPath = finalUrl;
+            if (cleanPath.startsWith("gs://")) {
+                cleanPath = cleanPath.replace(/^gs:\/\/[^\/]+\//, "");
+            }
             const fileRef = sRef(storage, cleanPath);
-            finalUrl = await getDownloadURL(fileRef);
-        } catch (err) {
-            console.warn("[STORAGE RESOLVE ERROR] Could not get download URL, using raw URL:", err);
+            arrayBuffer = await getBytes(fileRef);
+            console.log("[T1ERA BRIDGE] Acquired MIDI bytes via Storage SDK:", arrayBuffer.byteLength, "bytes");
+        } catch (storageErr) {
+            console.warn("[T1ERA BRIDGE] Storage getBytes bypassed or failed:", storageErr.message);
         }
     }
 
-    // Persist to localStorage across all common key aliases
+    // STEP 2: Fallback to direct HTTP fetch if getBytes was not applicable
+    if (!arrayBuffer && (finalUrl.startsWith("http://") || finalUrl.startsWith("https://") || finalUrl.startsWith("blob:"))) {
+        try {
+            const res = await fetch(finalUrl);
+            if (res.ok) {
+                arrayBuffer = await res.arrayBuffer();
+                console.log("[T1ERA BRIDGE] Acquired MIDI bytes via fetch:", arrayBuffer.byteLength, "bytes");
+            }
+        } catch (fetchErr) {
+            console.warn("[T1ERA BRIDGE] Direct fetch failed (likely CORS on storage):", fetchErr.message);
+        }
+    }
+
+    // STEP 3: Write the ArrayBuffer into IndexedDB Bridge
+    if (arrayBuffer && arrayBuffer.byteLength > 0) {
+        try {
+            await saveMidiToBridge(arrayBuffer, track.title);
+            console.log("[T1ERA BRIDGE] MIDI written to IndexedDB. Studio will load with 0 network latency.");
+        } catch (idbErr) {
+            console.warn("[T1ERA BRIDGE] IndexedDB bridge save failed:", idbErr);
+        }
+    }
+
+    // STEP 4: Store metadata fallbacks
     localStorage.setItem("t1era_current_midi", finalUrl);
     localStorage.setItem("t1era_current_title", track.title);
-    localStorage.setItem("midiUrl", finalUrl);
-    localStorage.setItem("current_midi", finalUrl);
 
-    // Build URL query string with both MIDI URL and track title
     const queryParams = new URLSearchParams({
+        source: arrayBuffer ? "bridge" : "url",
         midi: finalUrl,
-        url: finalUrl,
-        file: finalUrl,
         title: track.title
     });
 
@@ -448,7 +472,7 @@ async function openStudioWithTrack(track) {
 }
 
 // =======================================================
-// DEEZER MUSIC API VIA JSONP (KEYLESS CORS BYPASS)
+// DEEZER MUSIC API VIA JSONP
 // =======================================================
 function makeDeezerJSONPRequest(endpoint, params) {
     return new Promise((resolve, reject) => {
@@ -521,7 +545,7 @@ async function fetchDeezerTracks(params = {}) {
             `;
         }
     } catch (error) {
-        console.warn("[HYBRID DATA RESOLVER] Routing locally. Reason:", error.message);
+        console.warn("[HYBRID DATA RESOLVER] Routing locally:", error.message);
         
         if (params.q) {
             const searchFiltered = searchLocalMockTracks(params.q);
@@ -592,9 +616,6 @@ function renderPopularTracks(tracks) {
     popularGrid.appendChild(fragment);
 }
 
-// ==========================================
-// AUDIO PLAYBACK CONTROLS
-// ==========================================
 function selectAndPlayTrack(track) {
     activeTrack = track;
     if (playerAlbumArt) playerAlbumArt.src = track.art;
@@ -820,12 +841,8 @@ if (disclaimerModal) {
         localStorage.setItem("t1era_disclaimer_acknowledged", "true");
     };
 
-    if (closeDisclaimerBtn) {
-        closeDisclaimerBtn.addEventListener("click", closePopup);
-    }
-    if (acknowledgeDisclaimerBtn) {
-        acknowledgeDisclaimerBtn.addEventListener("click", closePopup);
-    }
+    if (closeDisclaimerBtn) closeDisclaimerBtn.addEventListener("click", closePopup);
+    if (acknowledgeDisclaimerBtn) acknowledgeDisclaimerBtn.addEventListener("click", closePopup);
 }
 
 const logoutBtn = document.getElementById("dashboard-logout-btn");
@@ -833,9 +850,7 @@ if (logoutBtn) {
     logoutBtn.addEventListener("click", () => {
         if (confirm("Disconnect session?")) {
             audioPlayer.pause();
-            if (snapshotUnsubscribe) {
-                snapshotUnsubscribe();
-            }
+            if (snapshotUnsubscribe) snapshotUnsubscribe();
 
             if (auth) {
               signOut(auth)
@@ -855,5 +870,4 @@ if (logoutBtn) {
     });
 }
 
-// Boot initial genre
 fetchDeezerTracksByGenre("all");
