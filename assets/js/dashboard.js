@@ -419,19 +419,40 @@ async function openStudioWithTrack(track, clickedBtn) {
 
     let arrayBuffer = null;
     let finalUrl = track.midiUrl;
+    let fileRef = null;
 
-    // STEP 1: If Storage is available, acquire binary ArrayBuffer directly with auth SDK
+    // Build a Storage ref up front (works for both gs:// URIs and Storage download URLs)
     if (storage) {
         try {
-            let cleanPath = finalUrl;
-            if (cleanPath.startsWith("gs://")) {
-                cleanPath = cleanPath.replace(/^gs:\/\/[^\/]+\//, "");
+            let refPath = finalUrl;
+            if (refPath.startsWith("gs://")) {
+                refPath = refPath.replace(/^gs:\/\/[^\/]+\//, "");
             }
-            const fileRef = sRef(storage, cleanPath);
+            fileRef = sRef(storage, refPath);
+        } catch (refErr) {
+            console.warn("[T1ERA BRIDGE] Could not create Storage ref:", refErr.message);
+            fileRef = null;
+        }
+    }
+
+    // STEP 1: If Storage is available, acquire binary ArrayBuffer directly with auth SDK
+    if (fileRef) {
+        try {
             arrayBuffer = await getBytes(fileRef);
             console.log("[T1ERA BRIDGE] Acquired MIDI bytes via Storage SDK:", arrayBuffer.byteLength, "bytes");
         } catch (storageErr) {
             console.warn("[T1ERA BRIDGE] Storage getBytes bypassed or failed:", storageErr.message);
+        }
+    }
+
+    // STEP 1b: A raw gs:// URI is not fetchable over HTTP. If that's what we started with,
+    // resolve it to a real https download URL so midiano.html always gets a usable link,
+    // even when the byte-bridge above fails or is unavailable.
+    if (finalUrl.startsWith("gs://") && fileRef) {
+        try {
+            finalUrl = await getDownloadURL(fileRef);
+        } catch (urlErr) {
+            console.warn("[T1ERA BRIDGE] Could not resolve gs:// to a download URL:", urlErr.message);
         }
     }
 
@@ -456,6 +477,17 @@ async function openStudioWithTrack(track, clickedBtn) {
         } catch (idbErr) {
             console.warn("[T1ERA BRIDGE] IndexedDB bridge save failed:", idbErr);
         }
+    } else if (finalUrl.startsWith("gs://")) {
+        // Neither the byte-bridge nor a download URL resolution worked - a gs:// URI
+        // cannot be handed to midiano.html as-is, so stop here instead of redirecting to a dead link.
+        console.error("[T1ERA BRIDGE] Unable to resolve a usable MIDI source for this track.");
+        if (clickedBtn) {
+            clickedBtn.innerHTML = `${studioIconSvg} Open Studio`;
+            clickedBtn.style.opacity = "1";
+            clickedBtn.disabled = false;
+        }
+        alert("This track's MIDI file couldn't be loaded. Please try again.");
+        return;
     }
 
     // STEP 4: Store metadata fallbacks
