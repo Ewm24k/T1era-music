@@ -564,13 +564,13 @@ function renderSheetMusic() {
             }
         }
 
-        // [FEATURE 1] Render Sharp (♯) Symbol inside Section 1 for black/sharp notes
+        // Render Sharp (♯) Symbol inside Section 1 for black/sharp notes
         const isSharp = IS_BLACK_KEY[pitch % 12] || (note.name && note.name.includes("#"));
         if (isSharp) {
             svgContent += renderSharpSVG(x - 15, y, color, 1.0, `sheet-sharp-${index}`);
         }
 
-        // [FEATURE 2] Render Hold Tail Line Curl to show Long Hold Start and Release
+        // Render Hold Tail Line Curl to show Long Hold Start and Release
         const isLongHold = (note.duration >= 0.35) || (note.durationTicks && note.durationTicks >= ppq * 0.75);
         if (isLongHold && w >= 18) {
             svgContent += renderHoldLineWithCurlSVG(x, x + w, y, stemDirection, color, 1.0, `sheet-hold-curl-${index}`);
@@ -613,10 +613,20 @@ function renderSheetMusic() {
 }
 
 // =========================================================================
-// SECTION 2: Portrait Wrapped Layout with Sharps & Long Hold Line Curls
+// SECTION 2: Portrait Wrapped Layout with Sharps, Line Curls & Pro Switch
 // =========================================================================
 function renderVerticalSheetMusic(targetContainerId) {
     if (!midiData || activeNotesMemory.length === 0) return;
+
+    // Dual-View Style Switcher Check: Timeline vs MuseStudio Pro
+    const selectorId = (targetContainerId === 'sheet-music-notation-max') ? 'select-sheet-style-max' : 'select-sheet-style-second';
+    const styleSelector = document.getElementById(selectorId);
+    const chosenStyle = styleSelector ? styleSelector.value : 'timeline';
+
+    if (chosenStyle === 'pro' && typeof renderProMuseScore === 'function') {
+        renderProMuseScore(targetContainerId);
+        return;
+    }
 
     if (!resolvedSheetTitle && midiData) {
         resolveSheetTitle().then(() => {
@@ -843,14 +853,14 @@ function renderVerticalSheetMusic(targetContainerId) {
             }
         }
 
-        // [FEATURE 1] Render Sharp (♯) Symbol inside Section 2
+        // Render Sharp (♯) Symbol inside Section 2
         const isSharp = IS_BLACK_KEY[pitch % 12] || (note.name && note.name.includes("#"));
         const sharpColor = showColors ? color : "#111115";
         if (isSharp) {
             svgContent += renderSharpSVG(noteX - 12 * scale, y, sharpColor, scale, `${targetContainerId}-sharp-${index}`);
         }
 
-        // [FEATURE 2] Render Hold Tail Line Curl to show Long Hold Start and Release
+        // Render Hold Tail Line Curl to show Long Hold Start and Release
         const isLongHold = (note.duration >= 0.35) || (note.durationTicks && note.durationTicks >= ppq * 0.75);
         if (isLongHold && noteW >= 16 * scale) {
             svgContent += renderHoldLineWithCurlSVG(noteX, noteX + noteW, y, stemDirection, sharpColor, scale, `${targetContainerId}-hold-curl-${index}`);
@@ -2110,6 +2120,31 @@ function resetStudioNoteHighlights() {
             holdCurl.querySelectorAll('circle').forEach(c => c.setAttribute('fill', defaultColor));
         }
     });
+}
+
+// --- Dynamic Event Listeners for Dual View Styles Synchronization ---
+function setupStyleSwitcherEvents() {
+    const selectStyleSecond = document.getElementById('select-sheet-style-second');
+    const selectStyleMax = document.getElementById('select-sheet-style-max');
+
+    if (selectStyleSecond) {
+        selectStyleSecond.addEventListener('change', (e) => {
+            if (selectStyleMax) selectStyleMax.value = e.target.value;
+            renderVerticalSheetMusic('sheet-music-notation-vertical');
+        });
+    }
+    if (selectStyleMax) {
+        selectStyleMax.addEventListener('change', (e) => {
+            if (selectStyleSecond) selectStyleSecond.value = e.target.value;
+            renderVerticalSheetMusic('sheet-music-notation-max');
+        });
+    }
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", setupStyleSwitcherEvents);
+} else {
+    setupStyleSwitcherEvents();
 }
 
 // --- Initialize Sequence Runner ---
