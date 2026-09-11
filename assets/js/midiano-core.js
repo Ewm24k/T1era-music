@@ -1072,7 +1072,21 @@ function setupEventListeners() {
     }
 }
 
+// FIX: guard against init() running more than once. This file's init() is
+// invoked from window "load" below, but midiano-sheet.js also calls init()
+// directly once it finishes loading. Without this guard, setupEventListeners()
+// ran twice, which silently attached every button's click handler twice.
+// For toggle-based playback (Section 1 "Play Score", Section 2 "Play Vert.
+// Score", the maximized view's "Play Score", and Studio playback) this meant
+// a single click fired the play handler AND the pause/stop handler back to
+// back in the same click, so the note immediately started and then stopped
+// again, appearing as if playback never started. Making init() idempotent
+// fixes all of those buttons without touching any other logic.
+let hasInitializedCore = false;
 function init() {
+    if (hasInitializedCore) return;
+    hasInitializedCore = true;
+
     setupAudioEngine();
     if (typeof handleResize === "function") handleResize();
     setupEventListeners();
