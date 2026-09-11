@@ -126,10 +126,8 @@ function renderHoldLineWithCurlSVG(startX, endX, y, stemDirection, color, scale 
     const curlR = 4.0 * scale;
 
     let out = `<g ${idAttr} class="hold-curl-group">`;
-    // Start anchor bead at notehead onset
     out += `<circle cx="${startX}" cy="${holdY}" r="${1.5 * scale}" fill="${color}" opacity="0.85" />`;
 
-    // Elegant arching tie path leading into an expressive line curl loop at the release end
     const d = `M ${startX} ${holdY} ` +
               `Q ${midX} ${holdY + arcDip} ${endX - curlR * 1.5} ${holdY + arcDip * 0.4} ` +
               `Q ${endX} ${holdY + arcDip * 0.2} ${endX} ${holdY - curlR * dir * 0.6} ` +
@@ -137,13 +135,202 @@ function renderHoldLineWithCurlSVG(startX, endX, y, stemDirection, color, scale 
               `C ${endX - curlR * 1.4} ${holdY - curlR * dir * 0.1} ${endX - curlR * 0.5} ${holdY - curlR * dir * 0.2} ${endX - curlR * 0.5} ${holdY - curlR * dir * 0.6}`;
 
     out += `<path d="${d}" fill="none" stroke="${color}" stroke-width="${1.3 * scale}" stroke-linecap="round" stroke-linejoin="round" opacity="0.85" />`;
-    
-    // Release boundary tick
     out += `<line x1="${endX}" y1="${holdY - 3 * scale}" x2="${endX}" y2="${holdY + 3 * scale}" stroke="${color}" stroke-width="${1.0 * scale}" opacity="0.6" stroke-linecap="round" />`;
     out += `</g>`;
 
     return out;
 }
+
+// =========================================================================
+// EMBEDDED MUSESTUDIO / MUSESCORE ENGRAVING ENGINE
+// =========================================================================
+
+function midiToProAbcPitch(midi) {
+    const pitchNames = ["C", "^C", "D", "^D", "E", "F", "^F", "G", "^G", "A", "^A", "B"];
+    const p = midi % 12;
+    const oct = Math.floor(midi / 12) - 1; // Middle C (60) -> oct = 4
+    const name = pitchNames[p];
+
+    if (oct === 4) {
+        return name;
+    } else if (oct > 4) {
+        const acc = name.startsWith("^") ? "^" : "";
+        const letter = (name.startsWith("^") ? name.slice(1) : name).toLowerCase();
+        const primes = "'".repeat(oct - 5);
+        return acc + letter + primes;
+    } else {
+        const commas = ",".repeat(Math.max(0, 4 - oct));
+        return name + commas;
+    }
+}
+
+function buildMeasureVoiceAbc(notes, mStart, mEnd, eighthSec, totalMeasureUnits) {
+    if (!notes || notes.length === 0) {
+        return `z${totalMeasureUnits}`;
+    }
+    
+    const clusters = [];
+    let curCluster = [notes[0]];
+    for (let i = 1; i < notes.length; i++) {
+        if (Math.abs(notes[i].time - curCluster[0].time) < 0.05) {
+            curCluster.push(notes[i]);
+        } else {
+            clusters.push(curCluster);
+            curCluster = [notes[i]];
+        }
+    }
+    clusters.push(curCluster);
+
+    let res = "";
+    let curTime = mStart;
+    let usedUnits = 0;
+
+    for (let c of clusters) {
+        const onset = c[0].time;
+        if (onset - curTime >= eighthSec * 0.75) {
+            const restUnits = Math.round((onset - curTime) / eighthSec);
+            if (restUnits > 0 && usedUnits + restUnits <= totalMeasureUnits) {
+                res += (restUnits === 1 ? "z " : `z${restUnits} `);
+                usedUnits += restUnits;
+            }
+        }
+
+        if (usedUnits >= totalMeasureUnits) break;
+
+        const dur = c.reduce((max, n) => Math.max(max, n.duration), 0);
+        let noteUnits = Math.max(1, Math.round(dur / eighthSec));
+        if (usedUnits + noteUnits > totalMeasureUnits) {
+            noteUnits = totalMeasureUnits - usedUnits;
+        }
+
+        const durSuffix = noteUnits === 1 ? "" : `${noteUnits}`;
+        if (c.length === 1) {
+            res += `${midiToProAbcPitch(c[0].midi)}${durSuffix} `;
+        } else {
+            const chordStr = c.map(n => midiToProAbcPitch(n.midi)).join("");
+            res += `[${chordStr}]${durSuffix} `;
+        }
+
+        usedUnits += noteUnits;
+        curTime = onset + (noteUnits * eighthSec);
+    }
+
+    if (usedUnits < totalMeasureUnits) {
+        const rem = totalMeasureUnits - usedUnits;
+        res += (rem === 1 ? "z" : `z${rem}`);
+    }
+
+    return res.trim();
+}
+
+function generateMuseStudioAbc() {
+    if (!activeNotesMemory || activeNotesMemory.length === 0) return "";
+
+    const bpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0])
+        ? Math.round(midiData.header.tempos[0].bpm)
+        : 120;
+
+    let timeSig = "4/4";
+    let beatsPerMeasure = 4;
+    if (midiData && midiData.header && midiData.header.timeSignatures && midiData.header.timeSignatures.length > 0) {
+        const ts = midiData.header.timeSignatures[0].timeSignature;
+        if (Array.isArray(ts) && ts.length === 2) {
+            beatsPerMeasure = ts[0];
+            timeSig = `${ts[0]}/${ts[1]}`;
+        }
+    }
+
+    const title = resolvedSheetTitle || (midiData && midiData.name && midiData.name !== "Untitled" ? midiData.name : "Piano Score");
+    const totalMeasureUnits = beatsPerMeasure * 2; // In L:1/8
+    const eighthSec = (60 / bpm) / 2;
+    const measureSec = eighthSec * totalMeasureUnits;
+    const totalDurationSecs = Math.max(1, totalDuration || 10);
+    const totalMeasures = Math.ceil(totalDurationSecs / measureSec) || 1;
+
+    let abc = `X:1\n`;
+    abc += `T:${title}\n`;
+    abc += `C:T1ERA MuseStudio Ai\n`;
+    abc += `M:${timeSig}\n`;
+    abc += `L:1/8\n`;
+    abc += `Q:1/4=${bpm}\n`;
+    abc += `K:C\n`;
+    abc += `%%staves {(1) (2)}\n`;
+    abc += `V:1 clef=treble\n`;
+    abc += `V:2 clef=bass\n`;
+
+    let v1Line = "";
+    let v2Line = "";
+
+    for (let m = 0; m < totalMeasures; m++) {
+        const mStart = m * measureSec;
+        const mEnd = (m + 1) * measureSec;
+
+        const rhNotes = activeNotesMemory.filter(n => n.midi >= 60 && n.time >= mStart && n.time < mEnd);
+        const lhNotes = activeNotesMemory.filter(n => n.midi < 60 && n.time >= mStart && n.time < mEnd);
+
+        v1Line += buildMeasureVoiceAbc(rhNotes, mStart, mEnd, eighthSec, totalMeasureUnits) + " | ";
+        v2Line += buildMeasureVoiceAbc(lhNotes, mStart, mEnd, eighthSec, totalMeasureUnits) + " | ";
+
+        // Output Grand Staff systems grouped every 4 measures
+        if ((m + 1) % 4 === 0 || m === totalMeasures - 1) {
+            abc += `V:1\n${v1Line.trim()}\n`;
+            abc += `V:2\n${v2Line.trim()}\n`;
+            v1Line = "";
+            v2Line = "";
+        }
+    }
+
+    return abc;
+}
+
+function renderProMuseScore(targetContainerId) {
+    const container = document.getElementById(targetContainerId);
+    if (!container) return;
+
+    if (typeof ABCJS === "undefined") {
+        container.innerHTML = "<div style='color:#3b82f6; padding:30px; text-align:center; font-weight:600;'>Loading MuseStudio Engraver...</div>";
+        setTimeout(() => {
+            if (typeof ABCJS !== "undefined") renderProMuseScore(targetContainerId);
+        }, 500);
+        return;
+    }
+
+    const abcString = generateMuseStudioAbc();
+    if (!abcString) {
+        container.innerHTML = "<div style='color:#9ca3af; padding:20px; text-align:center;'>No notes available to engrave.</div>";
+        return;
+    }
+
+    container.innerHTML = "";
+
+    const scrollFrame = document.getElementById('sheet-tab-notation-content-vertical');
+    const availableWidth = scrollFrame?.clientWidth || container.clientWidth || (window.innerWidth - 60);
+
+    const visualOptions = {
+        responsive: "resize",
+        add_classes: true,
+        staffwidth: Math.max(300, availableWidth - 40),
+        scale: 1.05,
+        paddingtop: 15,
+        paddingbottom: 25,
+        paddingleft: 15,
+        paddingright: 15
+    };
+
+    ABCJS.renderAbc(targetContainerId, abcString, visualOptions);
+
+    const renderedSvg = container.querySelector("svg");
+    if (renderedSvg) {
+        renderedSvg.style.backgroundColor = "#ffffff";
+        renderedSvg.style.borderRadius = "8px";
+        renderedSvg.style.boxShadow = "0 4px 15px rgba(0,0,0,0.12)";
+        renderedSvg.style.display = "block";
+        renderedSvg.style.margin = "0 auto";
+        renderedSvg.style.width = "100%";
+    }
+}
+
+window.renderProMuseScore = renderProMuseScore;
 
 // Intelligent SVG text wrapper helper
 function wrapSvgText(text, maxCharsPerLine) {
@@ -613,7 +800,7 @@ function renderSheetMusic() {
 }
 
 // =========================================================================
-// SECTION 2: Portrait Wrapped Layout with Sharps, Line Curls & Pro Switch
+// SECTION 2: Portrait Wrapped Layout (FULL-WIDTH EXPANSION & STYLE SWITCH)
 // =========================================================================
 function renderVerticalSheetMusic(targetContainerId) {
     if (!midiData || activeNotesMemory.length === 0) return;
@@ -623,7 +810,7 @@ function renderVerticalSheetMusic(targetContainerId) {
     const styleSelector = document.getElementById(selectorId);
     const chosenStyle = styleSelector ? styleSelector.value : 'timeline';
 
-    if (chosenStyle === 'pro' && typeof renderProMuseScore === 'function') {
+    if (chosenStyle === 'pro') {
         renderProMuseScore(targetContainerId);
         return;
     }
@@ -642,34 +829,30 @@ function renderVerticalSheetMusic(targetContainerId) {
     const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
     const marginLeft = 100;
 
+    // 1. DYNAMIC FULL-WIDTH EXPANSION: Fills 100% of the container before and after maximize
+    const targetEl = document.getElementById(targetContainerId);
+    const parentEl = targetEl?.parentElement;
+
     let containerWidth = 950;
-    const parentWidth = document.getElementById(targetContainerId)?.parentElement?.clientWidth || window.innerWidth;
-    
     if (targetContainerId === 'sheet-music-notation-max') {
-        const container = document.getElementById('max-modal-scroll-container');
-        if (container && container.clientWidth) {
-            containerWidth = Math.max(320, container.clientWidth - 40);
-        } else {
-            containerWidth = Math.max(1200, window.innerWidth * 0.88);
-        }
+        const container = document.getElementById('max-modal-scroll-container') || parentEl;
+        containerWidth = Math.max(320, (container?.clientWidth || window.innerWidth * 0.9) - 40);
     } else {
-        if (parentWidth < 950) {
-            containerWidth = Math.max(320, parentWidth - 20);
-        }
+        // Use the full available width of Section 2 scroll frame (no 950px cap!)
+        const scrollFrame = document.getElementById('sheet-tab-notation-content-vertical') || parentEl;
+        const available = scrollFrame?.clientWidth || document.getElementById('second-sheet-section')?.clientWidth || (window.innerWidth - 60);
+        containerWidth = Math.max(320, available - 24);
     }
 
-    const isVerticalOrMax = (targetContainerId === 'sheet-music-notation-vertical' || targetContainerId === 'sheet-music-notation-max');
     const isPhoneView = containerWidth < 768;
-    const shouldScale = isVerticalOrMax && isPhoneView;
+    const scale = isPhoneView ? 0.7 : 1.0;
+    const systemDuration = isPhoneView ? 6 : 10;
+    const numSystems = Math.ceil(totalDurationSecs / systemDuration) || 1;
 
-    const scale = shouldScale ? 0.65 : 1.0;
-    const systemDuration = shouldScale ? 6 : 10;
-    const numSystems = Math.ceil(totalDurationSecs / systemDuration);
-
-    const systemHeight = shouldScale ? 140 : 220;
-    const rhStaffCenterY = shouldScale ? 40 : 60;
-    const lhStaffCenterY = shouldScale ? 100 : 160;
-    const dy = shouldScale ? 2.0 : 3.0;
+    const systemHeight = isPhoneView ? 150 : 220;
+    const rhStaffCenterY = isPhoneView ? 42 : 60;
+    const lhStaffCenterY = isPhoneView ? 105 : 160;
+    const dy = isPhoneView ? 2.2 : 3.0;
     
     const svgWidth = containerWidth;
     let marginLeftValue = marginLeft;
@@ -681,11 +864,6 @@ function renderVerticalSheetMusic(targetContainerId) {
     }
     
     const systemWidth = svgWidth - marginLeftValue - marginRightValue;
-    const svgHeight = numSystems * systemHeight + 170; 
-
-    const chkShowColors = document.getElementById('chk-show-colors');
-    const showColors = chkShowColors ? chkShowColors.checked : false;
-
     const startPadding = 45;
     const localPixelsPerSecond = (systemWidth - startPadding * scale) / systemDuration;
 
@@ -731,14 +909,14 @@ function renderVerticalSheetMusic(targetContainerId) {
             svgContent += `<line x1="${marginLeftValue}" y1="${y}" x2="${marginLeftValue + systemWidth}" y2="${y}" stroke="#9ca3af" stroke-width="${0.75 * scale}" />`;
         });
 
-        const bracketX = marginLeftValue - (shouldScale ? 30 * scale : 80);
+        const bracketX = marginLeftValue - (isPhoneView ? 30 * scale : 80);
         svgContent += `<line x1="${bracketX}" y1="${yOffset + (rhStaffCenterY - 24) * scale}" x2="${bracketX}" y2="${yOffset + (lhStaffCenterY + 27) * scale}" stroke="#111115" stroke-width="${1.5 * scale}" />`;
         
-        const labelX = marginLeftValue - (shouldScale ? 22 * scale : 60);
+        const labelX = marginLeftValue - (isPhoneView ? 22 * scale : 60);
         svgContent += `<text x="${labelX}" y="${yOffset + rhStaffCenterY + 5 * scale}" fill="#111115" font-size="${14 * scale}" font-weight="bold" font-family="-apple-system, sans-serif">RH</text>`;
         svgContent += `<text x="${labelX}" y="${yOffset + lhStaffCenterY + 5 * scale}" fill="#111115" font-size="${14 * scale}" font-weight="bold" font-family="-apple-system, sans-serif">LH</text>`;
 
-        const clefX = marginLeftValue - (shouldScale ? 12 * scale : 30);
+        const clefX = marginLeftValue - (isPhoneView ? 12 * scale : 30);
         svgContent += `
         <g transform="translate(${clefX}, ${yOffset + rhStaffCenterY}) scale(${scale})" stroke="#111115" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round" stroke-linejoin="round">
             <path d="M 5,-40 L 5,30 C 5,38 0,42 -5,42 C -9,42 -12,38 -12,34 C -12,30 -9,27 -6,27 C -3,27 0,31 0,34" />
@@ -756,7 +934,7 @@ function renderVerticalSheetMusic(targetContainerId) {
         </g>`;
 
         if (i === 0) {
-            const tsX = marginLeftValue + (shouldScale ? 10 * scale : 12);
+            const tsX = marginLeftValue + (isPhoneView ? 10 * scale : 12);
             svgContent += `
             <g id="${targetContainerId}-time-signature-treble" fill="#111115" stroke="none">
                 <text x="${tsX}" y="${yOffset + rhStaffCenterY - 4 * scale}" font-family="Georgia, serif" font-size="${24 * scale}" font-weight="bold" text-anchor="middle">${timeSignatureNum}</text>
@@ -905,7 +1083,7 @@ function renderVerticalSheetMusic(targetContainerId) {
     svgContent += `<line x1="${endX + 3 * scale}" y1="${lastSystemYOffset + (rhStaffCenterY - 18) * scale}" x2="${endX + 3 * scale}" y2="${lastSystemYOffset + (lhStaffCenterY + 21) * scale}" stroke="#111115" stroke-width="${2.8 * scale}" />`;
 
     svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeftValue + startPadding * scale}" y1="10" x2="${marginLeftValue + startPadding * scale}" y2="${svgHeightVal - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
-    svgContent += `<text x="${svgWidth / 2}" y="${svgHeight - 15}" text-anchor="middle" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">(C) T1ERA Music Ai</text>`;
+    svgContent += `<text x="${svgWidth / 2}" y="${svgHeightVal - 15}" text-anchor="middle" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">(C) T1ERA Music Ai</text>`;
 
     const svgString = `<svg width="${svgWidth}" height="${svgHeightVal}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">${svgContent}</svg>`;
     document.getElementById(targetContainerId).innerHTML = svgString;
@@ -937,20 +1115,16 @@ function startVerticalPlayback(targetContainerId) {
     resetVerticalNoteHighlights(targetContainerId);
 
     const marginLeft = 100;
-    let containerWidth = 950;
-    const parentWidth = document.getElementById(targetContainerId)?.parentElement?.clientWidth || window.innerWidth;
+    const parentEl = document.getElementById(targetContainerId)?.parentElement;
     
+    let containerWidth = 950;
     if (targetContainerId === 'sheet-music-notation-max') {
-        const container = document.getElementById('max-modal-scroll-container');
-        if (container && container.clientWidth) {
-            containerWidth = Math.max(320, container.clientWidth - 60);
-        } else {
-            containerWidth = Math.max(1200, window.innerWidth * 0.88);
-        }
+        const container = document.getElementById('max-modal-scroll-container') || parentEl;
+        containerWidth = Math.max(320, (container?.clientWidth || window.innerWidth * 0.9) - 40);
     } else {
-        if (parentWidth < 950) {
-            containerWidth = Math.max(320, parentWidth - 20);
-        }
+        const scrollFrame = document.getElementById('sheet-tab-notation-content-vertical') || parentEl;
+        const available = scrollFrame?.clientWidth || document.getElementById('second-sheet-section')?.clientWidth || (window.innerWidth - 60);
+        containerWidth = Math.max(320, available - 24);
     }
     
     let localMarginLeft = marginLeft;
@@ -960,15 +1134,12 @@ function startVerticalPlayback(targetContainerId) {
         localMarginRight = 15;
     }
     
-    const isVerticalOrMax = (targetContainerId === 'sheet-music-notation-vertical' || targetContainerId === 'sheet-music-notation-max');
     const isPhoneView = containerWidth < 768;
-    const shouldScale = isVerticalOrMax && isPhoneView;
-
-    const scale = shouldScale ? 0.65 : 1.0;
-    const systemDuration = shouldScale ? 6 : 10;
-    const systemHeight = shouldScale ? 140 : 220;
-    const rhStaffCenterY = shouldScale ? 40 : 60;
-    const lhStaffCenterY = shouldScale ? 100 : 160;
+    const scale = isPhoneView ? 0.7 : 1.0;
+    const systemDuration = isPhoneView ? 6 : 10;
+    const systemHeight = isPhoneView ? 150 : 220;
+    const rhStaffCenterY = isPhoneView ? 42 : 60;
+    const lhStaffCenterY = isPhoneView ? 105 : 160;
 
     const startPadding = 45;
     const systemWidth = containerWidth - localMarginLeft - localMarginRight;
@@ -1165,11 +1336,8 @@ function stopVerticalPlayback() {
         const container = document.getElementById(activeVerticalContainerId);
         const containerWidth = container?.parentElement?.clientWidth || window.innerWidth;
         
-        const isMaximizedView = (activeVerticalContainerId === 'sheet-music-notation-max');
         const isPhoneView = containerWidth < 768;
-        const shouldScale = isMaximizedView && isPhoneView;
-        
-        const scale = shouldScale ? 0.65 : 1.0;
+        const scale = isPhoneView ? 0.7 : 1.0;
         const startPadding = 45;
 
         const cursor = document.getElementById(`${activeVerticalContainerId}-playback-cursor`);
