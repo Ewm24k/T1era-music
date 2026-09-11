@@ -62,7 +62,7 @@
                 border: 1px solid rgba(255, 255, 255, 0.15) !important;
                 border-radius: 12px !important;
                 box-shadow: 0 25px 65px rgba(0, 0, 0, 0.95) !important;
-                z-index: 9999 !important; /* Ensure it stays fully above all canvases and popup container structures */
+                z-index: 9999 !important;
                 pointer-events: auto !important;
                 opacity: 1 !important;
             }
@@ -84,7 +84,6 @@
     <div id="control-panel">
         <!-- Sleek Modern Collapsible Mobile Header Row -->
         <div class="mobile-header-row">
-            <!-- Restored blank title element for external script fetch handling with no startup text -->
             <span id="mobile-track-title"></span>
             <button id="btn-expand-tools" type="button">
                 <span>Show Tools</span>
@@ -199,7 +198,7 @@
     <!-- Sheet Music Overlay Popup Container -->
     <div id="sheet-modal">
         <div id="sheet-content">
-            <!-- New Popup Responsive Header -->
+            <!-- Popup Responsive Header -->
             <div class="popup-header-container">
                 <div class="popup-title-bar">
                     <span class="popup-title">Sheet Music Console</span>
@@ -224,7 +223,7 @@
             </div>
             
             <div id="sheet-tab-notation-content">
-                <!-- Section 1 (Horizontal Staff) -->
+                <!-- Section 1 (Horizontal Staff - Preserved Original Dark Flow) -->
                 <div style="margin-bottom: 25px; border-bottom: 1px solid var(--panel-border); padding-bottom: 25px;">
                     <h3 style="color: var(--text-color); margin-bottom: 12px; font-size: 1rem;">Section 1: Horizontal Continuous Flow</h3>
                     <div id="sheet-music-notation" style="overflow-x: auto; width: 100%; white-space: nowrap; background: #0b0b0f; border-radius: 8px; padding: 15px;"></div>
@@ -238,7 +237,7 @@
                             <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0;">Traditional vertical page scroll (White paper / Thin staves)</p>
                         </div>
                         <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-                            <!-- Style Selector for Section 2 -->
+                            <!-- Style Selector for Section 2 (Default: Timeline Sketch) -->
                             <div style="display: flex; align-items: center; gap: 6px;">
                                 <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600;">Style:</span>
                                 <select id="select-sheet-style-second" style="background: #20202c; color: #fff; border: 1px solid var(--panel-border); padding: 5px 8px; border-radius: 6px; font-size: 0.8rem; cursor: pointer;">
@@ -247,7 +246,7 @@
                                 </select>
                             </div>
 
-                            <!-- Show Colors Checkbox (Unchecked by default) -->
+                            <!-- Show Colors Checkbox -->
                             <label style="display: inline-flex; align-items: center; gap: 6px; color: var(--text-color); font-size: 0.85rem; cursor: pointer; user-select: none;">
                                 <input type="checkbox" id="chk-show-colors" style="accent-color: var(--accent-color);">
                                 Show Colorful Notes
@@ -257,7 +256,7 @@
                             <button id="btn-stop-second" disabled style="background-color: #ef4444; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Stop Vert. Score</button>
                             <button id="btn-maximize-second" style="background-color: var(--accent-color); color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Maximize View</button>
                             
-                            <!-- Updated Download Button to Dropdown Wrapper -->
+                            <!-- Dropdown Download Wrapper -->
                             <div class="dropdown-wrapper" style="position: relative;">
                                 <button id="btn-download-second" style="background-color: #4b5563; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;" type="button">Download</button>
                                 <div id="download-dropdown-second" class="dropdown-content">
@@ -270,7 +269,7 @@
                         </div>
                     </div>
                     <!-- Vertical Scroll Frame -->
-                    <div id="sheet-tab-notation-content-vertical" style="overflow-y: auto; max-height: 400px; background: #ffffff; border-radius: 8px; border: 1px solid #d1d5db; display: flex; justify-content: center; padding: 20px 10px;">
+                    <div id="sheet-tab-notation-content-vertical" style="overflow-y: auto; max-height: 400px; background: #ffffff; border-radius: 8px; border: 1px solid #d1d5db; display: flex; justify-content: center; padding: 20px 10px; width: 100%; box-sizing: border-box;">
                         <div id="sheet-music-notation-vertical" style="width: 100%; display: flex; justify-content: center;"></div>
                     </div>
                 </div>
@@ -292,9 +291,7 @@
                                     <th style="padding: 10px 12px; font-weight: 600;">Staff Map</th>
                                 </tr>
                             </thead>
-                            <tbody id="raw-event-table-body">
-                                <!-- Populated dynamically -->
-                            </tbody>
+                            <tbody id="raw-event-table-body"></tbody>
                         </table>
                     </div>
                 </div>
@@ -304,10 +301,9 @@
                 </div>
             </div>
 
-            <!-- New Studio Tab Content Layout -->
+            <!-- Studio Tab Content Layout -->
             <div id="sheet-tab-studio-content" style="display: none; flex: 1; overflow-y: auto; color: var(--text-color); font-family: monospace; font-size: 0.9rem; gap: 20px; flex-direction: column; width: 100%;">
                 
-                <!-- Row 1 Section: Edit, Filtering, Removal Details list, and Chronological Table -->
                 <div style="background: #0f0f13; padding: 20px; border-radius: 8px; border: 1px solid var(--panel-border); display: flex; flex-direction: column; gap: 15px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
                         <h3 style="color: var(--text-color); font-size: 1rem;">Row 1: Studio Event Filtering & Editing</h3>
@@ -324,12 +320,9 @@
                         </div>
                     </div>
 
-                    <!-- Pre-Apply Velocity Cutting Preview details list container -->
                     <div id="studio-removal-preview-container" style="background: #1a1a24; border: 1px solid #ef4444; border-radius: 6px; padding: 12px; display: none; flex-direction: column; gap: 8px;">
                         <span style="color: #fca5a5; font-weight: 600; font-size: 0.85rem;">⚠️ Notes Scheduled for Removal (Velocity &le; <span id="lbl-studio-current-threshold">0.48</span>):</span>
-                        <div id="studio-removal-preview-list" style="max-height: 80px; overflow-y: auto; font-size: 0.8rem; color: #fecaca; display: flex; flex-wrap: wrap; gap: 8px;">
-                            <!-- Populated dynamically -->
-                        </div>
+                        <div id="studio-removal-preview-list" style="max-height: 80px; overflow-y: auto; font-size: 0.8rem; color: #fecaca; display: flex; flex-wrap: wrap; gap: 8px;"></div>
                     </div>
 
                     <div style="max-height: 250px; overflow-y: auto; border: 1px solid var(--panel-border); border-radius: 6px; background: #16161e;">
@@ -345,14 +338,11 @@
                                     <th style="padding: 10px 12px; font-weight: 600;">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody id="studio-event-table-body">
-                                <!-- Populated dynamically -->
-                            </tbody>
+                            <tbody id="studio-event-table-body"></tbody>
                         </table>
                     </div>
                 </div>
 
-                <!-- Row 2 Section: Post-edited Music Sheet notation container with standalone audio dispatcher play/stop controls -->
                 <div style="background: #1a1a24; border: 1px solid var(--panel-border); border-radius: 8px; padding: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                         <div>
@@ -364,7 +354,6 @@
                             <button id="btn-studio-stop-score" disabled style="background-color: #ef4444; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Stop Studio Score</button>
                         </div>
                     </div>
-                    <!-- Vertical Scroll Frame for Studio Sheet Music -->
                     <div id="sheet-tab-studio-content-vertical" style="overflow-y: auto; max-height: 400px; background: #ffffff; border-radius: 8px; border: 1px solid #d1d5db; display: flex; justify-content: center; padding: 20px 10px;">
                         <div id="sheet-music-notation-studio" style="width: 100%; display: flex; justify-content: center;"></div>
                     </div>
@@ -376,11 +365,10 @@
 
     <!-- Second Sheet Maximize Popup Modal -->
     <div id="second-sheet-max-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9); z-index: 1100; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
-        <div style="background: #ffffff; width: 90%; height: 90%; border-radius: 12px; padding: 30px; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8); position: relative;">
+        <div style="background: #ffffff; width: 92%; height: 90%; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8); position: relative;">
             <div class="max-modal-header">
                 <h2 class="max-modal-title">Full Sheet Music (Portrait Wrapped)</h2>
                 <div class="max-modal-btn-grid">
-                    <!-- Style Selector inside Maximized Modal -->
                     <div style="display: flex; align-items: center; gap: 6px;">
                         <span style="color: #4b5563; font-size: 0.8rem; font-weight: 600;">Style:</span>
                         <select id="select-sheet-style-max" style="background: #f3f4f6; color: #111827; border: 1px solid #d1d5db; padding: 5px 8px; border-radius: 6px; font-size: 0.8rem; cursor: pointer;">
@@ -392,7 +380,6 @@
                     <button id="btn-play-max" class="btn-primary-action">Play Score</button>
                     <button id="btn-stop-max" class="btn-danger-action" disabled>Stop Score</button>
                     
-                    <!-- Updated Download SVG Button inside Maximized Modal to Dropdown Wrapper -->
                     <div class="dropdown-wrapper" style="position: relative;">
                         <button id="btn-download-max" class="btn-muted-action" type="button">Download</button>
                         <div id="download-dropdown-max" class="dropdown-content">
@@ -406,14 +393,13 @@
                     <button id="btn-close-max" class="btn-close-action">Close Fullscreen</button>
                 </div>
             </div>
-            <!-- Fullscreen Scrolling Body -->
-            <div id="max-modal-scroll-container" style="flex: 1; overflow-y: auto; background: #ffffff; display: flex; justify-content: center; padding: 20px 10px; border-radius: 8px; border: 1px solid #e5e7eb;">
+            <div id="max-modal-scroll-container" style="flex: 1; overflow-y: auto; background: #ffffff; display: flex; justify-content: center; padding: 20px 10px; border-radius: 8px; border: 1px solid #e5e7eb; width: 100%; box-sizing: border-box;">
                 <div id="sheet-music-notation-max" style="width: 100%; display: flex; justify-content: center;"></div>
             </div>
         </div>
     </div>
 
-    <!-- Added Modular Settings Overlay Panel Modal -->
+    <!-- Modular Settings Overlay Panel Modal -->
     <div id="settings-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.75); z-index: 1200; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
         <div style="background: var(--panel-color); border: 1px solid var(--panel-border); border-radius: 12px; width: 320px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); position: relative; color: var(--text-color);">
             <h3 style="margin-bottom: 20px; font-size: 1.1rem; border-bottom: 1px solid var(--panel-border); padding-bottom: 10px; display: flex; align-items: center; gap: 8px;">
@@ -424,7 +410,6 @@
                 Settings
             </h3>
             
-            <!-- Toggle settings item 1: Particles -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                 <span>Splash Particles Effect</span>
                 <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 22px;">
@@ -433,7 +418,6 @@
                 </label>
             </div>
 
-            <!-- Added Toggle settings item 2: Key Note Labels -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <span>Show Key Labels (C-D-E)</span>
                 <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 22px;">
@@ -442,7 +426,6 @@
                 </label>
             </div>
 
-            <!-- Added Toggle settings item 3: Octave Split Lines -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <span>Octave Split Lines</span>
                 <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 22px;">
@@ -455,7 +438,7 @@
         </div>
     </div>
 
-    <!-- Added Modular Generate Music/Transcribe Overlay Panel Modal -->
+    <!-- Modular Generate Music/Transcribe Overlay Panel Modal -->
     <div id="transcribe-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); z-index: 1250; align-items: center; justify-content: center; backdrop-filter: blur(8px); padding: calc(10px + env(safe-area-inset-top)) calc(15px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(15px + env(safe-area-inset-left));">
         <div class="services-hub-card" style="background: rgba(15, 15, 19, 0.95); border: 1px solid var(--panel-border); color: var(--text-color); max-width: 850px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 30px; border-radius: 20px; display: flex; flex-direction: column; gap: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); text-align: center;">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--panel-border); padding-bottom: 15px; width: 100%;">
@@ -466,14 +449,12 @@
             </div>
             
             <div style="display: flex; flex-direction: column; gap: 24px; width: 100%; text-align: left;">
-                <!-- STEP 1: CHOOSE NEURAL TRANSCRIBER ENGINE -->
                 <div class="model-picker-section" id="transcribe-model-picker-container">
                     <div class="step-header">
                         <span class="step-num">STEP 1</span>
                         <span class="step-desc">Select AI Neural Transcriber Engine</span>
                     </div>
                     <div class="model-grid">
-                        <!-- Model Card 1: Nexus-6 -->
                         <div class="model-card" data-model="T1ERA-Nexus-6">
                             <div class="model-badge nexus">Nexus-6</div>
                             <div class="model-name">TiERA Nexus-6</div>
@@ -481,7 +462,6 @@
                             <div class="model-stages">STAGES 0 - 6</div>
                         </div>
 
-                        <!-- Model Card 2: Vortex-Ultra -->
                         <div class="model-card" data-model="T1ERA-Vortex-Ultra">
                             <div class="model-badge vortex">Vortex-Ultra</div>
                             <div class="model-name">TiERA Vortex-Ultra</div>
@@ -489,7 +469,6 @@
                             <div class="model-stages">STAGES 0 - 5</div>
                         </div>
 
-                        <!-- Model Card 3: Ivory-4 -->
                         <div class="model-card" data-model="T1ERA-Ivory-4">
                             <div class="model-badge ivory">Ivory-4</div>
                             <div class="model-name">TiERA Ivory-4</div>
@@ -497,7 +476,6 @@
                             <div class="model-stages">STAGES 0 - 4</div>
                         </div>
 
-                        <!-- Model Card 4: Ivory-2 (ByteDance piano engine) -->
                         <div class="model-card" data-model="T1ERA-Ivory-2">
                             <div class="model-badge bytedance">Ivory-2</div>
                             <div class="model-name">TiERA Ivory-2</div>
@@ -507,7 +485,6 @@
                     </div>
                 </div>
 
-                <!-- STEP 2: SELECT AUDIO INPUT METHOD (Dimmed until Step 1 is completed) -->
                 <div class="input-method-section selection-locked" id="transcribe-input-methods-wrapper">
                     <div class="step-header">
                         <span class="step-num">STEP 2</span>
@@ -515,7 +492,6 @@
                     </div>
                     
                     <div class="services-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; width: 100%;">
-                        <!-- Upload Option 1: YouTube Import (Web3 Card) -->
                         <div class="service-card-expanded blue-glow">
                             <div class="card-icon-header">
                                 <svg class="yt-logo" viewBox="0 0 24 24" fill="#FF0000" style="width: 24px; height: 24px; filter: drop-shadow(0 0 5px rgba(255, 0, 0, 0.6));">
@@ -529,7 +505,6 @@
                             </div>
                         </div>
 
-                        <!-- Upload Option 2: File Explorer Audio Upload (Web3 Dropzone) -->
                         <div class="service-card-expanded emerald-glow" id="transcribe-file-dropzone-trigger" style="cursor: pointer;">
                             <div class="card-icon-header">
                                 <div class="card-subtitle" style="font-size: 0.85rem; font-weight: 500; letter-spacing: 2px; text-transform: uppercase;">Local Audio File</div>
@@ -543,7 +518,6 @@
                             </div>
                         </div>
 
-                        <!-- Upload Option 3: MIDI Player (Standard Visual Link Card) -->
                         <div class="service-card glowing-active" id="transcribe-midi-upload-card" style="cursor: pointer;">
                             <div class="card-icon" style="font-size: 2rem;">🎹</div>
                             <div class="card-name" style="font-size: 0.9rem; letter-spacing: 2px; font-weight: 500; text-transform: uppercase;">Upload MIDI file</div>
