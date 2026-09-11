@@ -42,21 +42,6 @@ styleNode.innerHTML = `
         transition: all 0.2s ease !important;
     }
 
-    /* Ensure Section 2 elements are pitch-black ink (never white-on-white) */
-    #sheet-tab-notation-content-vertical,
-    #sheet-music-notation-vertical,
-    #sheet-music-notation-max,
-    #max-modal-scroll-container {
-        color: #111115 !important;
-    }
-
-    #sheet-music-notation-vertical svg text,
-    #sheet-music-notation-max svg text {
-        fill: #111115 !important;
-        stroke: none !important;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-    }
-
     /* High-density, professional mobile viewport styling (iOS & Android) */
     @media (max-width: 768px) {
         div:has(> #btn-play-second) {
@@ -116,8 +101,8 @@ function renderSharpSVG(x, y, color, scale = 1, id = "") {
     const s = scale;
     return `
     <g ${idAttr} class="sharp-symbol" opacity="0.95">
-        <line x1="${sx - 2.8 * s}" y1="${sy - 10 * s}" x2="${sx - 2.8 * s}" y2="${sy + 8 * s}" stroke="${color}" stroke-width="${1.2 * s}" stroke-linecap="round" />
-        <line x1="${sx + 2.8 * s}" y1="${sy - 8 * s}" x2="${sx + 2.8 * s}" y2="${sy + 10 * s}" stroke="${color}" stroke-width="${1.2 * s}" stroke-linecap="round" />
+        <line x1="${sx - 2.8 * s}" y1="${sy - 10 * s}" x2="${sx - 2.8 * s}" y2="${sy + 8 * s}" stroke="${color}" stroke-width="${1.1 * s}" stroke-linecap="round" />
+        <line x1="${sx + 2.8 * s}" y1="${sy - 8 * s}" x2="${sx + 2.8 * s}" y2="${sy + 10 * s}" stroke="${color}" stroke-width="${1.1 * s}" stroke-linecap="round" />
         <line x1="${sx - 6 * s}" y1="${sy - 1.5 * s}" x2="${sx + 6 * s}" y2="${sy - 4.5 * s}" stroke="${color}" stroke-width="${2.2 * s}" stroke-linecap="round" />
         <line x1="${sx - 6 * s}" y1="${sy + 4.5 * s}" x2="${sx + 6 * s}" y2="${sy + 1.5 * s}" stroke="${color}" stroke-width="${2.2 * s}" stroke-linecap="round" />
     </g>`;
@@ -816,6 +801,7 @@ function renderSheetMusic() {
     const svgString = `<svg width="${svgWidth}" height="${svgHeight}" style="background: #0b0b0f; border-radius: 8px;">${svgContent}</svg>`;
     elSheetMusicNotation.innerHTML = svgString;
 
+    // Automatically populate Section 2
     renderVerticalSheetMusic('sheet-music-notation-vertical');
 }
 
@@ -849,12 +835,29 @@ function renderVerticalSheetMusic(targetContainerId) {
     const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
     const marginLeft = 100;
 
-    // True Dynamic Full-Width: Never squished, scales to fit parent container completely
+    // Dynamic width calculation that never collapses to 0
+    let containerWidth = 950;
     const targetEl = document.getElementById(targetContainerId);
-    const parentEl = targetEl?.parentElement;
-    const parentWidth = parentEl?.clientWidth || (window.innerWidth * 0.85);
-    const containerWidth = Math.max(320, parentWidth - 20);
+    let pWidth = targetEl?.parentElement?.clientWidth || 0;
 
+    if (targetContainerId === 'sheet-music-notation-max') {
+        const container = document.getElementById('max-modal-scroll-container');
+        if (container && container.clientWidth) {
+            containerWidth = Math.max(320, container.clientWidth - 40);
+        } else {
+            containerWidth = Math.max(1200, window.innerWidth * 0.88);
+        }
+    } else {
+        if (!pWidth || pWidth < 100) {
+            pWidth = document.getElementById('second-sheet-section')?.clientWidth || 0;
+        }
+        if (!pWidth || pWidth < 100) {
+            pWidth = Math.min(1100, Math.max(320, window.innerWidth - 60));
+        }
+        containerWidth = Math.max(320, pWidth - 20);
+    }
+
+    // Original Sketch Geometry Parameters
     const isVerticalOrMax = (targetContainerId === 'sheet-music-notation-vertical' || targetContainerId === 'sheet-music-notation-max');
     const isPhoneView = containerWidth < 768;
     const shouldScale = isVerticalOrMax && isPhoneView;
@@ -911,7 +914,7 @@ function renderVerticalSheetMusic(targetContainerId) {
     for (let i = 0; i < numSystems; i++) {
         const yOffset = i * systemHeight + 110;
 
-        // Staff lines
+        // Original Sketch Staves
         const rhLines = [64, 67, 71, 74, 77];
         rhLines.forEach(pitch => {
             const y = yOffset + rhStaffCenterY - (pitch - 71) * dy;
@@ -966,7 +969,7 @@ function renderVerticalSheetMusic(targetContainerId) {
         }
     }
 
-    // Rest Gaps
+    // Silent Rest Gaps
     const gaps = findSilenceGaps(activeNotesMemory);
     gaps.forEach(gap => {
         const restsEndSecs = Math.max(0, gap.end - 0.1);
@@ -1010,13 +1013,17 @@ function renderVerticalSheetMusic(targetContainerId) {
         const pitch = note.midi;
 
         let y = 0;
-        let color = showColors ? (pitch >= 60 ? "#4f46e5" : "#d97706") : "#111115";
-        let stemDirection = (pitch >= (pitch >= 60 ? 72 : 51)) ? "down" : "up";
+        let color = "";
+        let stemDirection = "";
 
         if (pitch >= 60) {
             y = yOffset + rhStaffCenterY - (pitch - 71) * dy;
+            color = showColors ? "#4f46e5" : "#111115";
+            stemDirection = (pitch >= 72) ? "down" : "up";
         } else {
             y = yOffset + lhStaffCenterY - (pitch - 50) * dy;
+            color = showColors ? "#d97706" : "#111115";
+            stemDirection = (pitch >= 51) ? "down" : "up";
         }
 
         // Ledger lines
@@ -1076,6 +1083,7 @@ function renderVerticalSheetMusic(targetContainerId) {
             strokeWidthAttr = `stroke-width="${1.3 * scale}"`;
         }
 
+        // Original Rotated Notehead Ellipse
         svgContent += `<ellipse cx="${noteX}" cy="${y}" rx="${5.5 * scale}" ry="${3.8 * scale}" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="${targetContainerId}-notehead-${index}" transform="rotate(-15, ${noteX}, ${y})" />`;
 
         if (!isWholeNote) {
@@ -1087,6 +1095,7 @@ function renderVerticalSheetMusic(targetContainerId) {
         }
     });
 
+    // Double Bar Line
     const lastNoteTimeShifted = totalDurationSecs;
     const lastSystemIdx = Math.floor(lastNoteTimeShifted / systemDuration);
     const lastSystemTimeOffset = lastNoteTimeShifted - lastSystemIdx * systemDuration;
@@ -1097,7 +1106,7 @@ function renderVerticalSheetMusic(targetContainerId) {
     svgContent += `<line x1="${endX + 3 * scale}" y1="${lastSystemYOffset + (rhStaffCenterY - 18) * scale}" x2="${endX + 3 * scale}" y2="${lastSystemYOffset + (lhStaffCenterY + 21) * scale}" stroke="#111115" stroke-width="${2.8 * scale}" />`;
 
     svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeftValue + startPadding * scale}" y1="10" x2="${marginLeftValue + startPadding * scale}" y2="${svgHeightVal - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
-    svgContent += `<text x="${svgWidth / 2}" y="${svgHeightVal - 15}" text-anchor="middle" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">(C) T1ERA Music Ai</text>`;
+    svgContent += `<text x="${svgWidth / 2}" y="${svgHeight - 15}" text-anchor="middle" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">(C) T1ERA Music Ai</text>`;
 
     const svgString = `<svg width="${svgWidth}" height="${svgHeightVal}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">${svgContent}</svg>`;
     document.getElementById(targetContainerId).innerHTML = svgString;
@@ -1129,9 +1138,21 @@ function startVerticalPlayback(targetContainerId) {
     resetVerticalNoteHighlights(targetContainerId);
 
     const marginLeft = 100;
-    const parentEl = document.getElementById(targetContainerId)?.parentElement;
-    const parentWidth = parentEl?.clientWidth || (window.innerWidth * 0.85);
-    const containerWidth = Math.max(320, parentWidth - 20);
+    let containerWidth = 950;
+    const parentWidth = document.getElementById(targetContainerId)?.parentElement?.clientWidth || window.innerWidth;
+    
+    if (targetContainerId === 'sheet-music-notation-max') {
+        const container = document.getElementById('max-modal-scroll-container');
+        if (container && container.clientWidth) {
+            containerWidth = Math.max(320, container.clientWidth - 60);
+        } else {
+            containerWidth = Math.max(1200, window.innerWidth * 0.88);
+        }
+    } else {
+        if (parentWidth < 950) {
+            containerWidth = Math.max(320, parentWidth - 20);
+        }
+    }
     
     let localMarginLeft = marginLeft;
     let localMarginRight = 50;
@@ -1293,7 +1314,12 @@ function startVerticalPlayback(targetContainerId) {
                 const chkShowColors = document.getElementById('chk-show-colors');
                 const showColors = chkShowColors ? chkShowColors.checked : false;
                 
-                let defaultColor = showColors ? (note.midi >= 60 ? '#4f46e5' : '#d97706') : '#111115';
+                let defaultColor = "";
+                if (note.midi >= 60) {
+                    defaultColor = showColors ? '#4f46e5' : '#111115';
+                } else {
+                    defaultColor = showColors ? '#d97706' : '#111115';
+                }
                 
                 if (noteHead) {
                     const isHollow = noteHead.getAttribute('stroke') !== 'none';
@@ -1378,7 +1404,12 @@ function resetVerticalNoteHighlights(containerId) {
         const sharpEl = document.getElementById(`${containerId}-sharp-${index}`);
         const holdCurl = document.getElementById(`${containerId}-hold-curl-${index}`);
         
-        let defaultColor = showColors ? (note.midi >= 60 ? '#4f46e5' : '#d97706') : '#111115';
+        let defaultColor = "";
+        if (note.midi >= 60) {
+            defaultColor = showColors ? '#4f46e5' : '#111115';
+        } else {
+            defaultColor = showColors ? '#d97706' : '#111115';
+        }
 
         const durationTicks = note.durationTicks || (note.duration * 2 * ppq);
         const isWholeNote = durationTicks >= ppq * 3.2;
@@ -1498,7 +1529,6 @@ function populateRawMidiData() {
     });
 }
 
-// Section 1 playback
 function startSheetPlayback() {
     if (sheetMusicPlaying) {
         pauseSheetPlayback();
@@ -2287,7 +2317,7 @@ function resetStudioNoteHighlights() {
     });
 }
 
-// Dual View Styles Synchronization
+// Dual View Styles Synchronization & First-Time Modal Open Fix
 function setupStyleSwitcherEvents() {
     const selectStyleSecond = document.getElementById('select-sheet-style-second');
     const selectStyleMax = document.getElementById('select-sheet-style-max');
@@ -2303,6 +2333,25 @@ function setupStyleSwitcherEvents() {
             if (selectStyleSecond) selectStyleSecond.value = e.target.value;
             renderVerticalSheetMusic('sheet-music-notation-max');
             renderVerticalSheetMusic('sheet-music-notation-vertical');
+        });
+    }
+
+    // Modal layout trigger fix: re-render when closing fullscreen or opening sheet modal
+    const btnCloseMax = document.getElementById('btn-close-max');
+    if (btnCloseMax) {
+        btnCloseMax.addEventListener('click', () => {
+            setTimeout(() => {
+                renderVerticalSheetMusic('sheet-music-notation-vertical');
+            }, 60);
+        });
+    }
+
+    const btnSheet = document.getElementById('btn-sheet');
+    if (btnSheet) {
+        btnSheet.addEventListener('click', () => {
+            setTimeout(() => {
+                renderVerticalSheetMusic('sheet-music-notation-vertical');
+            }, 60);
         });
     }
 }
