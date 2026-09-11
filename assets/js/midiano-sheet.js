@@ -354,6 +354,80 @@ function playNoteSafely(noteName, duration, time, velocity, strict) {
     }
 }
 
+// --- Music Theory Engine & Sharp Key System ---
+// Diatonic accidental maps for all major keys
+const KEY_MAPS = {
+    "C":  ["C", "^C", "D", "^D", "E", "F", "^F", "G", "^G", "A", "^A", "B"],
+    "G":  ["C", "^C", "D", "^D", "E", "F", "^F", "G", "^G", "A", "^A", "B"],
+    "D":  ["C", "^C", "D", "^D", "E", "F", "^F", "G", "^G", "A", "^A", "B"],
+    "A":  ["C", "^C", "D", "^D", "E", "F", "^F", "G", "^G", "A", "^A", "B"],
+    "E":  ["C", "^C", "D", "^D", "E", "F", "^F", "G", "^G", "A", "^A", "B"],
+    "B":  ["C", "^C", "D", "^D", "E", "^E", "^F", "G", "^G", "A", "^A", "B"],
+    "F#": ["^B", "^C", "D", "^D", "E", "^E", "^F", "G", "^G", "A", "^A", "B"],
+    "C#": ["^B", "^C", "^D", "^D", "E", "^E", "^F", "^^F", "^G", "A", "^A", "B"],
+    "F":  ["C", "_D", "D", "_E", "E", "F", "_G", "G", "_A", "A", "_B", "B"],
+    "Bb": ["C", "_D", "D", "_E", "E", "F", "_G", "G", "_A", "A", "_B", "B"],
+    "Eb": ["C", "_D", "D", "_E", "E", "F", "_G", "G", "_A", "A", "_B", "B"],
+    "Ab": ["C", "_D", "D", "_E", "E", "F", "_G", "G", "_A", "A", "_B", "B"],
+    "Db": ["C", "_D", "D", "_E", "E", "F", "_G", "G", "_A", "A", "_B", "B"],
+    "Gb": ["C", "_D", "D", "_E", "E", "F", "_G", "G", "_A", "A", "_B", "B"],
+    "Cb": ["_D", "_D", "_E", "_E", "_F", "_G", "_G", "_A", "_A", "_B", "_B", "_C"]
+};
+
+// Complete sharp key definitions mapping standard circle-of-fifths order of sharps: F, C, G, D, A, E, B
+const SHARP_KEYS_METADATA = {
+    "C":  { count: 0, sharps: [] },
+    "G":  { count: 1, sharps: ["F"] },
+    "D":  { count: 2, sharps: ["F", "C"] },
+    "A":  { count: 3, sharps: ["F", "C", "G"] },
+    "E":  { count: 4, sharps: ["F", "C", "G", "D"] },
+    "B":  { count: 5, sharps: ["F", "C", "G", "D", "A"] },
+    "F#": { count: 6, sharps: ["F", "C", "G", "D", "A", "E"] },
+    "C#": { count: 7, sharps: ["F", "C", "G", "D", "A", "E", "B"] },
+    "a":  { count: 0, sharps: [] },
+    "e":  { count: 1, sharps: ["F"] },
+    "b":  { count: 2, sharps: ["F", "C"] },
+    "f#": { count: 3, sharps: ["F", "C", "G"] },
+    "c#": { count: 4, sharps: ["F", "C", "G", "D"] },
+    "g#": { count: 5, sharps: ["F", "C", "G", "D", "A"] },
+    "d#": { count: 6, sharps: ["F", "C", "G", "D", "A", "E"] },
+    "a#": { count: 7, sharps: ["F", "C", "G", "D", "A", "E", "B"] }
+};
+
+// Semitone positions of chromatic sharp notes: C#(1), D#(3), F#(6), G#(8), A#(10)
+const CHROMATIC_SHARP_PITCH_CLASSES = [1, 3, 6, 8, 10];
+
+// Determines whether a key signature uses sharps
+function isSharpKey(key) {
+    if (!key) return false;
+    const normalizedKey = key.trim();
+    return Boolean(SHARP_KEYS_METADATA[normalizedKey] && SHARP_KEYS_METADATA[normalizedKey].count > 0);
+}
+
+// Retrieves sharp signature specifications (count and note names)
+function getSharpKeySignature(key) {
+    if (!key) return { count: 0, sharps: [] };
+    const normalizedKey = key.trim();
+    return SHARP_KEYS_METADATA[normalizedKey] || { count: 0, sharps: [] };
+}
+
+// Checks if a given MIDI note corresponds to an accidental sharp pitch
+function isPitchSharp(midi) {
+    const pitchClass = ((midi % 12) + 12) % 12;
+    return CHROMATIC_SHARP_PITCH_CLASSES.includes(pitchClass);
+}
+
+// Renders an engraved vector musical sharp glyph (♯) in SVG format
+function drawSharpSymbolSVG(x, y, scale = 1.0, color = "#111115") {
+    const s = scale;
+    return `<g transform="translate(${x}, ${y})" stroke="${color}" fill="${color}" stroke-linecap="round">` +
+        `<line x1="${-2.5 * s}" y1="${-10 * s}" x2="${-2.5 * s}" y2="${10 * s}" stroke-width="${1.0 * s}" />` +
+        `<line x1="${2.5 * s}" y1="${-8 * s}" x2="${2.5 * s}" y2="${12 * s}" stroke-width="${1.0 * s}" />` +
+        `<line x1="${-5.5 * s}" y1="${-2 * s}" x2="${5.5 * s}" y2="${-5 * s}" stroke-width="${2.2 * s}" />` +
+        `<line x1="${-5.5 * s}" y1="${4 * s}" x2="${5.5 * s}" y2="${1 * s}" stroke-width="${2.2 * s}" />` +
+        `</g>`;
+}
+
 // Algorithmic spelling engine: Converts pitch numbers into properly spelled notes based on current Key Signature
 function midiToAbcPitch(midi, key) {
     const pitchClass = midi % 12;
