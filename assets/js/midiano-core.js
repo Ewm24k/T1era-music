@@ -449,6 +449,14 @@ function loadMidi(buffer, customTitle) {
     const detectedKeyName = getMidiKeySignature();
     const displayTitle = customTitle || (midiData.name && midiData.name !== "Untitled" ? midiData.name : null) || "Studio Transcribed Track";
 
+    // --- SYNCHRONIZE TITLE WITH PIANO ROLL STATS & SHEET MUSIC ENGINE ---
+    window.currentMidiTitle = displayTitle;
+    if (typeof setSheetTitle === "function") {
+        setSheetTitle(displayTitle);
+    } else if (typeof resolvedSheetTitle !== "undefined") {
+        resolvedSheetTitle = displayTitle;
+    }
+
     const statNameEl = document.getElementById('stat-name');
     if (statNameEl) statNameEl.textContent = displayTitle;
 
@@ -1072,16 +1080,6 @@ function setupEventListeners() {
     }
 }
 
-// FIX: guard against init() running more than once. This file's init() is
-// invoked from window "load" below, but midiano-sheet.js also calls init()
-// directly once it finishes loading. Without this guard, setupEventListeners()
-// ran twice, which silently attached every button's click handler twice.
-// For toggle-based playback (Section 1 "Play Score", Section 2 "Play Vert.
-// Score", the maximized view's "Play Score", and Studio playback) this meant
-// a single click fired the play handler AND the pause/stop handler back to
-// back in the same click, so the note immediately started and then stopped
-// again, appearing as if playback never started. Making init() idempotent
-// fixes all of those buttons without touching any other logic.
 let hasInitializedCore = false;
 function init() {
     if (hasInitializedCore) return;
@@ -1126,7 +1124,6 @@ async function loadMidiFromBridge() {
             tx.oncomplete = () => {
                 const buffer = reqData.result || null;
                 const title = reqTitle.result || null;
-                // Clear after consuming so subsequent reloads don't stick
                 try {
                     const cleanTx = idb.transaction(STORE_NAME, "readwrite");
                     cleanTx.objectStore(STORE_NAME).clear();
@@ -1185,7 +1182,6 @@ async function executeAutoLoadMidi() {
         });
 }
 
-// Ensure execution occurs AFTER all visualizer engine scripts are fully evaluated
 window.addEventListener("load", () => {
     init();
     executeAutoLoadMidi();
