@@ -11,9 +11,9 @@ let studioLogicalStartTime = 0;
 
 // Global Resolved Title State Cache & Layout Offsets
 let resolvedSheetTitle = "";
-let currentHeaderOffset = 110;
+let currentHeaderOffset = 110; // Dynamic vertical spacer margin
 
-// Inject modern responsive layout CSS for Section 2 controls inside the sheet music popup
+// Inject modern responsive layout CSS for Section 2 controls inside the sheet music popup (iOS & Android optimized)
 const styleNode = document.createElement('style');
 styleNode.innerHTML = `
     /* Pinned Sticky Header Wrapper with Glassmorphic styling for Section 2 controls */
@@ -35,16 +35,19 @@ styleNode.innerHTML = `
         margin-bottom: 14px !important;
     }
 
+    /* Standard desktop overrides */
     #btn-play-second, #btn-stop-second, #btn-maximize-second, #btn-download-second {
         font-family: inherit !important;
         cursor: pointer !important;
         transition: all 0.2s ease !important;
     }
 
-    /* Enforce solid pitch-black engraving on white sheet paper (No faint gray, no white text!) */
-    #sheet-music-notation-vertical svg,
-    #sheet-music-notation-max svg {
-        background: #ffffff !important;
+    /* Ensure Section 2 elements are pitch-black ink (never white-on-white) */
+    #sheet-tab-notation-content-vertical,
+    #sheet-music-notation-vertical,
+    #sheet-music-notation-max,
+    #max-modal-scroll-container {
+        color: #111115 !important;
     }
 
     #sheet-music-notation-vertical svg text,
@@ -54,21 +57,7 @@ styleNode.innerHTML = `
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
     }
 
-    /* Force ABCJS engraved elements to be solid pitch-black */
-    #sheet-music-notation-vertical .abcjs-note,
-    #sheet-music-notation-max .abcjs-note,
-    #sheet-music-notation-vertical .abcjs-clef,
-    #sheet-music-notation-max .abcjs-clef,
-    #sheet-music-notation-vertical .abcjs-staff,
-    #sheet-music-notation-max .abcjs-staff,
-    #sheet-music-notation-vertical .abcjs-bar,
-    #sheet-music-notation-max .abcjs-bar,
-    #sheet-music-notation-vertical .abcjs-beam,
-    #sheet-music-notation-max .abcjs-beam {
-        fill: #111115 !important;
-        stroke: #111115 !important;
-    }
-
+    /* High-density, professional mobile viewport styling (iOS & Android) */
     @media (max-width: 768px) {
         div:has(> #btn-play-second) {
             padding: 8px 12px !important;
@@ -127,10 +116,10 @@ function renderSharpSVG(x, y, color, scale = 1, id = "") {
     const s = scale;
     return `
     <g ${idAttr} class="sharp-symbol" opacity="0.95">
-        <line x1="${sx - 2.8 * s}" y1="${sy - 10 * s}" x2="${sx - 2.8 * s}" y2="${sy + 8 * s}" stroke="${color}" stroke-width="${1.3 * s}" stroke-linecap="round" />
-        <line x1="${sx + 2.8 * s}" y1="${sy - 8 * s}" x2="${sx + 2.8 * s}" y2="${sy + 10 * s}" stroke="${color}" stroke-width="${1.3 * s}" stroke-linecap="round" />
-        <line x1="${sx - 6 * s}" y1="${sy - 1.5 * s}" x2="${sx + 6 * s}" y2="${sy - 4.5 * s}" stroke="${color}" stroke-width="${2.4 * s}" stroke-linecap="round" />
-        <line x1="${sx - 6 * s}" y1="${sy + 4.5 * s}" x2="${sx + 6 * s}" y2="${sy + 1.5 * s}" stroke="${color}" stroke-width="${2.4 * s}" stroke-linecap="round" />
+        <line x1="${sx - 2.8 * s}" y1="${sy - 10 * s}" x2="${sx - 2.8 * s}" y2="${sy + 8 * s}" stroke="${color}" stroke-width="${1.2 * s}" stroke-linecap="round" />
+        <line x1="${sx + 2.8 * s}" y1="${sy - 8 * s}" x2="${sx + 2.8 * s}" y2="${sy + 10 * s}" stroke="${color}" stroke-width="${1.2 * s}" stroke-linecap="round" />
+        <line x1="${sx - 6 * s}" y1="${sy - 1.5 * s}" x2="${sx + 6 * s}" y2="${sy - 4.5 * s}" stroke="${color}" stroke-width="${2.2 * s}" stroke-linecap="round" />
+        <line x1="${sx - 6 * s}" y1="${sy + 4.5 * s}" x2="${sx + 6 * s}" y2="${sy + 1.5 * s}" stroke="${color}" stroke-width="${2.2 * s}" stroke-linecap="round" />
     </g>`;
 }
 
@@ -146,7 +135,7 @@ function renderHoldLineWithCurlSVG(startX, endX, y, stemDirection, color, scale 
     const curlR = 4.0 * scale;
 
     let out = `<g ${idAttr} class="hold-curl-group">`;
-    out += `<circle cx="${startX}" cy="${holdY}" r="${1.8 * scale}" fill="${color}" opacity="0.9" />`;
+    out += `<circle cx="${startX}" cy="${holdY}" r="${1.5 * scale}" fill="${color}" opacity="0.85" />`;
 
     const d = `M ${startX} ${holdY} ` +
               `Q ${midX} ${holdY + arcDip} ${endX - curlR * 1.5} ${holdY + arcDip * 0.4} ` +
@@ -154,15 +143,15 @@ function renderHoldLineWithCurlSVG(startX, endX, y, stemDirection, color, scale 
               `C ${endX + curlR * 0.3} ${holdY - curlR * dir * 1.6} ${endX - curlR * 1.8} ${holdY - curlR * dir * 1.8} ${endX - curlR * 1.6} ${holdY - curlR * dir * 0.7} ` +
               `C ${endX - curlR * 1.4} ${holdY - curlR * dir * 0.1} ${endX - curlR * 0.5} ${holdY - curlR * dir * 0.2} ${endX - curlR * 0.5} ${holdY - curlR * dir * 0.6}`;
 
-    out += `<path d="${d}" fill="none" stroke="${color}" stroke-width="${1.4 * scale}" stroke-linecap="round" stroke-linejoin="round" opacity="0.9" />`;
-    out += `<line x1="${endX}" y1="${holdY - 3.5 * scale}" x2="${endX}" y2="${holdY + 3.5 * scale}" stroke="${color}" stroke-width="${1.2 * scale}" opacity="0.75" stroke-linecap="round" />`;
+    out += `<path d="${d}" fill="none" stroke="${color}" stroke-width="${1.3 * scale}" stroke-linecap="round" stroke-linejoin="round" opacity="0.85" />`;
+    out += `<line x1="${endX}" y1="${holdY - 3 * scale}" x2="${endX}" y2="${holdY + 3 * scale}" stroke="${color}" stroke-width="${1.0 * scale}" opacity="0.6" stroke-linecap="round" />`;
     out += `</g>`;
 
     return out;
 }
 
 // =========================================================================
-// EMBEDDED MUSESTUDIO ENGRAVED SCORE ENGINE
+// EMBEDDED MUSESTUDIO ENGRAVED SCORE ENGINE (SOLID BLACK INK)
 // =========================================================================
 
 function midiToProAbcPitch(midi) {
@@ -351,7 +340,6 @@ function renderProMuseScore(targetContainerId) {
         renderedSvg.style.width = "100%";
         renderedSvg.style.color = "#111115";
 
-        // Enforce solid pitch-black strokes and fills
         renderedSvg.querySelectorAll("path, text, line, rect").forEach(el => {
             if (el.getAttribute("fill") && el.getAttribute("fill") !== "none") {
                 el.setAttribute("fill", "#111115");
@@ -386,6 +374,7 @@ function wrapSvgText(text, maxCharsPerLine) {
     return lines;
 }
 
+// Helper to extract clean track title directly from the URL filename as a fast fallback
 function extractTitleFromUrl(url) {
     if (!url) return "";
     try {
@@ -405,6 +394,7 @@ function extractTitleFromUrl(url) {
     }
 }
 
+// Algorithmic Title Resolver using URL parameters, localStorage, details.json, and URL-fallback systems
 async function resolveSheetTitle() {
     if (resolvedSheetTitle) return resolvedSheetTitle;
 
@@ -448,6 +438,7 @@ async function resolveSheetTitle() {
     return resolvedSheetTitle;
 }
 
+// Merges active note timelines to isolate all global silent segments (gaps) in the piece
 function findSilenceGaps(notes) {
     if (!notes || notes.length === 0) return [];
     
@@ -488,6 +479,7 @@ function findSilenceGaps(notes) {
     return gaps;
 }
 
+// --- Helper Functions for Procedural Rests Rendering ---
 function renderRestsForGap(svgContent, startX, endX, centerY, isRH) {
     const gapDuration = (endX - startX) / pixelsPerSecond;
     if (gapDuration <= 0.05) return svgContent;
@@ -503,7 +495,7 @@ function renderRestsForGap(svgContent, startX, endX, centerY, isRH) {
     let remaining = gapDuration;
     let currentX = startX;
 
-    const color = "#111115";
+    const color = isRH ? "#818cf8" : "#fbbf24";
     const dy = 3;
 
     while (remaining > 0.05) {
@@ -526,9 +518,9 @@ function renderRestsForGap(svgContent, startX, endX, centerY, isRH) {
 
         if (restType === "whole") {
             const line4Y = centerY - 3 * dy;
-            svgContent += `<rect x="${midX - 7}" y="${line4Y}" width="14" height="6" fill="${color}" opacity="0.95" />`;
+            svgContent += `<rect x="${midX - 7}" y="${line4Y}" width="14" height="6" fill="${color}" opacity="0.85" />`;
         } else if (restType === "half") {
-            svgContent += `<rect x="${midX - 7}" y="${centerY - 6}" width="14" height="6" fill="${color}" opacity="0.95" />`;
+            svgContent += `<rect x="${midX - 7}" y="${centerY - 6}" width="14" height="6" fill="${color}" opacity="0.85" />`;
         }
 
         currentX += restWidth;
@@ -589,13 +581,14 @@ function renderRestsForGapVertical(svgContent, startSecs, endSecs, systemDuratio
 function drawSingleRestSVG(svgContent, x, centerY, type, color, dy, scale) {
     if (type === "whole") {
         const line4Y = centerY - 3 * dy * scale;
-        svgContent += `<rect x="${x - 7 * scale}" y="${line4Y}" width="${14 * scale}" height="${6 * scale}" fill="${color}" opacity="0.95" />`;
+        svgContent += `<rect x="${x - 7 * scale}" y="${line4Y}" width="${14 * scale}" height="${6 * scale}" fill="${color}" opacity="0.85" />`;
     } else if (type === "half") {
-        svgContent += `<rect x="${x - 7 * scale}" y="${centerY - 6 * scale}" width="${14 * scale}" height="${6 * scale}" fill="${color}" opacity="0.95" />`;
+        svgContent += `<rect x="${x - 7 * scale}" y="${centerY - 6 * scale}" width="${14 * scale}" height="${6 * scale}" fill="${color}" opacity="0.85" />`;
     }
     return svgContent;
 }
 
+// Shared massive-key / anti-choke playback guard
 function playNoteSafely(noteName, duration, time, velocity, strict) {
     if (typeof triggerNoteWithVoiceGuard === 'function') {
         triggerNoteWithVoiceGuard(noteName, duration, time, velocity, strict);
@@ -609,8 +602,55 @@ function playNoteSafely(noteName, duration, time, velocity, strict) {
     }
 }
 
+// Algorithmic spelling engine
+function midiToAbcPitch(midi, key) {
+    const pitchClass = midi % 12;
+    const octave = Math.floor(midi / 12) - 1;
+    
+    const keyMap = KEY_MAPS[key] || KEY_MAPS["C"];
+    let baseName = keyMap[pitchClass];
+
+    let abc = "";
+    if (octave === 4) {
+        abc = baseName;
+    } else if (octave > 4) {
+        const match = baseName.match(/^([=^^_]*)([A-G])$/);
+        if (match) {
+            abc = match[1] + match[2].toLowerCase();
+        } else {
+            abc = baseName.toLowerCase();
+        }
+        const ticks = octave - 5;
+        abc += "'".repeat(ticks);
+    } else {
+        abc = baseName;
+        const commas = 4 - octave;
+        abc += ",".repeat(commas);
+    }
+    return abc;
+}
+
+function toAbcFraction(val) {
+    if (val <= 0) return "";
+    const rounded = Math.round(val * 1000) / 1000;
+    if (rounded === 1) return "";
+    
+    const num = Math.round(rounded * 1000);
+    const den = 1000;
+    
+    const gcd = (a, b) => b ? gcd(b, a % b) : a;
+    const d = gcd(num, den);
+    const finalNum = num / d;
+    const finalDen = den / d;
+    
+    if (finalDen === 1) {
+        return finalNum === 1 ? "" : `${finalNum}`;
+    }
+    return `${finalNum}/${finalDen}`;
+}
+
 // =========================================================================
-// SECTION 1: Continuous Horizontal Staff (White Paper & Solid Black Lines)
+// SECTION 1: Continuous Horizontal Layout (ORIGINAL DARK THEME PRESERVED)
 // =========================================================================
 function renderSheetMusic() {
     if (!midiData || activeNotesMemory.length === 0) return;
@@ -632,42 +672,43 @@ function renderSheetMusic() {
 
     let svgContent = "";
 
-    // Solid Black Staff lines
+    // 1. Draw RH Staff lines
     const rhLines = [64, 67, 71, 74, 77];
     rhLines.forEach(pitch => {
         const y = rhStaffCenterY - (pitch - 71) * dy;
-        svgContent += `<line x1="0" y1="${y}" x2="${svgWidth}" y2="${y}" stroke="#111115" stroke-width="1.2" />`;
+        svgContent += `<line x1="0" y1="${y}" x2="${svgWidth}" y2="${y}" stroke="#242432" stroke-width="1.5" />`;
     });
 
+    // 2. Draw LH Staff lines
     const lhLines = [43, 47, 50, 53, 57];
     lhLines.forEach(pitch => {
         const y = lhStaffCenterY - (pitch - 50) * dy;
-        svgContent += `<line x1="0" y1="${y}" x2="${svgWidth}" y2="${y}" stroke="#111115" stroke-width="1.2" />`;
+        svgContent += `<line x1="0" y1="${y}" x2="${svgWidth}" y2="${y}" stroke="#242432" stroke-width="1.5" />`;
     });
 
-    // Solid Black System Linkages
-    svgContent += `<line x1="20" y1="30" x2="20" y2="270" stroke="#111115" stroke-width="2.5" />`;
-    svgContent += `<text x="30" y="85" fill="#111115" font-size="14" font-weight="bold">RH</text>`;
-    svgContent += `<text x="30" y="225" fill="#111115" font-size="14" font-weight="bold">LH</text>`;
+    // 3. Middle system linkages and labels
+    svgContent += `<line x1="20" y1="30" x2="20" y2="270" stroke="#4b5563" stroke-width="2" />`;
+    svgContent += `<text x="30" y="85" fill="#9ca3af" font-size="14" font-weight="bold">RH</text>`;
+    svgContent += `<text x="30" y="225" fill="#9ca3af" font-size="14" font-weight="bold">LH</text>`;
 
-    // Solid Black Clefs
+    // 4. Procedural Clef symbols
     svgContent += `
-    <g transform="translate(60, 80)" stroke="#111115" stroke-width="2.5" fill="none" opacity="1.0" stroke-linecap="round" stroke-linejoin="round">
+    <g transform="translate(60, 80)" stroke="#818cf8" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round" stroke-linejoin="round">
         <path d="M 5,-40 L 5,30 C 5,38 0,42 -5,42 C -9,42 -12,38 -12,34 C -12,30 -9,27 -6,27 C -3,27 0,31 0,34" />
-        <circle cx="5" cy="-40" r="3" fill="#111115" />
+        <circle cx="5" cy="-40" r="3" fill="#818cf8" />
         <path d="M 5,-15 C 5,-28 15,-32 15,-20 C 15,-10 5,0 5,10" />
         <path d="M 5,10 C 5,22 -8,22 -8,10 C -8,-2 13,-2 13,10 C 13,20 3,24 0,16" />
     </g>`;
 
     svgContent += `
-    <g transform="translate(60, 220)" stroke="#111115" stroke-width="2.5" fill="none" opacity="1.0" stroke-linecap="round" stroke-linejoin="round">
+    <g transform="translate(60, 220)" stroke="#fbbf24" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round" stroke-linejoin="round">
         <path d="M -8,-10 C -2,-18 10,-18 10,-8 C 10,2 -2,10 -8,18 C -10,21 -12,25 -12,28" />
-        <circle cx="-8" cy="-10" r="3.5" fill="#111115" stroke="none" />
-        <circle cx="16" cy="-15" r="2.5" fill="#111115" stroke="none" />
-        <circle cx="16" cy="-5" r="2.5" fill="#111115" stroke="none" />
+        <circle cx="-8" cy="-10" r="3.5" fill="#fbbf24" stroke="none" />
+        <circle cx="16" cy="-15" r="2.5" fill="#fbbf24" stroke="none" />
+        <circle cx="16" cy="-5" r="2.5" fill="#fbbf24" stroke="none" />
     </g>`;
 
-    // Rests & Barlines
+    // 5. Silent Rest Gaps
     const gaps = findSilenceGaps(activeNotesMemory);
     gaps.forEach(gap => {
         const restsEndSecs = Math.max(0, gap.end - 0.1);
@@ -677,14 +718,15 @@ function renderSheetMusic() {
         }
 
         const doubleBarX = gap.end * pixelsPerSecond + 100 - 10;
-        svgContent += `<line x1="${doubleBarX - 3}" y1="${rhStaffCenterY - 6 * dy}" x2="${doubleBarX - 3}" y2="${rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="1.2" />`;
-        svgContent += `<line x1="${doubleBarX}" y1="${rhStaffCenterY - 6 * dy}" x2="${doubleBarX}" y2="${rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="2.8" />`;
-        svgContent += `<line x1="${doubleBarX - 3}" y1="${lhStaffCenterY - 7 * dy}" x2="${doubleBarX - 3}" y2="${lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="1.2" />`;
-        svgContent += `<line x1="${doubleBarX}" y1="${lhStaffCenterY - 7 * dy}" x2="${doubleBarX}" y2="${lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="2.8" />`;
+        svgContent += `<line x1="${doubleBarX - 3}" y1="${rhStaffCenterY - 6 * dy}" x2="${doubleBarX - 3}" y2="${rhStaffCenterY + 7 * dy}" stroke="#818cf8" stroke-width="1.2" opacity="0.8" />`;
+        svgContent += `<line x1="${doubleBarX}" y1="${rhStaffCenterY - 6 * dy}" x2="${doubleBarX}" y2="${rhStaffCenterY + 7 * dy}" stroke="#818cf8" stroke-width="2.8" opacity="0.8" />`;
+        svgContent += `<line x1="${doubleBarX - 3}" y1="${lhStaffCenterY - 7 * dy}" x2="${doubleBarX - 3}" y2="${lhStaffCenterY + 7 * dy}" stroke="#fbbf24" stroke-width="1.2" opacity="0.8" />`;
+        svgContent += `<line x1="${doubleBarX}" y1="${lhStaffCenterY - 7 * dy}" x2="${doubleBarX}" y2="${lhStaffCenterY + 7 * dy}" stroke="#fbbf24" stroke-width="2.8" opacity="0.8" />`;
     });
 
     const ppq = (midiData && midiData.header) ? (midiData.header.PPQ || midiData.header.ppq || 480) : 480;
 
+    // 6. Render notes
     activeNotesMemory.forEach((note, index) => {
         const shiftedStart = Math.max(0, note.time - firstNoteTime);
         const x = shiftedStart * pixelsPerSecond + 100;
@@ -692,26 +734,30 @@ function renderSheetMusic() {
         const pitch = note.midi;
 
         let y = 0;
-        let color = "#111115"; // Solid pitch black
-        let stemDirection = (pitch >= (pitch >= 60 ? 72 : 51)) ? "down" : "up";
+        let color = "";
+        let stemDirection = "";
 
         if (pitch >= 60) {
             y = rhStaffCenterY - (pitch - 71) * dy;
+            color = "#818cf8";
+            stemDirection = (pitch >= 72) ? "down" : "up";
         } else {
             y = lhStaffCenterY - (pitch - 50) * dy;
+            color = "#fbbf24";
+            stemDirection = (pitch >= 51) ? "down" : "up";
         }
 
-        // Ledger lines in Solid Black
+        // Ledger Lines
         if (pitch >= 60) {
             if (pitch <= 60) {
                 const ly = rhStaffCenterY - (60 - 71) * dy;
-                svgContent += `<line x1="${x - 12}" y1="${ly}" x2="${x + 12}" y2="${ly}" stroke="#111115" stroke-width="1.5" />`;
+                svgContent += `<line x1="${x - 12}" y1="${ly}" x2="${x + 12}" y2="${ly}" stroke="${color}" stroke-width="1.5" />`;
             } else if (pitch >= 81) {
                 const rhLedgerLines = [81, 84, 88, 91, 95, 98, 101, 105, 108];
                 rhLedgerLines.forEach(lp => {
                     if (lp <= pitch) {
                         const ly = rhStaffCenterY - (lp - 71) * dy;
-                        svgContent += `<line x1="${x - 12}" y1="${ly}" x2="${x + 12}" y2="${ly}" stroke="#111115" stroke-width="1.5" />`;
+                        svgContent += `<line x1="${x - 12}" y1="${ly}" x2="${x + 12}" y2="${ly}" stroke="${color}" stroke-width="1.5" />`;
                     }
                 });
             }
@@ -721,7 +767,7 @@ function renderSheetMusic() {
                 lhLedgerLines.forEach(lp => {
                     if (lp >= pitch) {
                         const ly = lhStaffCenterY - (lp - 50) * dy;
-                        svgContent += `<line x1="${x - 12}" y1="${ly}" x2="${x + 12}" y2="${ly}" stroke="#111115" stroke-width="1.5" />`;
+                        svgContent += `<line x1="${x - 12}" y1="${ly}" x2="${x + 12}" y2="${ly}" stroke="${color}" stroke-width="1.5" />`;
                     }
                 });
             }
@@ -730,51 +776,51 @@ function renderSheetMusic() {
         // Accidental Sharp
         const isSharp = IS_BLACK_KEY[pitch % 12] || (note.name && note.name.includes("#"));
         if (isSharp) {
-            svgContent += renderSharpSVG(x - 15, y, "#111115", 1.0, `sheet-sharp-${index}`);
+            svgContent += renderSharpSVG(x - 15, y, color, 1.0, `sheet-sharp-${index}`);
         }
 
         // Hold tail with release curl
         const isLongHold = (note.duration >= 0.35) || (note.durationTicks && note.durationTicks >= ppq * 0.75);
         if (isLongHold && w >= 18) {
-            svgContent += renderHoldLineWithCurlSVG(x, x + w, y, stemDirection, "#111115", 1.0, `sheet-hold-curl-${index}`);
+            svgContent += renderHoldLineWithCurlSVG(x, x + w, y, stemDirection, color, 1.0, `sheet-hold-curl-${index}`);
         }
 
-        svgContent += `<rect x="${x}" y="${y - 4}" width="${w}" height="8" rx="4" fill="#111115" opacity="0.3" id="sheet-note-rect-${index}" />`;
+        svgContent += `<rect x="${x}" y="${y - 4}" width="${w}" height="8" rx="4" fill="${color}" opacity="0.6" id="sheet-note-rect-${index}" />`;
 
         const durationTicks = note.durationTicks || (note.duration * 2 * ppq);
         const isWholeNote = durationTicks >= ppq * 3.2;
         const isHalfNote = durationTicks >= ppq * 1.6 && durationTicks < ppq * 3.2;
 
-        let noteheadFill = "#111115";
+        let noteheadFill = color;
         let noteheadStroke = "none";
         let strokeWidthAttr = "";
         if (isWholeNote || isHalfNote) {
-            noteheadFill = "#ffffff";
-            noteheadStroke = "#111115";
-            strokeWidthAttr = 'stroke-width="1.5"';
+            noteheadFill = "#0b0b0f";
+            noteheadStroke = color;
+            strokeWidthAttr = 'stroke-width="1.3"';
         }
 
         svgContent += `<ellipse cx="${x}" cy="${y}" rx="7" ry="5" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="sheet-notehead-${index}" transform="rotate(-15, ${x}, ${y})" />`;
 
         if (!isWholeNote) {
             if (stemDirection === "up") {
-                svgContent += `<line x1="${x + 6}" y1="${y}" x2="${x + 6}" y2="${y - 25}" stroke="#111115" stroke-width="1.5" id="sheet-stem-${index}" />`;
+                svgContent += `<line x1="${x + 6}" y1="${y}" x2="${x + 6}" y2="${y - 25}" stroke="${color}" stroke-width="1.5" id="sheet-stem-${index}" />`;
             } else {
-                svgContent += `<line x1="${x - 6}" y1="${y}" x2="${noteX || (x - 6)}" y2="${y + 25}" stroke="#111115" stroke-width="1.5" id="sheet-stem-${index}" />`;
+                svgContent += `<line x1="${x - 6}" y1="${y}" x2="${x - 6}" y2="${y + 25}" stroke="${color}" stroke-width="1.5" id="sheet-stem-${index}" />`;
             }
         }
     });
 
     svgContent += `<line id="sheet-playback-cursor" x1="100" y1="10" x2="100" y2="290" stroke="#ef4444" stroke-width="2" style="display: none;" />`;
 
-    const svgString = `<svg width="${svgWidth}" height="${svgHeight}" style="background: #ffffff; border-radius: 8px;">${svgContent}</svg>`;
+    const svgString = `<svg width="${svgWidth}" height="${svgHeight}" style="background: #0b0b0f; border-radius: 8px;">${svgContent}</svg>`;
     elSheetMusicNotation.innerHTML = svgString;
 
     renderVerticalSheetMusic('sheet-music-notation-vertical');
 }
 
 // =========================================================================
-// SECTION 2: Portrait Wrapped Layout (FULL-WIDTH, SOLID BLACK INK ON WHITE)
+// SECTION 2: Portrait Wrapped Layout (FULL WIDTH & ORIGINAL SKETCH STYLE)
 // =========================================================================
 function renderVerticalSheetMusic(targetContainerId) {
     if (!midiData || activeNotesMemory.length === 0) return;
@@ -803,25 +849,24 @@ function renderVerticalSheetMusic(targetContainerId) {
     const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
     const marginLeft = 100;
 
-    // Full-Width Measurement: Fills 100% of the visible container
+    // True Dynamic Full-Width: Never squished, scales to fit parent container completely
     const targetEl = document.getElementById(targetContainerId);
     const parentEl = targetEl?.parentElement;
-    const scrollFrame = (targetContainerId === 'sheet-music-notation-max')
-        ? (document.getElementById('max-modal-scroll-container') || parentEl)
-        : (document.getElementById('sheet-tab-notation-content-vertical') || parentEl);
+    const parentWidth = parentEl?.clientWidth || (window.innerWidth * 0.85);
+    const containerWidth = Math.max(320, parentWidth - 20);
 
-    const availableWidth = scrollFrame?.clientWidth || (window.innerWidth - 60);
-    const containerWidth = Math.max(320, availableWidth - 24);
-
+    const isVerticalOrMax = (targetContainerId === 'sheet-music-notation-vertical' || targetContainerId === 'sheet-music-notation-max');
     const isPhoneView = containerWidth < 768;
-    const scale = isPhoneView ? 0.7 : 1.0;
-    const systemDuration = isPhoneView ? 6 : 10;
+    const shouldScale = isVerticalOrMax && isPhoneView;
+
+    const scale = shouldScale ? 0.65 : 1.0;
+    const systemDuration = shouldScale ? 6 : 10;
     const numSystems = Math.ceil(totalDurationSecs / systemDuration) || 1;
 
-    const systemHeight = isPhoneView ? 150 : 220;
-    const rhStaffCenterY = isPhoneView ? 42 : 60;
-    const lhStaffCenterY = isPhoneView ? 105 : 160;
-    const dy = isPhoneView ? 2.2 : 3.0;
+    const systemHeight = shouldScale ? 140 : 220;
+    const rhStaffCenterY = shouldScale ? 40 : 60;
+    const lhStaffCenterY = shouldScale ? 100 : 160;
+    const dy = shouldScale ? 2.0 : 3.0;
     
     const svgWidth = containerWidth;
     let marginLeftValue = marginLeft;
@@ -866,31 +911,31 @@ function renderVerticalSheetMusic(targetContainerId) {
     for (let i = 0; i < numSystems; i++) {
         const yOffset = i * systemHeight + 110;
 
-        // Solid Pitch-Black Staff lines
+        // Staff lines
         const rhLines = [64, 67, 71, 74, 77];
         rhLines.forEach(pitch => {
             const y = yOffset + rhStaffCenterY - (pitch - 71) * dy;
-            svgContent += `<line x1="${marginLeftValue}" y1="${y}" x2="${marginLeftValue + systemWidth}" y2="${y}" stroke="#111115" stroke-width="${0.9 * scale}" />`;
+            svgContent += `<line x1="${marginLeftValue}" y1="${y}" x2="${marginLeftValue + systemWidth}" y2="${y}" stroke="#9ca3af" stroke-width="${0.75 * scale}" />`;
         });
 
         const lhLines = [43, 47, 50, 53, 57];
         lhLines.forEach(pitch => {
             const y = yOffset + lhStaffCenterY - (pitch - 50) * dy;
-            svgContent += `<line x1="${marginLeftValue}" y1="${y}" x2="${marginLeftValue + systemWidth}" y2="${y}" stroke="#111115" stroke-width="${0.9 * scale}" />`;
+            svgContent += `<line x1="${marginLeftValue}" y1="${y}" x2="${marginLeftValue + systemWidth}" y2="${y}" stroke="#9ca3af" stroke-width="${0.75 * scale}" />`;
         });
 
-        // Brackets & Labels in pitch-black
-        const bracketX = marginLeftValue - (isPhoneView ? 30 * scale : 80);
+        // Brackets & Labels
+        const bracketX = marginLeftValue - (shouldScale ? 30 * scale : 80);
         svgContent += `<line x1="${bracketX}" y1="${yOffset + (rhStaffCenterY - 24) * scale}" x2="${bracketX}" y2="${yOffset + (lhStaffCenterY + 27) * scale}" stroke="#111115" stroke-width="${1.5 * scale}" />`;
         
-        const labelX = marginLeftValue - (isPhoneView ? 22 * scale : 60);
+        const labelX = marginLeftValue - (shouldScale ? 22 * scale : 60);
         svgContent += `<text x="${labelX}" y="${yOffset + rhStaffCenterY + 5 * scale}" fill="#111115" font-size="${14 * scale}" font-weight="bold" font-family="-apple-system, sans-serif">RH</text>`;
         svgContent += `<text x="${labelX}" y="${yOffset + lhStaffCenterY + 5 * scale}" fill="#111115" font-size="${14 * scale}" font-weight="bold" font-family="-apple-system, sans-serif">LH</text>`;
 
-        // Original Sketch Clefs in pitch-black
-        const clefX = marginLeftValue - (isPhoneView ? 12 * scale : 30);
+        // Original Sketch Clefs
+        const clefX = marginLeftValue - (shouldScale ? 12 * scale : 30);
         svgContent += `
-        <g transform="translate(${clefX}, ${yOffset + rhStaffCenterY}) scale(${scale})" stroke="#111115" stroke-width="2.5" fill="none" opacity="1.0" stroke-linecap="round" stroke-linejoin="round">
+        <g transform="translate(${clefX}, ${yOffset + rhStaffCenterY}) scale(${scale})" stroke="#111115" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round" stroke-linejoin="round">
             <path d="M 5,-40 L 5,30 C 5,38 0,42 -5,42 C -9,42 -12,38 -12,34 C -12,30 -9,27 -6,27 C -3,27 0,31 0,34" />
             <circle cx="5" cy="-40" r="3" fill="#111115" />
             <path d="M 5,-15 C 5,-28 15,-32 15,-20 C 15,-10 5,0 5,10" />
@@ -898,7 +943,7 @@ function renderVerticalSheetMusic(targetContainerId) {
         </g>`;
 
         svgContent += `
-        <g transform="translate(${clefX}, ${yOffset + lhStaffCenterY}) scale(${scale})" stroke="#111115" stroke-width="2.5" fill="none" opacity="1.0" stroke-linecap="round" stroke-linejoin="round">
+        <g transform="translate(${clefX}, ${yOffset + lhStaffCenterY}) scale(${scale})" stroke="#111115" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round" stroke-linejoin="round">
             <path d="M -8,-10 C -2,-18 10,-18 10,-8 C 10,2 -2,10 -8,18 C -10,21 -12,25 -12,28" />
             <circle cx="-8" cy="-10" r="3.5" fill="#111115" stroke="none" />
             <circle cx="16" cy="-15" r="2.5" fill="#111115" stroke="none" />
@@ -906,7 +951,7 @@ function renderVerticalSheetMusic(targetContainerId) {
         </g>`;
 
         if (i === 0) {
-            const tsX = marginLeftValue + (isPhoneView ? 10 * scale : 12);
+            const tsX = marginLeftValue + (shouldScale ? 10 * scale : 12);
             svgContent += `
             <g id="${targetContainerId}-time-signature-treble" fill="#111115" stroke="none">
                 <text x="${tsX}" y="${yOffset + rhStaffCenterY - 4 * scale}" font-family="Georgia, serif" font-size="${24 * scale}" font-weight="bold" text-anchor="middle">${timeSignatureNum}</text>
@@ -921,7 +966,7 @@ function renderVerticalSheetMusic(targetContainerId) {
         }
     }
 
-    // Silent Rest Gaps
+    // Rest Gaps
     const gaps = findSilenceGaps(activeNotesMemory);
     gaps.forEach(gap => {
         const restsEndSecs = Math.max(0, gap.end - 0.1);
@@ -950,7 +995,7 @@ function renderVerticalSheetMusic(targetContainerId) {
     const chkShowColors = document.getElementById('chk-show-colors');
     const showColors = chkShowColors ? chkShowColors.checked : false;
 
-    // Render Original Sketch Notes (Solid Black by Default, Colors Only if Checked)
+    // Render Original Sketch Notes
     activeNotesMemory.forEach((note, index) => {
         const shiftedStart = Math.max(0, note.time - firstNoteTime);
         const systemIdx = Math.floor(shiftedStart / systemDuration);
@@ -979,13 +1024,13 @@ function renderVerticalSheetMusic(targetContainerId) {
         if (pitch >= 60) {
             if (pitch <= 60) {
                 const ly = yOffset + rhStaffCenterY - (60 - 71) * dy;
-                svgContent += `<line x1="${noteX - 8 * scale}" y1="${ly}" x2="${noteX + 8 * scale}" y2="${ly}" stroke="${lineStroke}" stroke-width="${1.3 * scale}" />`;
+                svgContent += `<line x1="${noteX - 8 * scale}" y1="${ly}" x2="${noteX + 8 * scale}" y2="${ly}" stroke="${lineStroke}" stroke-width="${1.2 * scale}" />`;
             } else if (pitch >= 81) {
                 const rhLedgerLines = [81, 84, 88, 91, 95, 98, 101, 105, 108];
                 rhLedgerLines.forEach(lp => {
                     if (lp <= pitch) {
                         const ly = yOffset + rhStaffCenterY - (lp - 71) * dy;
-                        svgContent += `<line x1="${noteX - 8 * scale}" y1="${ly}" x2="${noteX + 8 * scale}" y2="${ly}" stroke="${lineStroke}" stroke-width="${1.3 * scale}" />`;
+                        svgContent += `<line x1="${noteX - 8 * scale}" y1="${ly}" x2="${noteX + 8 * scale}" y2="${ly}" stroke="${lineStroke}" stroke-width="${1.2 * scale}" />`;
                     }
                 });
             }
@@ -995,7 +1040,7 @@ function renderVerticalSheetMusic(targetContainerId) {
                 lhLedgerLines.forEach(lp => {
                     if (lp >= pitch) {
                         const ly = yOffset + lhStaffCenterY - (lp - 50) * dy;
-                        svgContent += `<line x1="${noteX - 8 * scale}" y1="${ly}" x2="${noteX + 8 * scale}" y2="${ly}" stroke="${lineStroke}" stroke-width="${1.3 * scale}" />`;
+                        svgContent += `<line x1="${noteX - 8 * scale}" y1="${ly}" x2="${noteX + 8 * scale}" y2="${ly}" stroke="${lineStroke}" stroke-width="${1.2 * scale}" />`;
                     }
                 });
             }
@@ -1031,14 +1076,13 @@ function renderVerticalSheetMusic(targetContainerId) {
             strokeWidthAttr = `stroke-width="${1.3 * scale}"`;
         }
 
-        // Original Rotated Notehead Ellipse
         svgContent += `<ellipse cx="${noteX}" cy="${y}" rx="${5.5 * scale}" ry="${3.8 * scale}" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="${targetContainerId}-notehead-${index}" transform="rotate(-15, ${noteX}, ${y})" />`;
 
         if (!isWholeNote) {
             if (stemDirection === "up") {
-                svgContent += `<line x1="${noteX + 4.5 * scale}" y1="${y}" x2="${noteX + 4.5 * scale}" y2="${y - 18 * scale}" stroke="${color}" stroke-width="${1.3 * scale}" id="${targetContainerId}-stem-${index}" />`;
+                svgContent += `<line x1="${noteX + 4.5 * scale}" y1="${y}" x2="${noteX + 4.5 * scale}" y2="${y - 18 * scale}" stroke="${color}" stroke-width="${1.2 * scale}" id="${targetContainerId}-stem-${index}" />`;
             } else {
-                svgContent += `<line x1="${noteX - 4.5 * scale}" y1="${y}" x2="${noteX - 4.5 * scale}" y2="${y + 18 * scale}" stroke="${color}" stroke-width="${1.3 * scale}" id="${targetContainerId}-stem-${index}" />`;
+                svgContent += `<line x1="${noteX - 4.5 * scale}" y1="${y}" x2="${noteX - 4.5 * scale}" y2="${y + 18 * scale}" stroke="${color}" stroke-width="${1.2 * scale}" id="${targetContainerId}-stem-${index}" />`;
             }
         }
     });
@@ -1055,11 +1099,11 @@ function renderVerticalSheetMusic(targetContainerId) {
     svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeftValue + startPadding * scale}" y1="10" x2="${marginLeftValue + startPadding * scale}" y2="${svgHeightVal - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
     svgContent += `<text x="${svgWidth / 2}" y="${svgHeightVal - 15}" text-anchor="middle" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">(C) T1ERA Music Ai</text>`;
 
-    const svgString = `<svg width="${svgWidth}" height="${svgHeightVal}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: block; margin: 0 auto;">${svgContent}</svg>`;
+    const svgString = `<svg width="${svgWidth}" height="${svgHeightVal}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">${svgContent}</svg>`;
     document.getElementById(targetContainerId).innerHTML = svgString;
 }
 
-// Vertical playback engine
+// Direct playback audio engine (Vertical system)
 function startVerticalPlayback(targetContainerId) {
     if (isVerticalPlaying) {
         stopVerticalPlayback();
@@ -1086,12 +1130,8 @@ function startVerticalPlayback(targetContainerId) {
 
     const marginLeft = 100;
     const parentEl = document.getElementById(targetContainerId)?.parentElement;
-    const scrollFrame = (targetContainerId === 'sheet-music-notation-max')
-        ? (document.getElementById('max-modal-scroll-container') || parentEl)
-        : (document.getElementById('sheet-tab-notation-content-vertical') || parentEl);
-
-    const availableWidth = scrollFrame?.clientWidth || (window.innerWidth - 60);
-    const containerWidth = Math.max(320, availableWidth - 24);
+    const parentWidth = parentEl?.clientWidth || (window.innerWidth * 0.85);
+    const containerWidth = Math.max(320, parentWidth - 20);
     
     let localMarginLeft = marginLeft;
     let localMarginRight = 50;
@@ -1100,12 +1140,15 @@ function startVerticalPlayback(targetContainerId) {
         localMarginRight = 15;
     }
     
+    const isVerticalOrMax = (targetContainerId === 'sheet-music-notation-vertical' || targetContainerId === 'sheet-music-notation-max');
     const isPhoneView = containerWidth < 768;
-    const scale = isPhoneView ? 0.7 : 1.0;
-    const systemDuration = isPhoneView ? 6 : 10;
-    const systemHeight = isPhoneView ? 150 : 220;
-    const rhStaffCenterY = isPhoneView ? 42 : 60;
-    const lhStaffCenterY = isPhoneView ? 105 : 160;
+    const shouldScale = isVerticalOrMax && isPhoneView;
+
+    const scale = shouldScale ? 0.65 : 1.0;
+    const systemDuration = shouldScale ? 6 : 10;
+    const systemHeight = shouldScale ? 140 : 220;
+    const rhStaffCenterY = shouldScale ? 40 : 60;
+    const lhStaffCenterY = shouldScale ? 100 : 160;
 
     const startPadding = 45;
     const systemWidth = containerWidth - localMarginLeft - localMarginRight;
@@ -1173,6 +1216,7 @@ function startVerticalPlayback(targetContainerId) {
             }
         }
 
+        // Audio scheduling
         const lookahead = 0.100;
         const nextWindowTime = rawPlaybackTime + lookahead;
 
@@ -1202,6 +1246,7 @@ function startVerticalPlayback(targetContainerId) {
             }
         }
 
+        // Visual Highlight Loop
         while (verticalVisualNoteIndex < activeNotesMemory.length) {
             const note = activeNotesMemory[verticalVisualNoteIndex];
             const shiftedStart = Math.max(0, note.time - firstNoteTime);
@@ -1232,6 +1277,7 @@ function startVerticalPlayback(targetContainerId) {
             }
         }
 
+        // Visual Release Loop
         const checkStart = Math.max(0, verticalVisualNoteIndex - 100);
         for (let i = checkStart; i < verticalVisualNoteIndex; i++) {
             const note = activeNotesMemory[i];
@@ -1294,8 +1340,11 @@ function stopVerticalPlayback() {
         const container = document.getElementById(activeVerticalContainerId);
         const containerWidth = container?.parentElement?.clientWidth || window.innerWidth;
         
+        const isVerticalOrMax = (activeVerticalContainerId === 'sheet-music-notation-vertical' || activeVerticalContainerId === 'sheet-music-notation-max');
         const isPhoneView = containerWidth < 768;
-        const scale = isPhoneView ? 0.7 : 1.0;
+        const shouldScale = isVerticalOrMax && isPhoneView;
+
+        const scale = shouldScale ? 0.65 : 1.0;
         const startPadding = 45;
 
         const cursor = document.getElementById(`${activeVerticalContainerId}-playback-cursor`);
@@ -1449,6 +1498,7 @@ function populateRawMidiData() {
     });
 }
 
+// Section 1 playback
 function startSheetPlayback() {
     if (sheetMusicPlaying) {
         pauseSheetPlayback();
@@ -1556,17 +1606,17 @@ function startSheetPlayback() {
 
                 if (noteHead) {
                     if (noteHead.getAttribute('stroke') !== 'none') {
-                        noteHead.setAttribute('stroke', '#db2777');
-                        noteHead.setAttribute('stroke-width', '1.5');
+                        noteHead.setAttribute('stroke', '#e879f9');
+                        noteHead.setAttribute('stroke-width', '1.3');
                     } else {
-                        noteHead.setAttribute('fill', '#db2777');
+                        noteHead.setAttribute('fill', '#e879f9');
                     }
                 }
-                if (noteRect) noteRect.setAttribute('fill', '#db2777');
-                if (sharpEl) sharpEl.querySelectorAll('line').forEach(l => l.setAttribute('stroke', '#db2777'));
+                if (noteRect) noteRect.setAttribute('fill', '#e879f9');
+                if (sharpEl) sharpEl.querySelectorAll('line').forEach(l => l.setAttribute('stroke', '#e879f9'));
                 if (holdCurl) {
-                    holdCurl.querySelectorAll('path, line').forEach(el => el.setAttribute('stroke', '#db2777'));
-                    holdCurl.querySelectorAll('circle').forEach(c => c.setAttribute('fill', '#db2777'));
+                    holdCurl.querySelectorAll('path, line').forEach(el => el.setAttribute('stroke', '#e879f9'));
+                    holdCurl.querySelectorAll('circle').forEach(c => c.setAttribute('fill', '#e879f9'));
                 }
 
                 sheetVisualNoteIndex++;
@@ -1585,22 +1635,22 @@ function startSheetPlayback() {
                 const noteRect = document.getElementById(`sheet-note-rect-${i}`);
                 const sharpEl = document.getElementById(`sheet-sharp-${i}`);
                 const holdCurl = document.getElementById(`sheet-hold-curl-${i}`);
-                const defColor = "#111115";
+                const defColor = note.midi >= 60 ? '#818cf8' : '#fbbf24';
 
                 if (noteHead) {
                     const isHollow = noteHead.getAttribute('stroke') !== 'none';
                     if (isHollow) {
-                        if (noteHead.getAttribute('stroke') === '#db2777') {
+                        if (noteHead.getAttribute('stroke') === '#e879f9') {
                             noteHead.setAttribute('stroke', defColor);
-                            noteHead.setAttribute('stroke-width', '1.5');
+                            noteHead.setAttribute('stroke-width', '1.3');
                         }
                     } else {
-                        if (noteHead.getAttribute('fill') === '#db2777') {
+                        if (noteHead.getAttribute('fill') === '#e879f9') {
                             noteHead.setAttribute('fill', defColor);
                         }
                     }
                 }
-                if (noteRect && noteRect.getAttribute('fill') === '#db2777') {
+                if (noteRect && noteRect.getAttribute('fill') === '#e879f9') {
                     noteRect.setAttribute('fill', defColor);
                 }
                 if (sharpEl) {
@@ -1664,7 +1714,7 @@ function resetSheetNoteHighlights() {
         const noteRect = document.getElementById(`sheet-note-rect-${index}`);
         const sharpEl = document.getElementById(`sheet-sharp-${index}`);
         const holdCurl = document.getElementById(`sheet-hold-curl-${index}`);
-        const defaultColor = "#111115";
+        const defaultColor = note.midi >= 60 ? '#818cf8' : '#fbbf24';
 
         const durationTicks = note.durationTicks || (note.duration * 2 * ppq);
         const isWholeNote = durationTicks >= ppq * 3.2;
@@ -1672,9 +1722,9 @@ function resetSheetNoteHighlights() {
 
         if (noteHead) {
             if (isWholeNote || isHalfNote) {
-                noteHead.setAttribute('fill', '#ffffff');
+                noteHead.setAttribute('fill', '#0b0b0f');
                 noteHead.setAttribute('stroke', defaultColor);
-                noteHead.setAttribute('stroke-width', '1.5');
+                noteHead.setAttribute('stroke-width', '1.3');
             } else {
                 noteHead.setAttribute('fill', defaultColor);
                 noteHead.setAttribute('stroke', 'none');
@@ -1765,13 +1815,13 @@ function renderStudioSheetMusic(targetContainerId) {
         const rhLines = [64, 67, 71, 74, 77];
         rhLines.forEach(pitch => {
             const y = yOffset + rhStaffCenterY - (pitch - 71) * dy;
-            svgContent += `<line x1="${marginLeft}" y1="${y}" x2="${marginLeft + systemWidth}" y2="${y}" stroke="#111115" stroke-width="0.9" />`;
+            svgContent += `<line x1="${marginLeft}" y1="${y}" x2="${marginLeft + systemWidth}" y2="${y}" stroke="#9ca3af" stroke-width="0.75" />`;
         });
 
         const lhLines = [43, 47, 50, 53, 57];
         lhLines.forEach(pitch => {
             const y = yOffset + lhStaffCenterY - (pitch - 50) * dy;
-            svgContent += `<line x1="${marginLeft}" y1="${y}" x2="${marginLeft + systemWidth}" y2="${y}" stroke="#111115" stroke-width="0.9" />`;
+            svgContent += `<line x1="${marginLeft}" y1="${y}" x2="${marginLeft + systemWidth}" y2="${y}" stroke="#9ca3af" stroke-width="0.75" />`;
         });
 
         svgContent += `<line x1="${marginLeft - 80}" y1="${yOffset + 20}" x2="${marginLeft - 80}" y2="${yOffset + 200}" stroke="#111115" stroke-width="1.5" />`;
@@ -1779,7 +1829,7 @@ function renderStudioSheetMusic(targetContainerId) {
         svgContent += `<text x="${marginLeft - 60}" y="${yOffset + lhStaffCenterY + 5}" fill="#111115" font-size="14" font-weight="bold" font-family="-apple-system, sans-serif">LH</text>`;
 
         svgContent += `
-        <g transform="translate(${marginLeft - 30}, ${yOffset + rhStaffCenterY})" stroke="#111115" stroke-width="2.5" fill="none" opacity="1.0" stroke-linecap="round" stroke-linejoin="round">
+        <g transform="translate(${marginLeft - 30}, ${yOffset + rhStaffCenterY})" stroke="#111115" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round" stroke-linejoin="round">
             <path d="M 5,-40 L 5,30 C 5,38 0,42 -5,42 C -9,42 -12,38 -12,34 C -12,30 -9,27 -6,27 C -3,27 0,31 0,34" />
             <circle cx="5" cy="-40" r="3" fill="#111115" />
             <path d="M 5,-15 C 5,-28 15,-32 15,-20 C 15,-10 5,0 5,10" />
@@ -1787,7 +1837,7 @@ function renderStudioSheetMusic(targetContainerId) {
         </g>`;
 
         svgContent += `
-        <g transform="translate(${marginLeft - 30}, ${yOffset + lhStaffCenterY})" stroke="#111115" stroke-width="2.5" fill="none" opacity="1.0" stroke-linecap="round" stroke-linejoin="round">
+        <g transform="translate(${marginLeft - 30}, ${yOffset + lhStaffCenterY})" stroke="#111115" stroke-width="2.5" fill="none" opacity="0.9" stroke-linecap="round" stroke-linejoin="round">
             <path d="M -8,-10 C -2,-18 10,-18 10,-8 C 10,2 -2,10 -8,18 C -10,21 -12,25 -12,28" />
             <circle cx="-8" cy="-10" r="3.5" fill="#111115" stroke="none" />
             <circle cx="16" cy="-15" r="2.5" fill="#111115" stroke="none" />
@@ -1826,10 +1876,10 @@ function renderStudioSheetMusic(targetContainerId) {
         const noteX = systemTimeOffset * localPixelsPerSecond + marginLeft + startPadding;
         const doubleBarX = noteX - 10;
 
-        svgContent += `<line x1="${doubleBarX - 3}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX - 3}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="1.0" opacity="0.95" />`;
-        svgContent += `<line x1="${doubleBarX}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="2.4" opacity="0.95" />`;
-        svgContent += `<line x1="${doubleBarX - 3}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX - 3}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="1.0" opacity="0.95" />`;
-        svgContent += `<line x1="${doubleBarX}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="2.4" opacity="0.95" />`;
+        svgContent += `<line x1="${doubleBarX - 3}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX - 3}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="1.0" opacity="0.85" />`;
+        svgContent += `<line x1="${doubleBarX}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="2.4" opacity="0.85" />`;
+        svgContent += `<line x1="${doubleBarX - 3}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX - 3}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="1.0" opacity="0.85" />`;
+        svgContent += `<line x1="${doubleBarX}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="2.4" opacity="0.85" />`;
     });
 
     const ppq = (midiData && midiData.header) ? (midiData.header.PPQ || midiData.header.ppq || 480) : 480;
@@ -1848,13 +1898,17 @@ function renderStudioSheetMusic(targetContainerId) {
         const pitch = note.midi;
 
         let y = 0;
-        let color = showColors ? (pitch >= 60 ? "#4f46e5" : "#d97706") : "#111115";
-        let stemDirection = (pitch >= (pitch >= 60 ? 72 : 51)) ? "down" : "up";
+        let color = "";
+        let stemDirection = "";
 
         if (pitch >= 60) {
             y = yOffset + rhStaffCenterY - (pitch - 71) * dy;
+            color = showColors ? "#4f46e5" : "#111115";
+            stemDirection = (pitch >= 72) ? "down" : "up";
         } else {
             y = yOffset + lhStaffCenterY - (pitch - 50) * dy;
+            color = showColors ? "#d97706" : "#111115";
+            stemDirection = (pitch >= 51) ? "down" : "up";
         }
 
         const lineStroke = showColors ? color : "#111115";
@@ -2111,7 +2165,12 @@ function startStudioPlayback() {
                 const chkShowColors = document.getElementById('chk-show-colors');
                 const showColors = chkShowColors ? chkShowColors.checked : false;
 
-                let defaultColor = showColors ? (note.midi >= 60 ? '#4f46e5' : '#d97706') : '#111115';
+                let defaultColor = "";
+                if (note.midi >= 60) {
+                    defaultColor = showColors ? '#4f46e5' : '#111115';
+                } else {
+                    defaultColor = showColors ? '#d97706' : '#111115';
+                }
 
                 if (noteHead) {
                     const isHollow = noteHead.getAttribute('stroke') !== 'none';
@@ -2189,7 +2248,12 @@ function resetStudioNoteHighlights() {
         const sharpEl = document.getElementById(`sheet-music-notation-studio-sharp-${index}`);
         const holdCurl = document.getElementById(`sheet-music-notation-studio-hold-curl-${index}`);
         
-        let defaultColor = showColors ? (note.midi >= 60 ? '#4f46e5' : '#d97706') : '#111115';
+        let defaultColor = "";
+        if (note.midi >= 60) {
+            defaultColor = showColors ? '#4f46e5' : '#111115';
+        } else {
+            defaultColor = showColors ? '#d97706' : '#111115';
+        }
 
         const durationTicks = note.durationTicks || (note.duration * 2 * ppq);
         const isWholeNote = durationTicks >= ppq * 3.2;
