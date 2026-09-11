@@ -13,6 +13,14 @@ let studioLogicalStartTime = 0;
 let resolvedSheetTitle = "";
 let currentHeaderOffset = 110; // Dynamic vertical spacer margin
 
+// Dynamically load the new export helper script on load to ensure it links perfectly
+if (!document.querySelector('script[src*="t1era-sheet-export.js"]')) {
+    const scriptNode = document.createElement('script');
+    scriptNode.src = 't1era-sheet-export.js';
+    scriptNode.type = 'text/javascript';
+    document.head.appendChild(scriptNode);
+}
+
 // Inject modern responsive layout CSS for Section 2 controls inside the sheet music popup (iOS & Android optimized)
 const styleNode = document.createElement('style');
 styleNode.innerHTML = `
@@ -330,6 +338,7 @@ function drawSingleRestSVG(svgContent, x, centerY, type, color, dy, scale) {
         const line4Y = centerY - 3 * dy * scale;
         svgContent += `<rect x="${x - 7 * scale}" y="${line4Y}" width="${14 * scale}" height="${6 * scale}" fill="${color}" opacity="0.85" />`;
     } else if (type === "half") {
+        const line3Y = centerY;
         svgContent += `<rect x="${x - 7 * scale}" y="${centerY - 6 * scale}" width="${14 * scale}" height="${6 * scale}" fill="${color}" opacity="0.85" />`;
     }
     return svgContent;
@@ -651,8 +660,14 @@ function renderVerticalSheetMusic(targetContainerId) {
     }
     
     const systemWidth = svgWidth - marginLeftValue - marginRightValue;
-    // Shifted entire layout down by 70px to make room for Title + Subtitle
-    const svgHeight = numSystems * systemHeight + 170; 
+
+    // Split title intelligently into multiple lines if too long to prevent horizontal overflows [1]
+    const titleText = resolvedSheetTitle || "Loading Score...";
+    const titleLines = wrapSvgText(titleText, containerWidth < 600 ? 25 : 50).slice(0, 2);
+    
+    // Scale system spacer dynamically depending on if title wraps to 2 lines [1]
+    currentHeaderOffset = titleLines.length > 1 ? 135 : 110;
+    const svgHeightVal = numSystems * systemHeight + currentHeaderOffset + 60; 
 
     const chkShowColors = document.getElementById('chk-show-colors');
     const showColors = chkShowColors ? chkShowColors.checked : false;
@@ -664,13 +679,6 @@ function renderVerticalSheetMusic(targetContainerId) {
     let svgContent = "";
 
     // 4. Centered Track Title & Subtitle inside the Sheet Music (Strictly inside Section 2 SVG Canvas) [1]
-    const titleText = resolvedSheetTitle || "Loading Score...";
-    const titleLines = wrapSvgText(titleText, containerWidth < 600 ? 25 : 50).slice(0, 2);
-    
-    // Scale system spacer dynamically depending on if title wraps to 2 lines [1]
-    currentHeaderOffset = titleLines.length > 1 ? 135 : 110;
-    const svgHeightVal = numSystems * systemHeight + currentHeaderOffset + 60; 
-
     if (titleLines.length === 1) {
         svgContent += `<text x="${svgWidth / 2}" y="45" text-anchor="middle" fill="#111115" font-size="20" font-weight="700" font-family="Georgia, serif">${titleLines[0]}</text>`;
         svgContent += `<text x="${svgWidth / 2}" y="65" text-anchor="middle" fill="#66666e" font-size="11" font-weight="500" font-family="-apple-system, sans-serif">(c) T1ERA Music Ai</text>`;
@@ -889,7 +897,7 @@ function renderVerticalSheetMusic(targetContainerId) {
     svgContent += `<line x1="${endX + 3 * scale}" y1="${lastSystemYOffset + (rhStaffCenterY - 18) * scale}" x2="${endX + 3 * scale}" y2="${lastSystemYOffset + (lhStaffCenterY + 21) * scale}" stroke="#111115" stroke-width="${2.8 * scale}" />`;
 
     // Vertical playback tracking pointer cursor
-    svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeftValue + startPadding * scale}" y1="10" x2="${marginLeftValue + startPadding * scale}" y2="${svgHeightVal - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
+    svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeftValue + startPadding * scale}" y1="10" x2="${marginLeftValue + startPadding * scale}" y2="${svgHeight - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
 
     // Draw footer copyright on the bottom center (Replaced unicode to prevent ?? errors)
     svgContent += `<text x="${svgWidth / 2}" y="${svgHeight - 15}" text-anchor="middle" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">(C) T1ERA Music Ai</text>`;
@@ -1552,7 +1560,6 @@ function renderStudioSheetMusic(targetContainerId) {
     }
 
     const firstNoteTime = 0;
-    const firstNoteActualTime = studioNotesMemory.length > 0 ? studioNotesMemory[0].time : 0;
     const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
 
     const marginLeft = 100;
@@ -1768,7 +1775,7 @@ function renderStudioSheetMusic(targetContainerId) {
         const isWholeNote = durationTicks >= ppq * 3.2;
         const isHalfNote = durationTicks >= ppq * 1.6 && durationTicks < ppq * 3.2;
 
-        // Notehead (reduced stroke-width to 1.3)
+        // Notehead
         let noteheadFill = color;
         let noteheadStroke = "none";
         let strokeWidthAttr = "";
