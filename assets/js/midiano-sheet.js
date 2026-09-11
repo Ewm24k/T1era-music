@@ -567,7 +567,7 @@ function renderSheetMusic() {
             strokeWidthAttr = 'stroke-width="1.3"';
         }
 
-        svgContent += `<ellipse cx="${x}" cy="${y}" rx="7" ry="5" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="sheet-notehead-${index}" transform="rotate(-15, ${x}, ${y})" />`;
+        svgContent += `<ellipse cx="${x}" cy="${y}" rx="${7}" ry="${5}" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="sheet-notehead-${index}" transform="rotate(-15, ${x}, ${y})" />`;
 
         // Stems standard attachment (Whole notes do not have stems in standard engraving)
         if (!isWholeNote) {
@@ -2088,6 +2088,30 @@ function resetStudioNoteHighlights() {
             }
         }
     });
+}
+
+// Sharp Key Function
+function sharpKey(keyOrMidi) {
+    var sharpMap = {
+        "C": 0, "G": 1, "D": 2, "A": 3, "E": 4, "B": 5, "F#": 6, "C#": 7,
+        "a": 0, "e": 1, "b": 2, "f#": 3, "c#": 4, "g#": 5, "d#": 6, "a#": 7
+    };
+    if (typeof keyOrMidi === "number") {
+        var pitchClass = ((keyOrMidi % 12) + 12) % 12;
+        return pitchClass === 1 || pitchClass === 3 || pitchClass === 6 || pitchClass === 8 || pitchClass === 10;
+    }
+    if (typeof keyOrMidi === "string") {
+        var k = keyOrMidi.trim();
+        if (Object.prototype.hasOwnProperty.call(sharpMap, k)) {
+            return sharpMap[k] > 0;
+        }
+        return k.indexOf("#") !== -1 || k.indexOf("^") !== -1;
+    }
+    return false;
+}
+
+function isSharpKey(key) {
+    return sharpKey(key);
 }
 
 // --- Initialize Sequence Runner ---
