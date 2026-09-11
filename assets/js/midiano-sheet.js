@@ -354,13 +354,45 @@ function playNoteSafely(noteName, duration, time, velocity, strict) {
     }
 }
 
+// Sharp Key Function: detects sharp key signatures, sharp pitches (black keys), and accidentals
+function sharpKey(keyOrMidi) {
+    if (arguments.length === 0) {
+        if (typeof midiData !== 'undefined' && midiData && midiData.header && midiData.header.keySignatures && midiData.header.keySignatures.length > 0) {
+            var currentKey = midiData.header.keySignatures[0].key || "";
+            return sharpKey(currentKey);
+        }
+        return false;
+    }
+    var sharpMap = {
+        "C": 0, "G": 1, "D": 2, "A": 3, "E": 4, "B": 5, "F#": 6, "C#": 7,
+        "a": 0, "e": 1, "b": 2, "f#": 3, "c#": 4, "g#": 5, "d#": 6, "a#": 7
+    };
+    if (typeof keyOrMidi === "number") {
+        var pitchClass = ((keyOrMidi % 12) + 12) % 12;
+        return pitchClass === 1 || pitchClass === 3 || pitchClass === 6 || pitchClass === 8 || pitchClass === 10;
+    }
+    if (typeof keyOrMidi === "string") {
+        var k = keyOrMidi.trim();
+        if (Object.prototype.hasOwnProperty.call(sharpMap, k)) {
+            return sharpMap[k] > 0;
+        }
+        return k.indexOf("#") !== -1 || k.indexOf("^") !== -1;
+    }
+    return false;
+}
+
+function isSharpKey(key) {
+    return sharpKey(key);
+}
+
 // Algorithmic spelling engine: Converts pitch numbers into properly spelled notes based on current Key Signature
 function midiToAbcPitch(midi, key) {
     const pitchClass = midi % 12;
     const octave = Math.floor(midi / 12) - 1; // 4 is Middle C
     
     // Retrieve correct spelled diatonic accidental arrays based on current key signature map
-    const keyMap = KEY_MAPS[key] || KEY_MAPS["C"];
+    const defaultKeyMap = ["C", "^C", "D", "^D", "E", "F", "^F", "G", "^G", "A", "^A", "B"];
+    const keyMap = (typeof KEY_MAPS !== 'undefined' && KEY_MAPS && (KEY_MAPS[key] || KEY_MAPS["C"])) ? (KEY_MAPS[key] || KEY_MAPS["C"]) : defaultKeyMap;
     let baseName = keyMap[pitchClass];
 
     let abc = "";
@@ -567,7 +599,12 @@ function renderSheetMusic() {
             strokeWidthAttr = 'stroke-width="1.3"';
         }
 
-        svgContent += `<ellipse cx="${x}" cy="${y}" rx="${7}" ry="${5}" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="sheet-notehead-${index}" transform="rotate(-15, ${x}, ${y})" />`;
+        // Render Sharp accidental glyph on sharp keys/pitches
+        if (sharpKey(pitch)) {
+            svgContent += `<text x="${x - 11}" y="${y + 5}" font-size="16" font-family="Georgia, serif" font-weight="bold" fill="${color}" text-anchor="middle">♯</text>`;
+        }
+
+        svgContent += `<ellipse cx="${x}" cy="${y}" rx="7" ry="5" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="sheet-notehead-${index}" transform="rotate(-15, ${x}, ${y})" />`;
 
         // Stems standard attachment (Whole notes do not have stems in standard engraving)
         if (!isWholeNote) {
@@ -863,6 +900,11 @@ function renderVerticalSheetMusic(targetContainerId) {
             noteheadFill = "#ffffff"; // Masks background cleanly in white portal viewports
             noteheadStroke = color;
             strokeWidthAttr = `stroke-width="${1.3 * scale}"`;
+        }
+
+        // Render Sharp accidental glyph on sharp keys/pitches
+        if (sharpKey(pitch)) {
+            svgContent += `<text x="${noteX - 8.5 * scale}" y="${y + 4.2 * scale}" font-size="${13 * scale}" font-family="Georgia, serif" font-weight="bold" fill="${color}" text-anchor="middle">♯</text>`;
         }
 
         svgContent += `<ellipse cx="${noteX}" cy="${y}" rx="${5.5 * scale}" ry="${3.8 * scale}" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="${targetContainerId}-notehead-${index}" transform="rotate(-15, ${noteX}, ${y})" />`;
@@ -1778,6 +1820,11 @@ function renderStudioSheetMusic(targetContainerId) {
             strokeWidthAttr = 'stroke-width="1.3"';
         }
 
+        // Render Sharp accidental glyph on sharp keys/pitches
+        if (sharpKey(pitch)) {
+            svgContent += `<text x="${noteX - 11}" y="${y + 5}" font-size="15" font-family="Georgia, serif" font-weight="bold" fill="${color}" text-anchor="middle">♯</text>`;
+        }
+
         svgContent += `<ellipse cx="${noteX}" cy="${y}" rx="${7}" ry="${5}" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="${targetContainerId}-notehead-${index}" transform="rotate(-15, ${noteX}, ${y})" />`;
 
         // Stems standard attachment (No stem for Whole notes)
@@ -1948,8 +1995,8 @@ function startStudioPlayback() {
         }
 
         // Visual Highlight Loop (Lights up notes exactly when heard)
-        while (studioVisualNoteIndex < studioNotesMemory.length) {
-            const note = studioNotesMemory[studioVisualNoteIndex];
+        while (studioVisualNoteIndex < activeNotesMemory.length) {
+            const note = activeNotesMemory[studioVisualNoteIndex];
             const shiftedStart = Math.max(0, note.time - firstNoteTime);
             if (shiftedStart <= studioPlaybackTime) {
                 const noteHead = document.getElementById(`sheet-music-notation-studio-notehead-${studioVisualNoteIndex}`);
@@ -2088,30 +2135,6 @@ function resetStudioNoteHighlights() {
             }
         }
     });
-}
-
-// Sharp Key Function
-function sharpKey(keyOrMidi) {
-    var sharpMap = {
-        "C": 0, "G": 1, "D": 2, "A": 3, "E": 4, "B": 5, "F#": 6, "C#": 7,
-        "a": 0, "e": 1, "b": 2, "f#": 3, "c#": 4, "g#": 5, "d#": 6, "a#": 7
-    };
-    if (typeof keyOrMidi === "number") {
-        var pitchClass = ((keyOrMidi % 12) + 12) % 12;
-        return pitchClass === 1 || pitchClass === 3 || pitchClass === 6 || pitchClass === 8 || pitchClass === 10;
-    }
-    if (typeof keyOrMidi === "string") {
-        var k = keyOrMidi.trim();
-        if (Object.prototype.hasOwnProperty.call(sharpMap, k)) {
-            return sharpMap[k] > 0;
-        }
-        return k.indexOf("#") !== -1 || k.indexOf("^") !== -1;
-    }
-    return false;
-}
-
-function isSharpKey(key) {
-    return sharpKey(key);
 }
 
 // --- Initialize Sequence Runner ---
