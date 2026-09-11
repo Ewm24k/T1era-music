@@ -238,7 +238,16 @@
                             <h3 style="color: var(--text-color); font-size: 1rem; margin-bottom: 4px;">Section 2: Portrait Wrapped Layout</h3>
                             <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0;">Traditional vertical page scroll (White paper / Thin staves)</p>
                         </div>
-                        <div style="display: flex; gap: 12px; align-items: center;">
+                        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                            <!-- Style Selector for Section 2 -->
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600;">Style:</span>
+                                <select id="select-sheet-style-second" style="background: #20202c; color: #fff; border: 1px solid var(--panel-border); padding: 5px 8px; border-radius: 6px; font-size: 0.8rem; cursor: pointer;">
+                                    <option value="timeline" selected>Timeline (Visualizer)</option>
+                                    <option value="pro">MuseStudio Pro (Engraved)</option>
+                                </select>
+                            </div>
+
                             <!-- Show Colors Checkbox (Unchecked by default) -->
                             <label style="display: inline-flex; align-items: center; gap: 6px; color: var(--text-color); font-size: 0.85rem; cursor: pointer; user-select: none;">
                                 <input type="checkbox" id="chk-show-colors" style="accent-color: var(--accent-color);">
@@ -372,6 +381,15 @@
             <div class="max-modal-header">
                 <h2 class="max-modal-title">Full Sheet Music (Portrait Wrapped)</h2>
                 <div class="max-modal-btn-grid">
+                    <!-- Style Selector inside Maximized Modal -->
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="color: #4b5563; font-size: 0.8rem; font-weight: 600;">Style:</span>
+                        <select id="select-sheet-style-max" style="background: #f3f4f6; color: #111827; border: 1px solid #d1d5db; padding: 5px 8px; border-radius: 6px; font-size: 0.8rem; cursor: pointer;">
+                            <option value="timeline" selected>Timeline (Visualizer)</option>
+                            <option value="pro">MuseStudio Pro (Engraved)</option>
+                        </select>
+                    </div>
+
                     <button id="btn-play-max" class="btn-primary-action">Play Score</button>
                     <button id="btn-stop-max" class="btn-danger-action" disabled>Stop Score</button>
                     
@@ -543,6 +561,7 @@
     <script src="assets/js/midiano-transcribe.js"></script>
     <script src="assets/js/midiano-download.js"></script>
     <script src="assets/js/midiano-visualizer.js"></script>
+    <script src="assets/js/midiano-pro-sheet.js"></script>
     <script src="assets/js/midiano-sheet.js"></script>
 </body>
 </html>
