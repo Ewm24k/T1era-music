@@ -599,9 +599,9 @@ function renderSheetMusic() {
             strokeWidthAttr = 'stroke-width="1.3"';
         }
 
-        // Render Sharp accidental glyph on sharp keys/pitches
+        // Render Sharp accidental glyph on sharp keys/pitches (Optimized size and clear alignment)
         if (sharpKey(pitch)) {
-            svgContent += `<text x="${x - 11}" y="${y + 5}" font-size="16" font-family="Georgia, serif" font-weight="bold" fill="${color}" text-anchor="middle">♯</text>`;
+            svgContent += `<text x="${x - 13}" y="${y + 6}" font-size="20" font-family="Georgia, serif" font-weight="bold" fill="${color}" text-anchor="middle">♯</text>`;
         }
 
         svgContent += `<ellipse cx="${x}" cy="${y}" rx="7" ry="5" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="sheet-notehead-${index}" transform="rotate(-15, ${x}, ${y})" />`;
@@ -902,9 +902,9 @@ function renderVerticalSheetMusic(targetContainerId) {
             strokeWidthAttr = `stroke-width="${1.3 * scale}"`;
         }
 
-        // Render Sharp accidental glyph on sharp keys/pitches
+        // Render Sharp accidental glyph on sharp keys/pitches (Increased size with proportionate spacing)
         if (sharpKey(pitch)) {
-            svgContent += `<text x="${noteX - 8.5 * scale}" y="${y + 4.2 * scale}" font-size="${13 * scale}" font-family="Georgia, serif" font-weight="bold" fill="${color}" text-anchor="middle">♯</text>`;
+            svgContent += `<text x="${noteX - 11 * scale}" y="${y + 5.5 * scale}" font-size="${18 * scale}" font-family="Georgia, serif" font-weight="bold" fill="${color}" text-anchor="middle">♯</text>`;
         }
 
         svgContent += `<ellipse cx="${noteX}" cy="${y}" rx="${5.5 * scale}" ry="${3.8 * scale}" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="${targetContainerId}-notehead-${index}" transform="rotate(-15, ${noteX}, ${y})" />`;
@@ -1820,9 +1820,9 @@ function renderStudioSheetMusic(targetContainerId) {
             strokeWidthAttr = 'stroke-width="1.3"';
         }
 
-        // Render Sharp accidental glyph on sharp keys/pitches
+        // Render Sharp accidental glyph on sharp keys/pitches (Optimized size and clear alignment)
         if (sharpKey(pitch)) {
-            svgContent += `<text x="${noteX - 11}" y="${y + 5}" font-size="15" font-family="Georgia, serif" font-weight="bold" fill="${color}" text-anchor="middle">♯</text>`;
+            svgContent += `<text x="${noteX - 13}" y="${y + 6}" font-size="20" font-family="Georgia, serif" font-weight="bold" fill="${color}" text-anchor="middle">♯</text>`;
         }
 
         svgContent += `<ellipse cx="${noteX}" cy="${y}" rx="${7}" ry="${5}" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="${targetContainerId}-notehead-${index}" transform="rotate(-15, ${noteX}, ${y})" />`;
@@ -1995,8 +1995,8 @@ function startStudioPlayback() {
         }
 
         // Visual Highlight Loop (Lights up notes exactly when heard)
-        while (studioVisualNoteIndex < activeNotesMemory.length) {
-            const note = activeNotesMemory[studioVisualNoteIndex];
+        while (studioVisualNoteIndex < studioNotesMemory.length) {
+            const note = studioNotesMemory[studioVisualNoteIndex];
             const shiftedStart = Math.max(0, note.time - firstNoteTime);
             if (shiftedStart <= studioPlaybackTime) {
                 const noteHead = document.getElementById(`sheet-music-notation-studio-notehead-${studioVisualNoteIndex}`);
@@ -2019,7 +2019,7 @@ function startStudioPlayback() {
         // Visual Release Loop (Reverts expired noteheads)
         const checkStart = Math.max(0, studioVisualNoteIndex - 100);
         for (let i = checkStart; i < studioVisualNoteIndex; i++) {
-            const note = studioNotesMemory[i];
+            const note = activeNotesMemory[i];
             const shiftedStart = Math.max(0, note.time - firstNoteTime);
             const shiftedEnd = shiftedStart + note.duration;
             if (studioPlaybackTime >= shiftedEnd) {
