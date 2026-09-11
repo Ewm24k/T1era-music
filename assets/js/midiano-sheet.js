@@ -9,6 +9,29 @@ let verticalLogicalStartTime = 0;
 let studioAudioStartTime = 0;
 let studioLogicalStartTime = 0;
 
+// Playback State Engine & Safe Default Globals
+let isVerticalPlaying = false;
+let sheetMusicPlaying = false;
+let isStudioPlaying = false;
+let verticalPlaybackTime = 0;
+let sheetMusicPlaybackTime = 0;
+let studioPlaybackTime = 0;
+let verticalPlaybackNoteIndex = 0;
+let sheetPlaybackNoteIndex = 0;
+let studioPlaybackNoteIndex = 0;
+let verticalPlaybackTimer = null;
+let sheetMusicPlaybackTimer = null;
+let studioPlaybackTimer = null;
+let activeVerticalContainerId = null;
+
+// Safe runtime fallbacks to prevent NaN math and instant stoppage
+if (typeof playbackSpeed === 'undefined') { var playbackSpeed = 1.0; }
+if (typeof totalDuration === 'undefined') { var totalDuration = 0; }
+if (typeof pixelsPerSecond === 'undefined') { var pixelsPerSecond = 50; }
+if (typeof activeNotesMemory === 'undefined') { var activeNotesMemory = []; }
+if (typeof studioNotesMemory === 'undefined') { var studioNotesMemory = []; }
+if (typeof midiData === 'undefined') { var midiData = null; }
+
 // Global Resolved Title State Cache & Layout Offsets
 let resolvedSheetTitle = "";
 let currentHeaderOffset = 110; // Dynamic vertical spacer margin
@@ -336,21 +359,18 @@ function drawSingleRestSVG(svgContent, x, centerY, type, color, dy, scale) {
 }
 
 // --- Shared massive-key / anti-choke playback guard ---
-// Prefers the triggerNoteWithVoiceGuard() function defined in the audio
-// engine script (handles same-pitch choking, overall polyphony stealing,
-// and massive-chord burst thinning in one place). Falls back to a plain
-// choke+attack call if that script isn't loaded, so this file still works
-// on its own.
 function playNoteSafely(noteName, duration, time, velocity, strict) {
     if (typeof triggerNoteWithVoiceGuard === 'function') {
         triggerNoteWithVoiceGuard(noteName, duration, time, velocity, strict);
         return;
     }
-    if (activeInstrument) {
+    if (typeof activeInstrument !== 'undefined' && activeInstrument) {
         if (typeof activeInstrument.triggerRelease === 'function') {
             activeInstrument.triggerRelease(noteName, time);
         }
-        activeInstrument.triggerAttackRelease(noteName, duration, time, velocity);
+        if (typeof activeInstrument.triggerAttackRelease === 'function') {
+            activeInstrument.triggerAttackRelease(noteName, duration, time, velocity);
+        }
     }
 }
 
@@ -360,7 +380,7 @@ function midiToAbcPitch(midi, key) {
     const octave = Math.floor(midi / 12) - 1; // 4 is Middle C
     
     // Retrieve correct spelled diatonic accidental arrays based on current key signature map
-    const keyMap = KEY_MAPS[key] || KEY_MAPS["C"];
+    const keyMap = (typeof KEY_MAPS !== 'undefined' && KEY_MAPS[key]) ? KEY_MAPS[key] : (typeof KEY_MAPS !== 'undefined' && KEY_MAPS["C"] ? KEY_MAPS["C"] : ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]);
     let baseName = keyMap[pitchClass];
 
     let abc = "";
@@ -583,8 +603,10 @@ function renderSheetMusic() {
     svgContent += `<line id="sheet-playback-cursor" x1="100" y1="10" x2="100" y2="290" stroke="#ef4444" stroke-width="2" style="display: none;" />`;
 
     // Insert vector graphic content inside the display frame
-    const svgString = `<svg width="${svgWidth}" height="${svgHeight}" style="background: #0b0b0f; border-radius: 8px;">${svgContent}</svg>`;
-    elSheetMusicNotation.innerHTML = svgString;
+    if (typeof elSheetMusicNotation !== 'undefined' && elSheetMusicNotation) {
+        const svgString = `<svg width="${svgWidth}" height="${svgHeight}" style="background: #0b0b0f; border-radius: 8px;">${svgContent}</svg>`;
+        elSheetMusicNotation.innerHTML = svgString;
+    }
 
     // Automatically populate the wrapped portrait score inside Section 2
     renderVerticalSheetMusic('sheet-music-notation-vertical');
@@ -894,21 +916,48 @@ function renderVerticalSheetMusic(targetContainerId) {
     // Draw footer copyright on the bottom center (Replaced unicode to prevent ?? errors)
     svgContent += `<text x="${svgWidth / 2}" y="${svgHeight - 15}" text-anchor="middle" fill="#111115" font-size="11" font-weight="600" font-family="-apple-system, sans-serif">(C) T1ERA Music Ai</text>`;
 
-    const svgString = `<svg width="${svgWidth}" height="${svgHeightVal}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">${svgContent}</svg>`;
-    document.getElementById(targetContainerId).innerHTML = svgString;
+    const targetEl = document.getElementById(targetContainerId);
+    if (targetEl) {
+        const svgString = `<svg width="${svgWidth}" height="${svgHeightVal}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">${svgContent}</svg>`;
+        targetEl.innerHTML = svgString;
+    }
 }
 
 // Direct playback audio engine: loop through the activeNotesMemory log sequentially (Vertical system)
-function startVerticalPlayback(targetContainerId) {
+async function startVerticalPlayback(targetContainerId) {
     if (isVerticalPlaying) {
         stopVerticalPlayback();
+        return;
     }
-    if (Tone.context.state !== 'running') {
-        Tone.start();
+
+    // Modern browser audio safety: strictly resume/start AudioContext inside the user interaction
+    if (typeof Tone !== 'undefined') {
+        if (Tone.context.state !== 'running') {
+            await Tone.start();
+        }
+        if (Tone.context.state === 'suspended') {
+            await Tone.context.resume();
+        }
+    }
+
+    // Safety checks against empty arrays or undefined durations
+    if (!activeNotesMemory || activeNotesMemory.length === 0) {
+        console.warn("[PLAYBACK GUARD] activeNotesMemory is empty, nothing to play.");
+        return;
+    }
+
+    if (typeof playbackSpeed === 'undefined' || !playbackSpeed || isNaN(playbackSpeed)) {
+        playbackSpeed = 1.0;
+    }
+
+    const firstNoteTime = 0;
+    if (typeof totalDuration === 'undefined' || totalDuration <= 0) {
+        const lastNote = activeNotesMemory[activeNotesMemory.length - 1];
+        totalDuration = (lastNote.time || 0) + (lastNote.duration || 1) + 2;
     }
 
     isVerticalPlaying = true;
-    verticalAudioStartTime = Tone.now();
+    verticalAudioStartTime = (typeof Tone !== 'undefined') ? Tone.now() : 0;
     verticalLogicalStartTime = verticalPlaybackTime || 0;
     activeVerticalContainerId = targetContainerId;
 
@@ -916,7 +965,7 @@ function startVerticalPlayback(targetContainerId) {
     updateVerticalPlayButtonStates(targetContainerId, true);
 
     // Stop other play loops to avoid sound overlap
-    if (isPlaying) pausePlayback();
+    if (typeof isPlaying !== 'undefined' && isPlaying && typeof pausePlayback === 'function') pausePlayback();
     if (sheetMusicPlaying) stopSheetPlayback();
     if (isStudioPlaying) stopStudioPlayback();
 
@@ -964,8 +1013,6 @@ function startVerticalPlayback(targetContainerId) {
     const startPadding = 45; // Alignment with staves spacing
     const systemWidth = containerWidth - localMarginLeft - localMarginRight;
     const localPixelsPerSecond = (systemWidth - startPadding * scale) / systemDuration;
-
-    const firstNoteTime = 0;
     
     // Fast seek of starting index
     verticalPlaybackNoteIndex = 0;
@@ -983,18 +1030,18 @@ function startVerticalPlayback(targetContainerId) {
         if (!isVerticalPlaying) return;
 
         // PLL Clock Sync: Update visual progression using exact audio hardware context elapsed duration
-        const elapsedRealTime = Tone.now() - verticalAudioStartTime;
-        const rawPlaybackTime = verticalLogicalStartTime + (elapsedRealTime * playbackSpeed);
+        const elapsedRealTime = (typeof Tone !== 'undefined') ? (Tone.now() - verticalAudioStartTime) : 0;
+        const rawPlaybackTime = verticalLogicalStartTime + (elapsedRealTime * (playbackSpeed || 1.0));
 
         // COMPENSATE: Subtract processing and hardware output latency so visuals align with sound
-        const rawCtx = Tone.context ? (Tone.context.rawContext || Tone.context) : null;
+        const rawCtx = (typeof Tone !== 'undefined' && Tone.context) ? (Tone.context.rawContext || Tone.context) : null;
         const baseLatency = (rawCtx && rawCtx.baseLatency) ? rawCtx.baseLatency : 0;
         const outputLatency = (rawCtx && rawCtx.outputLatency) ? rawCtx.outputLatency : 0;
-        const lookAhead = (Tone.context && Tone.context.lookAhead) ? Tone.context.lookAhead : 0;
+        const lookAhead = (typeof Tone !== 'undefined' && Tone.context && Tone.context.lookAhead) ? Tone.context.lookAhead : 0;
         const totalAudioLatency = lookAhead + baseLatency + outputLatency;
         verticalPlaybackTime = Math.max(0, rawPlaybackTime - totalAudioLatency);
 
-        const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
+        const totalDurationSecs = Math.max(1, totalDuration - firstNoteTime);
 
         if (verticalPlaybackTime >= totalDurationSecs) {
             stopVerticalPlayback();
@@ -1006,7 +1053,6 @@ function startVerticalPlayback(targetContainerId) {
         const systemTimeOffset = verticalPlaybackTime - currentSystemIdx * systemDuration;
 
         const cursorX = systemTimeOffset * localPixelsPerSecond + localMarginLeft + startPadding * scale;
-        // Systems yOffset dynamically aligned [1]
         const yOffset = currentSystemIdx * systemHeight + currentHeaderOffset; 
 
         if (cursor) {
@@ -1041,15 +1087,15 @@ function startVerticalPlayback(targetContainerId) {
             const note = activeNotesMemory[verticalPlaybackNoteIndex];
             const shiftedStart = Math.max(0, note.time - firstNoteTime);
             if (shiftedStart < nextWindowTime) {
-                const targetTime = verticalAudioStartTime + (shiftedStart - verticalLogicalStartTime) / playbackSpeed;
+                const targetTime = verticalAudioStartTime + (shiftedStart - verticalLogicalStartTime) / (playbackSpeed || 1.0);
                 
                 try {
-                    const noteName = Tone.Frequency(note.midi, "midi").toNote();
+                    const noteName = (typeof Tone !== 'undefined') ? Tone.Frequency(note.midi, "midi").toNote() : null;
                     const duration = (note.duration && !isNaN(note.duration) && note.duration > 0) ? note.duration : 0.5;
                     const velocity = (note.velocity && !isNaN(note.velocity)) ? note.velocity : 0.8;
                     
-                    if (noteName && activeInstrument) {
-                        if (Tone.context.state === 'suspended') {
+                    if (noteName) {
+                        if (typeof Tone !== 'undefined' && Tone.context.state === 'suspended') {
                             Tone.context.resume();
                         }
                         playNoteSafely(noteName, duration, targetTime, velocity, true);
@@ -1139,10 +1185,12 @@ function stopVerticalPlayback() {
         verticalPlaybackTimer = null;
     }
     verticalPlaybackTime = 0;
-    activeInstrument.releaseAll();
+    
+    if (typeof activeInstrument !== 'undefined' && activeInstrument && typeof activeInstrument.releaseAll === 'function') {
+        activeInstrument.releaseAll();
+    }
 
     if (activeVerticalContainerId) {
-        // Find isPhoneView matching the active system width
         const container = document.getElementById(activeVerticalContainerId);
         const containerWidth = container?.parentElement?.clientWidth || window.innerWidth;
         
@@ -1198,7 +1246,7 @@ function resetVerticalNoteHighlights(containerId) {
             if (isWholeNote || isHalfNote) {
                 noteHead.setAttribute('fill', '#ffffff');
                 noteHead.setAttribute('stroke', defaultColor);
-                noteHead.setAttribute('stroke-width', '1.3'); // updated to elegant 1.3 stroke
+                noteHead.setAttribute('stroke-width', '1.3');
             } else {
                 noteHead.setAttribute('fill', defaultColor);
                 noteHead.setAttribute('stroke', 'none');
@@ -1219,26 +1267,32 @@ function updateVerticalPlayButtonStates(containerId, isPlayingState) {
     if (containerId === 'sheet-music-notation-vertical') {
         const btnPlay = document.getElementById('btn-play-second');
         const btnStop = document.getElementById('btn-stop-second');
-        if (isPlayingState) {
-            btnPlay.textContent = "Pause Score";
-            btnPlay.style.backgroundColor = "#fbbf24";
-            btnStop.disabled = false;
-        } else {
-            btnPlay.textContent = "Play Vert. Score";
-            btnPlay.style.backgroundColor = "#10b981";
-            btnStop.disabled = true;
+        if (btnPlay) {
+            if (isPlayingState) {
+                btnPlay.textContent = "Pause Score";
+                btnPlay.style.backgroundColor = "#fbbf24";
+            } else {
+                btnPlay.textContent = "Play Vert. Score";
+                btnPlay.style.backgroundColor = "#10b981";
+            }
+        }
+        if (btnStop) {
+            btnStop.disabled = !isPlayingState;
         }
     } else if (containerId === 'sheet-music-notation-max') {
         const btnPlay = document.getElementById('btn-play-max');
         const btnStop = document.getElementById('btn-stop-max');
-        if (isPlayingState) {
-            btnPlay.textContent = "Pause Score";
-            btnPlay.style.backgroundColor = "#fbbf24";
-            btnStop.disabled = false;
-        } else {
-            btnPlay.textContent = "Play Score";
-            btnPlay.style.backgroundColor = "#10b981";
-            btnStop.disabled = true;
+        if (btnPlay) {
+            if (isPlayingState) {
+                btnPlay.textContent = "Pause Score";
+                btnPlay.style.backgroundColor = "#fbbf24";
+            } else {
+                btnPlay.textContent = "Play Score";
+                btnPlay.style.backgroundColor = "#10b981";
+            }
+        }
+        if (btnStop) {
+            btnStop.disabled = !isPlayingState;
         }
     }
 }
@@ -1265,66 +1319,97 @@ function populateRawMidiData() {
 
     // 1. Populate Raw JSON View
     const rawJsonView = document.getElementById('raw-midi-json-view');
-    const jsonSummary = {
-        header: midiData.header,
-        durationSeconds: midiData.duration,
-        totalNotesTracked: activeNotesMemory.length,
-        tracksSummary: midiData.tracks.map((track, i) => ({
-            trackIndex: i,
-            name: track.name,
-            instrument: track.instrument?.name || "Default",
-            notesCount: track.notes.length
-        }))
-    };
-    rawJsonView.value = JSON.stringify(jsonSummary, null, 2);
+    if (rawJsonView) {
+        const jsonSummary = {
+            header: midiData.header,
+            durationSeconds: midiData.duration,
+            totalNotesTracked: activeNotesMemory.length,
+            tracksSummary: midiData.tracks.map((track, i) => ({
+                trackIndex: i,
+                name: track.name,
+                instrument: track.instrument?.name || "Default",
+                notesCount: track.notes.length
+            }))
+        };
+        rawJsonView.value = JSON.stringify(jsonSummary, null, 2);
+    }
 
     // 2. Populate Chronological Table
     const tableBody = document.getElementById('raw-event-table-body');
-    tableBody.innerHTML = '';
+    if (tableBody) {
+        tableBody.innerHTML = '';
 
-    activeNotesMemory.forEach((note, index) => {
-        const tr = document.createElement('tr');
-        tr.style.borderBottom = '1px solid var(--panel-border)';
-        
-        if (index % 2 === 1) {
-            tr.style.background = '#20202c';
-        }
+        activeNotesMemory.forEach((note, index) => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid var(--panel-border)';
+            
+            if (index % 2 === 1) {
+                tr.style.background = '#20202c';
+            }
 
-        const staffMap = note.midi >= 60 ? "RH (Top Staff)" : "LH (Bottom Staff)";
+            const staffMap = note.midi >= 60 ? "RH (Top Staff)" : "LH (Bottom Staff)";
 
-        tr.innerHTML = `
-            <td style="padding: 10px 12px; color: var(--text-muted);">${index + 1}</td>
-            <td style="padding: 10px 12px; font-weight: 500; color: var(--text-color);">${note.time.toFixed(4)}</td>
-            <td style="padding: 10px 12px; color: var(--text-color);">${note.midi}</td>
-            <td style="padding: 10px 12px; font-weight: 600; color: var(--accent-color);">${note.name}</td>
-            <td style="padding: 10px 12px; color: var(--text-muted);">${note.duration.toFixed(4)}</td>
-            <td style="padding: 10px 12px; color: var(--text-muted);">${(note.velocity || 0.8).toFixed(2)}</td>
-            <td style="padding: 10px 12px; font-weight: 500; color: ${note.midi >= 60 ? '#10b981' : '#f59e0b'};">${staffMap}</td>
-        `;
-        tableBody.appendChild(tr);
-    });
+            tr.innerHTML = `
+                <td style="padding: 10px 12px; color: var(--text-muted);">${index + 1}</td>
+                <td style="padding: 10px 12px; font-weight: 500; color: var(--text-color);">${note.time.toFixed(4)}</td>
+                <td style="padding: 10px 12px; color: var(--text-color);">${note.midi}</td>
+                <td style="padding: 10px 12px; font-weight: 600; color: var(--accent-color);">${note.name}</td>
+                <td style="padding: 10px 12px; color: var(--text-muted);">${note.duration.toFixed(4)}</td>
+                <td style="padding: 10px 12px; color: var(--text-muted);">${(note.velocity || 0.8).toFixed(2)}</td>
+                <td style="padding: 10px 12px; font-weight: 500; color: ${note.midi >= 60 ? '#10b981' : '#f59e0b'};">${staffMap}</td>
+            `;
+            tableBody.appendChild(tr);
+        });
+    }
 }
 
 // Direct playback audio engine: loop through the activeNotesMemory log sequentially
-function startSheetPlayback() {
+async function startSheetPlayback() {
     if (sheetMusicPlaying) {
         pauseSheetPlayback();
         return;
     }
-    if (Tone.context.state !== 'running') {
-        Tone.start();
+    
+    if (typeof Tone !== 'undefined') {
+        if (Tone.context.state !== 'running') {
+            await Tone.start();
+        }
+        if (Tone.context.state === 'suspended') {
+            await Tone.context.resume();
+        }
+    }
+
+    if (!activeNotesMemory || activeNotesMemory.length === 0) {
+        console.warn("[PLAYBACK GUARD] activeNotesMemory is empty, nothing to play.");
+        return;
+    }
+
+    if (typeof playbackSpeed === 'undefined' || !playbackSpeed || isNaN(playbackSpeed)) {
+        playbackSpeed = 1.0;
+    }
+
+    const firstNoteTime = 0;
+    if (typeof totalDuration === 'undefined' || totalDuration <= 0) {
+        const lastNote = activeNotesMemory[activeNotesMemory.length - 1];
+        totalDuration = (lastNote.time || 0) + (lastNote.duration || 1) + 2;
     }
 
     sheetMusicPlaying = true;
-    sheetAudioStartTime = Tone.now();
+    sheetAudioStartTime = (typeof Tone !== 'undefined') ? Tone.now() : 0;
     sheetLogicalStartTime = sheetMusicPlaybackTime || 0;
 
-    document.getElementById('btn-play-sheet').textContent = "Pause Score";
-    document.getElementById('btn-play-sheet').style.backgroundColor = "#fbbf24";
-    document.getElementById('btn-stop-sheet').disabled = false;
+    const btnPlaySheet = document.getElementById('btn-play-sheet');
+    const btnStopSheet = document.getElementById('btn-stop-sheet');
+    if (btnPlaySheet) {
+        btnPlaySheet.textContent = "Pause Score";
+        btnPlaySheet.style.backgroundColor = "#fbbf24";
+    }
+    if (btnStopSheet) {
+        btnStopSheet.disabled = false;
+    }
 
     // Pause visualizer loops to avoid sound overlays
-    if (isPlaying) {
+    if (typeof isPlaying !== 'undefined' && isPlaying && typeof pausePlayback === 'function') {
         pausePlayback();
     }
     if (isStudioPlaying) stopStudioPlayback();
@@ -1335,7 +1420,6 @@ function startSheetPlayback() {
     resetSheetNoteHighlights();
 
     // Setup optimized index seek heads
-    const firstNoteTime = 0;
     sheetPlaybackNoteIndex = 0;
     while (sheetPlaybackNoteIndex < activeNotesMemory.length && Math.max(0, activeNotesMemory[sheetPlaybackNoteIndex].time - firstNoteTime) < sheetMusicPlaybackTime) {
         sheetPlaybackNoteIndex++;
@@ -1345,28 +1429,21 @@ function startSheetPlayback() {
         sheetVisualNoteIndex++;
     }
 
-    const bpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0]) 
-        ? midiData.header.tempos[0].bpm 
-        : 120;
-    const beatDuration = 60 / bpm;
-
     // Frame scheduler to drive audio events and follow pointer visual states
     function updateSheetFrame(now) {
         if (!sheetMusicPlaying) return;
 
-        // PLL Clock Sync: Update visual progression using exact audio hardware context elapsed duration
-        const elapsedRealTime = Tone.now() - sheetAudioStartTime;
-        const rawPlaybackTime = sheetLogicalStartTime + (elapsedRealTime * playbackSpeed);
+        const elapsedRealTime = (typeof Tone !== 'undefined') ? (Tone.now() - sheetAudioStartTime) : 0;
+        const rawPlaybackTime = sheetLogicalStartTime + (elapsedRealTime * (playbackSpeed || 1.0));
 
-        // COMPENSATE: Subtract processing and hardware output latency so visuals align with sound
-        const rawCtx = Tone.context ? (Tone.context.rawContext || Tone.context) : null;
+        const rawCtx = (typeof Tone !== 'undefined' && Tone.context) ? (Tone.context.rawContext || Tone.context) : null;
         const baseLatency = (rawCtx && rawCtx.baseLatency) ? rawCtx.baseLatency : 0;
         const outputLatency = (rawCtx && rawCtx.outputLatency) ? rawCtx.outputLatency : 0;
-        const lookAhead = (Tone.context && Tone.context.lookAhead) ? Tone.context.lookAhead : 0;
+        const lookAhead = (typeof Tone !== 'undefined' && Tone.context && Tone.context.lookAhead) ? Tone.context.lookAhead : 0;
         const totalAudioLatency = lookAhead + baseLatency + outputLatency;
         sheetMusicPlaybackTime = Math.max(0, rawPlaybackTime - totalAudioLatency);
 
-        const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
+        const totalDurationSecs = Math.max(1, totalDuration - firstNoteTime);
 
         if (sheetMusicPlaybackTime >= totalDurationSecs) {
             stopSheetPlayback();
@@ -1388,22 +1465,22 @@ function startSheetPlayback() {
         }
 
         // 3. Audio Triggering Scheduler (Pre-trigger future notes with 100ms lookahead)
-        const lookahead = 0.100; // 100ms future queue window
+        const lookahead = 0.100;
         const nextWindowTime = rawPlaybackTime + lookahead;
 
         while (sheetPlaybackNoteIndex < activeNotesMemory.length) {
             const note = activeNotesMemory[sheetPlaybackNoteIndex];
             const shiftedStart = Math.max(0, note.time - firstNoteTime);
             if (shiftedStart < nextWindowTime) {
-                const targetTime = sheetAudioStartTime + (shiftedStart - sheetLogicalStartTime) / playbackSpeed;
+                const targetTime = sheetAudioStartTime + (shiftedStart - sheetLogicalStartTime) / (playbackSpeed || 1.0);
                 
                 try {
-                    const noteName = Tone.Frequency(note.midi, "midi").toNote();
+                    const noteName = (typeof Tone !== 'undefined') ? Tone.Frequency(note.midi, "midi").toNote() : null;
                     const duration = (note.duration && !isNaN(note.duration) && note.duration > 0) ? note.duration : 0.5;
                     const velocity = (note.velocity && !isNaN(note.velocity)) ? note.velocity : 0.8;
                     
-                    if (noteName && activeInstrument) {
-                        if (Tone.context.state === 'suspended') {
+                    if (noteName) {
+                        if (typeof Tone !== 'undefined' && Tone.context.state === 'suspended') {
                             Tone.context.resume();
                         }
                         playNoteSafely(noteName, duration, targetTime, velocity, true);
@@ -1425,7 +1502,6 @@ function startSheetPlayback() {
                 const noteHead = document.getElementById(`sheet-notehead-${sheetVisualNoteIndex}`);
                 const noteRect = document.getElementById(`sheet-note-rect-${sheetVisualNoteIndex}`);
                 if (noteHead) {
-                    // Outlines border only for open hollow notes, fills standard notes solid (stroke decreased to 1.3)
                     if (noteHead.getAttribute('stroke') !== 'none') {
                         noteHead.setAttribute('stroke', '#e879f9');
                         noteHead.setAttribute('stroke-width', '1.3');
@@ -1480,9 +1556,14 @@ function pauseSheetPlayback() {
         cancelAnimationFrame(sheetMusicPlaybackTimer);
         sheetMusicPlaybackTimer = null;
     }
-    activeInstrument.releaseAll();
-    document.getElementById('btn-play-sheet').textContent = "Resume Score";
-    document.getElementById('btn-play-sheet').style.backgroundColor = "#10b981";
+    if (typeof activeInstrument !== 'undefined' && activeInstrument && typeof activeInstrument.releaseAll === 'function') {
+        activeInstrument.releaseAll();
+    }
+    const btnPlaySheet = document.getElementById('btn-play-sheet');
+    if (btnPlaySheet) {
+        btnPlaySheet.textContent = "Resume Score";
+        btnPlaySheet.style.backgroundColor = "#10b981";
+    }
 }
 
 function stopSheetPlayback() {
@@ -1492,7 +1573,10 @@ function stopSheetPlayback() {
         sheetMusicPlaybackTimer = null;
     }
     sheetMusicPlaybackTime = 0;
-    activeInstrument.releaseAll();
+    
+    if (typeof activeInstrument !== 'undefined' && activeInstrument && typeof activeInstrument.releaseAll === 'function') {
+        activeInstrument.releaseAll();
+    }
 
     const cursor = document.getElementById('sheet-playback-cursor');
     if (cursor) {
@@ -1506,9 +1590,15 @@ function stopSheetPlayback() {
 
     resetSheetNoteHighlights();
 
-    document.getElementById('btn-play-sheet').textContent = "Play Score";
-    document.getElementById('btn-play-sheet').style.backgroundColor = "#10b981";
-    document.getElementById('btn-stop-sheet').disabled = true;
+    const btnPlaySheet = document.getElementById('btn-play-sheet');
+    const btnStopSheet = document.getElementById('btn-stop-sheet');
+    if (btnPlaySheet) {
+        btnPlaySheet.textContent = "Play Score";
+        btnPlaySheet.style.backgroundColor = "#10b981";
+    }
+    if (btnStopSheet) {
+        btnStopSheet.disabled = true;
+    }
 }
 
 function resetSheetNoteHighlights() {
@@ -1527,7 +1617,7 @@ function resetSheetNoteHighlights() {
             if (isWholeNote || isHalfNote) {
                 noteHead.setAttribute('fill', '#0b0b0f');
                 noteHead.setAttribute('stroke', defaultColor);
-                noteHead.setAttribute('stroke-width', '1.3'); // updated to elegant 1.3 stroke
+                noteHead.setAttribute('stroke-width', '1.3');
             } else {
                 noteHead.setAttribute('fill', defaultColor);
                 noteHead.setAttribute('stroke', 'none');
@@ -1540,7 +1630,10 @@ function resetSheetNoteHighlights() {
 
 function renderStudioSheetMusic(targetContainerId) {
     if (!midiData || studioNotesMemory.length === 0) {
-        document.getElementById(targetContainerId).innerHTML = "<div style='color: #9ca3af; padding: 20px; text-align: center;'>No notes in studio buffer. Apply a filter or load a MIDI file.</div>";
+        const target = document.getElementById(targetContainerId);
+        if (target) {
+            target.innerHTML = "<div style='color: #9ca3af; padding: 20px; text-align: center;'>No notes in studio buffer. Apply a filter or load a MIDI file.</div>";
+        }
         return;
     }
 
@@ -1552,7 +1645,6 @@ function renderStudioSheetMusic(targetContainerId) {
     }
 
     const firstNoteTime = 0;
-    const firstNoteActualTime = studioNotesMemory.length > 0 ? studioNotesMemory[0].time : 0;
     const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
 
     const marginLeft = 100;
@@ -1564,7 +1656,6 @@ function renderStudioSheetMusic(targetContainerId) {
         containerWidth = Math.max(320, parentWidth - 20);
     }
 
-    // Standard unscaled layout configurations matching standard vertical sheet settings
     const systemDuration = 10;
     const numSystems = Math.ceil(totalDurationSecs / systemDuration) || 1;
 
@@ -1576,13 +1667,11 @@ function renderStudioSheetMusic(targetContainerId) {
     const marginRight = 50;
     const systemWidth = containerWidth - marginLeft - marginRight;
     const svgWidth = containerWidth;
-    // Shifted entire layout down by 70px to make room for Title + Subtitle
     const svgHeight = numSystems * systemHeight + 170; 
 
     const chkShowColors = document.getElementById('chk-show-colors');
     const showColors = chkShowColors ? chkShowColors.checked : false;
 
-    // Proportional Scaling mapping matching studio width parameters
     const startPadding = 45; // Space for clefs & signatures
     const localPixelsPerSecond = (systemWidth - startPadding) / systemDuration;
 
@@ -1592,7 +1681,6 @@ function renderStudioSheetMusic(targetContainerId) {
     const titleText = resolvedSheetTitle || "Loading Score...";
     const titleLines = wrapSvgText(titleText, containerWidth < 600 ? 25 : 50).slice(0, 2);
     
-    // Scale system spacer dynamically depending on if title wraps to 2 lines [1]
     currentHeaderOffset = titleLines.length > 1 ? 135 : 110;
     const svgHeightVal = numSystems * systemHeight + currentHeaderOffset + 60; 
 
@@ -1617,7 +1705,6 @@ function renderStudioSheetMusic(targetContainerId) {
     }
 
     for (let i = 0; i < numSystems; i++) {
-        // Systems yOffset dynamically aligned [1]
         const yOffset = i * systemHeight + 110;
 
         // Draw Treble (RH) Staves
@@ -1684,22 +1771,18 @@ function renderStudioSheetMusic(targetContainerId) {
             );
         }
 
-        // Calculate system index based on actual gap end (first note start) to avoid system splits
         const firstNoteSystemIdx = Math.floor(gap.end / systemDuration);
-        const yOffset = firstNoteSystemIdx * systemHeight + 110; // Shifted to 110px
+        const yOffset = firstNoteSystemIdx * systemHeight + 110;
         const systemTimeOffset = gap.end - firstNoteSystemIdx * systemDuration;
         
-        // Compute exact x position slightly before the note center
         const noteX = systemTimeOffset * localPixelsPerSecond + marginLeft + startPadding;
         const doubleBarX = noteX - 10;
 
         svgContent += `<!-- Double Bar Lines strictly fitting inside the 5 lines of each staff (Studio) -->`;
         
-        // Treble staff double bar (dy = 3, updated to elegant 1.0/2.4 stroke configurations)
         svgContent += `<line x1="${doubleBarX - 3}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX - 3}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="1.0" opacity="0.85" />`;
         svgContent += `<line x1="${doubleBarX}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="2.4" opacity="0.85" />`;
         
-        // Bass staff double bar
         svgContent += `<line x1="${doubleBarX - 3}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX - 3}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="1.0" opacity="0.85" />`;
         svgContent += `<line x1="${doubleBarX}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="2.4" opacity="0.85" />`;
     });
@@ -1711,7 +1794,7 @@ function renderStudioSheetMusic(targetContainerId) {
         const systemIdx = Math.floor(shiftedStart / systemDuration);
         if (systemIdx >= numSystems) return;
 
-        const yOffset = systemIdx * systemHeight + 110; // Shifted to 110px
+        const yOffset = systemIdx * systemHeight + 110;
         const systemTimeOffset = shiftedStart - systemIdx * systemDuration;
         const noteX = systemTimeOffset * localPixelsPerSecond + marginLeft + startPadding;
         
@@ -1768,19 +1851,17 @@ function renderStudioSheetMusic(targetContainerId) {
         const isWholeNote = durationTicks >= ppq * 3.2;
         const isHalfNote = durationTicks >= ppq * 1.6 && durationTicks < ppq * 3.2;
 
-        // Notehead (reduced stroke-width to 1.3)
         let noteheadFill = color;
         let noteheadStroke = "none";
         let strokeWidthAttr = "";
         if (isWholeNote || isHalfNote) {
-            noteheadFill = "#ffffff"; // Masks background cleanly in white portal viewports
+            noteheadFill = "#ffffff";
             noteheadStroke = color;
             strokeWidthAttr = 'stroke-width="1.3"';
         }
 
         svgContent += `<ellipse cx="${noteX}" cy="${y}" rx="${7}" ry="${5}" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="${targetContainerId}-notehead-${index}" transform="rotate(-15, ${noteX}, ${y})" />`;
 
-        // Stems standard attachment (No stem for Whole notes)
         if (!isWholeNote) {
             if (stemDirection === "up") {
                 svgContent += `<line x1="${noteX + 6}" y1="${y}" x2="${noteX + 6}" y2="${y - 25}" stroke="${color}" stroke-width="1.5" id="${targetContainerId}-stem-${index}" />`;
@@ -1804,31 +1885,59 @@ function renderStudioSheetMusic(targetContainerId) {
     // Tracking pointer cursor
     svgContent += `<line id="${targetContainerId}-playback-cursor" x1="${marginLeft + startPadding}" y1="10" x2="${marginLeft + startPadding}" y2="${svgHeightVal - 80}" stroke="#ef4444" stroke-width="2.5" style="display: none;" />`;
 
-    const svgString = `<svg width="${svgWidth}" height="${svgHeightVal}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">${svgContent}</svg>`;
-    document.getElementById(targetContainerId).innerHTML = svgString;
+    const targetEl = document.getElementById(targetContainerId);
+    if (targetEl) {
+        const svgString = `<svg width="${svgWidth}" height="${svgHeightVal}" style="background: #ffffff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">${svgContent}</svg>`;
+        targetEl.innerHTML = svgString;
+    }
 }
 
 // Dedicated playback loops for Studio scores
-function startStudioPlayback() {
+async function startStudioPlayback() {
     if (isStudioPlaying) {
         stopStudioPlayback();
         return;
     }
-    if (Tone.context.state !== 'running') {
-        Tone.start();
+    
+    if (typeof Tone !== 'undefined') {
+        if (Tone.context.state !== 'running') {
+            await Tone.start();
+        }
+        if (Tone.context.state === 'suspended') {
+            await Tone.context.resume();
+        }
+    }
+
+    if (!studioNotesMemory || studioNotesMemory.length === 0) {
+        console.warn("[PLAYBACK GUARD] studioNotesMemory is empty, nothing to play.");
+        return;
+    }
+
+    if (typeof playbackSpeed === 'undefined' || !playbackSpeed || isNaN(playbackSpeed)) {
+        playbackSpeed = 1.0;
+    }
+
+    const firstNoteTime = 0;
+    if (typeof totalDuration === 'undefined' || totalDuration <= 0) {
+        const lastNote = studioNotesMemory[studioNotesMemory.length - 1];
+        totalDuration = (lastNote.time || 0) + (lastNote.duration || 1) + 2;
     }
 
     isStudioPlaying = true;
-    studioAudioStartTime = Tone.now();
+    studioAudioStartTime = (typeof Tone !== 'undefined') ? Tone.now() : 0;
     studioLogicalStartTime = studioPlaybackTime || 0;
 
     const btnPlay = document.getElementById('btn-studio-play-score');
     const btnStop = document.getElementById('btn-studio-stop-score');
-    btnPlay.textContent = "Pause Studio Score";
-    btnPlay.style.backgroundColor = "#fbbf24";
-    btnStop.disabled = false;
+    if (btnPlay) {
+        btnPlay.textContent = "Pause Studio Score";
+        btnPlay.style.backgroundColor = "#fbbf24";
+    }
+    if (btnStop) {
+        btnStop.disabled = false;
+    }
 
-    if (isPlaying) pausePlayback();
+    if (typeof isPlaying !== 'undefined' && isPlaying && typeof pausePlayback === 'function') pausePlayback();
     if (sheetMusicPlaying) stopSheetPlayback();
     if (isVerticalPlaying) stopVerticalPlayback();
 
@@ -1837,10 +1946,8 @@ function startStudioPlayback() {
 
     resetStudioNoteHighlights();
 
-    const systemHeight = 220; // fallback default
     const marginLeft = 100;
 
-    // Synchronized width and pacing setup mirroring renderStudioSheetMusic exactly
     let containerWidth = 950;
     const parentWidth = document.getElementById('sheet-music-notation-studio')?.parentElement?.clientWidth || window.innerWidth;
     if (parentWidth < 950) {
@@ -1849,7 +1956,6 @@ function startStudioPlayback() {
     const marginRight = 50;
     const systemWidth = containerWidth - marginLeft - marginRight;
 
-    // Standard unscaled parameters
     const systemDuration = 10;
     const activeSystemHeight = 220;
     const rhStaffCenterY = 60;
@@ -1858,9 +1964,6 @@ function startStudioPlayback() {
     const startPadding = 45;
     const localPixelsPerSecond = (systemWidth - startPadding) / systemDuration;
 
-    const firstNoteTime = 0;
-    
-    // Fast seek of starting studio indexes
     studioPlaybackNoteIndex = 0;
     while (studioPlaybackNoteIndex < studioNotesMemory.length && Math.max(0, studioNotesMemory[studioPlaybackNoteIndex].time - firstNoteTime) < studioPlaybackTime) {
         studioPlaybackNoteIndex++;
@@ -1875,19 +1978,17 @@ function startStudioPlayback() {
     function updateStudioFrame(now) {
         if (!isStudioPlaying) return;
 
-        // PLL Clock Sync: Update visual progression using exact audio hardware context elapsed duration
-        const elapsedRealTime = Tone.now() - studioAudioStartTime;
-        const rawPlaybackTime = studioLogicalStartTime + (elapsedRealTime * playbackSpeed);
+        const elapsedRealTime = (typeof Tone !== 'undefined') ? (Tone.now() - studioAudioStartTime) : 0;
+        const rawPlaybackTime = studioLogicalStartTime + (elapsedRealTime * (playbackSpeed || 1.0));
 
-        // COMPENSATE: Subtract processing and hardware output latency so visuals align with sound
-        const rawCtx = Tone.context ? (Tone.context.rawContext || Tone.context) : null;
+        const rawCtx = (typeof Tone !== 'undefined' && Tone.context) ? (Tone.context.rawContext || Tone.context) : null;
         const baseLatency = (rawCtx && rawCtx.baseLatency) ? rawCtx.baseLatency : 0;
         const outputLatency = (rawCtx && rawCtx.outputLatency) ? rawCtx.outputLatency : 0;
-        const lookAhead = (Tone.context && Tone.context.lookAhead) ? Tone.context.lookAhead : 0;
+        const lookAhead = (typeof Tone !== 'undefined' && Tone.context && Tone.context.lookAhead) ? Tone.context.lookAhead : 0;
         const totalAudioLatency = lookAhead + baseLatency + outputLatency;
         studioPlaybackTime = Math.max(0, rawPlaybackTime - totalAudioLatency);
 
-        const totalDurationSecs = Math.max(0, totalDuration - firstNoteTime);
+        const totalDurationSecs = Math.max(1, totalDuration - firstNoteTime);
 
         if (studioPlaybackTime >= totalDurationSecs) {
             stopStudioPlayback();
@@ -1898,7 +1999,7 @@ function startStudioPlayback() {
         const systemTimeOffset = studioPlaybackTime - currentSystemIdx * systemDuration;
 
         const cursorX = systemTimeOffset * localPixelsPerSecond + marginLeft + startPadding;
-        const yOffset = currentSystemIdx * activeSystemHeight + 110; // Shifted to 110px
+        const yOffset = currentSystemIdx * activeSystemHeight + 110;
 
         if (cursor) {
             cursor.setAttribute('x1', cursorX);
@@ -1907,7 +2008,6 @@ function startStudioPlayback() {
             cursor.setAttribute('y2', yOffset + (lhStaffCenterY + 21));
         }
 
-        // OPTIMIZED: only scroll Studio panel container when line wraps
         if (currentSystemIdx !== lastScrolledSystemIdx) {
             lastScrolledSystemIdx = currentSystemIdx;
             const scrollContainer = document.getElementById('sheet-tab-studio-content-vertical');
@@ -1917,23 +2017,22 @@ function startStudioPlayback() {
             }
         }
 
-        // Audio Triggering Scheduler (Pre-trigger future notes with 100ms lookahead)
-        const lookahead = 0.100; // 100ms future queue window
+        const lookahead = 0.100;
         const nextWindowTime = rawPlaybackTime + lookahead;
 
         while (studioPlaybackNoteIndex < studioNotesMemory.length) {
             const note = studioNotesMemory[studioPlaybackNoteIndex];
             const shiftedStart = Math.max(0, note.time - firstNoteTime);
             if (shiftedStart < nextWindowTime) {
-                const targetTime = studioAudioStartTime + (shiftedStart - studioLogicalStartTime) / playbackSpeed;
+                const targetTime = studioAudioStartTime + (shiftedStart - studioLogicalStartTime) / (playbackSpeed || 1.0);
                 
                 try {
-                    const noteName = Tone.Frequency(note.midi, "midi").toNote();
+                    const noteName = (typeof Tone !== 'undefined') ? Tone.Frequency(note.midi, "midi").toNote() : null;
                     const duration = (note.duration && !isNaN(note.duration) && note.duration > 0) ? note.duration : 0.5;
                     const velocity = (note.velocity && !isNaN(note.velocity)) ? note.velocity : 0.8;
                     
-                    if (noteName && activeInstrument) {
-                        if (Tone.context.state === 'suspended') {
+                    if (noteName) {
+                        if (typeof Tone !== 'undefined' && Tone.context.state === 'suspended') {
                             Tone.context.resume();
                         }
                         playNoteSafely(noteName, duration, targetTime, velocity, true);
@@ -1947,7 +2046,6 @@ function startStudioPlayback() {
             }
         }
 
-        // Visual Highlight Loop (Lights up notes exactly when heard)
         while (studioVisualNoteIndex < studioNotesMemory.length) {
             const note = studioNotesMemory[studioVisualNoteIndex];
             const shiftedStart = Math.max(0, note.time - firstNoteTime);
@@ -1969,7 +2067,6 @@ function startStudioPlayback() {
             }
         }
 
-        // Visual Release Loop (Reverts expired noteheads)
         const checkStart = Math.max(0, studioVisualNoteIndex - 100);
         for (let i = checkStart; i < studioVisualNoteIndex; i++) {
             const note = studioNotesMemory[i];
@@ -2022,7 +2119,10 @@ function stopStudioPlayback() {
         studioPlaybackTimer = null;
     }
     studioPlaybackTime = 0;
-    activeInstrument.releaseAll();
+    
+    if (typeof activeInstrument !== 'undefined' && activeInstrument && typeof activeInstrument.releaseAll === 'function') {
+        activeInstrument.releaseAll();
+    }
 
     const btnPlay = document.getElementById('btn-studio-play-score');
     const btnStop = document.getElementById('btn-studio-stop-score');
@@ -2073,7 +2173,7 @@ function resetStudioNoteHighlights() {
             if (isWholeNote || isHalfNote) {
                 noteHead.setAttribute('fill', '#ffffff');
                 noteHead.setAttribute('stroke', defaultColor);
-                noteHead.setAttribute('stroke-width', '1.3'); // updated to elegant 1.3 stroke
+                noteHead.setAttribute('stroke-width', '1.3');
             } else {
                 noteHead.setAttribute('fill', defaultColor);
                 noteHead.setAttribute('stroke', 'none');
@@ -2090,5 +2190,71 @@ function resetStudioNoteHighlights() {
     });
 }
 
-// --- Initialize Sequence Runner ---
-init();
+// Global button listener binder to ensure play controls always respond on click
+function bindPlaybackControls() {
+    const btnPlaySecond = document.getElementById('btn-play-second');
+    if (btnPlaySecond && !btnPlaySecond.dataset.bound) {
+        btnPlaySecond.dataset.bound = "true";
+        btnPlaySecond.addEventListener('click', () => startVerticalPlayback('sheet-music-notation-vertical'));
+    }
+
+    const btnStopSecond = document.getElementById('btn-stop-second');
+    if (btnStopSecond && !btnStopSecond.dataset.bound) {
+        btnStopSecond.dataset.bound = "true";
+        btnStopSecond.addEventListener('click', () => stopVerticalPlayback());
+    }
+
+    const btnPlayMax = document.getElementById('btn-play-max');
+    if (btnPlayMax && !btnPlayMax.dataset.bound) {
+        btnPlayMax.dataset.bound = "true";
+        btnPlayMax.addEventListener('click', () => startVerticalPlayback('sheet-music-notation-max'));
+    }
+
+    const btnStopMax = document.getElementById('btn-stop-max');
+    if (btnStopMax && !btnStopMax.dataset.bound) {
+        btnStopMax.dataset.bound = "true";
+        btnStopMax.addEventListener('click', () => stopVerticalPlayback());
+    }
+
+    const btnPlaySheet = document.getElementById('btn-play-sheet');
+    if (btnPlaySheet && !btnPlaySheet.dataset.bound) {
+        btnPlaySheet.dataset.bound = "true";
+        btnPlaySheet.addEventListener('click', () => startSheetPlayback());
+    }
+
+    const btnStopSheet = document.getElementById('btn-stop-sheet');
+    if (btnStopSheet && !btnStopSheet.dataset.bound) {
+        btnStopSheet.dataset.bound = "true";
+        btnStopSheet.addEventListener('click', () => stopSheetPlayback());
+    }
+
+    const btnStudioPlay = document.getElementById('btn-studio-play-score');
+    if (btnStudioPlay && !btnStudioPlay.dataset.bound) {
+        btnStudioPlay.dataset.bound = "true";
+        btnStudioPlay.addEventListener('click', () => startStudioPlayback());
+    }
+
+    const btnStudioStop = document.getElementById('btn-studio-stop-score');
+    if (btnStudioStop && !btnStudioStop.dataset.bound) {
+        btnStudioStop.dataset.bound = "true";
+        btnStudioStop.addEventListener('click', () => stopStudioPlayback());
+    }
+
+    const btnDownloadSecond = document.getElementById('btn-download-second');
+    if (btnDownloadSecond && !btnDownloadSecond.dataset.bound) {
+        btnDownloadSecond.dataset.bound = "true";
+        btnDownloadSecond.addEventListener('click', () => downloadVerticalSVG('sheet-music-notation-vertical'));
+    }
+}
+
+// Auto-bind controls on document ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindPlaybackControls);
+} else {
+    bindPlaybackControls();
+}
+
+// --- Initialize Sequence Runner (Safe invocation) ---
+if (typeof init === 'function') {
+    init();
+}
