@@ -179,19 +179,25 @@ document.addEventListener("DOMContentLoaded", () => {
     if (downXmlMax) downXmlMax.addEventListener("click", handleXmlDownload);
 
     // --- Duration -> notated symbol decomposition -----------------------------
-    // These tables assume <divisions>4</divisions> (quarter note = 4 divisions).
-    // Every note/rest length that comes out of the quantizer is a multiple of 2
-    // (an eighth note or longer), but decomposeDuration() works for ANY positive
-    // integer division count, splitting it into tied notes if it doesn't map to
-    // a single legal symbol. This guarantees every <note> always gets a valid
-    // <type> (and <dot>/<tie> when needed), which is what MuseScore Studio's
-    // importer requires to accept the file.
+    // NOTE_DIVISIONS = ticks per quarter note. Raised from 4 to 48 so notes are
+    // quantized to the nearest 1/64th-note tick instead of being forced onto a
+    // coarse eighth-note grid. If the source MIDI is already quantized, its real
+    // note times land almost exactly on this fine grid, so this is effectively
+    // "no re-quantization" rather than a second rounding pass.
+    // decomposeDuration() works for ANY positive integer division count,
+    // splitting a length into tied notes if it doesn't map to a single legal
+    // symbol. This guarantees every <note> always gets a valid <type> (and
+    // <dot>/<tie> when needed), which is what MuseScore Studio's importer
+    // requires to accept the file.
+    const NOTE_DIVISIONS = 48;
     const BASIC_NOTE_VALUES = [
-        { div: 16, type: "whole" },
-        { div: 8, type: "half" },
-        { div: 4, type: "quarter" },
-        { div: 2, type: "eighth" },
-        { div: 1, type: "16th" }
+        { div: NOTE_DIVISIONS * 4, type: "whole" },
+        { div: NOTE_DIVISIONS * 2, type: "half" },
+        { div: NOTE_DIVISIONS, type: "quarter" },
+        { div: NOTE_DIVISIONS / 2, type: "eighth" },
+        { div: NOTE_DIVISIONS / 4, type: "16th" },
+        { div: NOTE_DIVISIONS / 8, type: "32nd" },
+        { div: NOTE_DIVISIONS / 16, type: "64th" }
     ];
 
     function decomposeDuration(totalDiv) {
@@ -299,9 +305,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const quarterSec = 60 / bpm;
         const measureDurationSec = beats * (4 / beatType) * quarterSec;
 
-        // Divisions = 4 guarantees small, non-drifting integers (Quarter note = 4, 16th note = 1)
-        // 4/4 measure = exactly 16 divisions total
-        const divisions = 4;
+        // divisions must match NOTE_DIVISIONS so BASIC_NOTE_VALUES lines up correctly.
+        const divisions = NOTE_DIVISIONS;
         const totalMeasureDivs = Math.round(beats * (4 / beatType) * divisions);
 
         // 2. Resolve Key Signature
@@ -387,15 +392,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 return buildRestXml(totalMeasureDivs, voiceNum, staffNum);
             }
 
-            // Quantize notes onto an eighth-note grid (grid size = 2 ticks)
+            // Snap each note to the nearest tick at full resolution (1 tick =
+            // a 64th note at NOTE_DIVISIONS=48). No forced coarser grid - an
+            // already-quantized MIDI note lands on (or essentially on) its
+            // exact original position here instead of being re-rounded.
             const slotMap = {};
             notes.forEach((note) => {
                 const relSec = Math.max(0, note.time - mStartSec);
-                let slot = Math.round((relSec / measureDurationSec) * (totalMeasureDivs / 2)) * 2;
-                slot = Math.max(0, Math.min(totalMeasureDivs - 2, slot));
-
-                // Snap notes near beat 1 directly to tick 0
-                if (slot <= 2) slot = 0;
+                let slot = Math.round((relSec / measureDurationSec) * totalMeasureDivs);
+                slot = Math.max(0, Math.min(totalMeasureDivs - 1, slot));
 
                 if (!slotMap[slot]) {
                     slotMap[slot] = [];
