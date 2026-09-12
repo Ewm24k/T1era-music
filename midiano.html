@@ -4,16 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Professional MIDI Piano Visualizer & Analyzer</title>
-    <!-- External Dependencies: Tone.js, @tonejs/midi, and abcjs (Music Notation Renderer) -->
+    <!-- External Dependencies: Tone.js, @tonejs/midi, abcjs, and jsPDF (Direct Multi-Page PDF Engine) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <script src="https://unpkg.com/@tonejs/midi"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/abcjs/6.3.0/abcjs-basic-min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- Separated CSS External Link -->
     <link rel="stylesheet" href="assets/css/midiano.css">
     
     <!-- Responsive layout overrides specifically for dropdown wrappers inside headers -->
     <style>
-        /* Symmetrical mobile flex alignment for the new Section 2 dropdown wrapper */
+        /* Symmetrical mobile flex alignment for the Section 2 dropdown wrapper */
         @media (max-width: 768px) {
             div:has(> #btn-play-second) .dropdown-wrapper {
                 flex: 1 1 calc(50% - 6px) !important;
@@ -62,7 +63,7 @@
                 border: 1px solid rgba(255, 255, 255, 0.15) !important;
                 border-radius: 12px !important;
                 box-shadow: 0 25px 65px rgba(0, 0, 0, 0.95) !important;
-                z-index: 9999 !important; /* Ensure it stays fully above all canvases and popup container structures */
+                z-index: 9999 !important;
                 pointer-events: auto !important;
                 opacity: 1 !important;
             }
@@ -82,9 +83,8 @@
 <body>
 
     <div id="control-panel">
-        <!-- Sleek Modern Collapsible Mobile Header Row -->
+        <!-- Modern Collapsible Mobile Header Row -->
         <div class="mobile-header-row">
-            <!-- Restored blank title element for external script fetch handling with no startup text -->
             <span id="mobile-track-title"></span>
             <button id="btn-expand-tools" type="button">
                 <span>Show Tools</span>
@@ -106,10 +106,10 @@
                 <!-- Sheet Music Popup Button -->
                 <button id="btn-sheet" disabled>Sheet Music</button>
 
-                <!-- Moved "Generate Music" Orange Button Beside Sheet Music -->
+                <!-- Generate Music Orange Button -->
                 <button id="btn-transcribe" style="background-color: #f35f22; border-color: #f35f22; color: #ffffff; font-weight: 600;" title="Generate Music">Generate Music</button>
 
-                <!-- Modern Dropdown Download Button wrapper -->
+                <!-- Download Dropdown Button wrapper -->
                 <div class="dropdown-wrapper">
                     <button id="btn-download-menu" style="background-color: #4b5563; border-color: #4b5563; color: #ffffff;" disabled>Download</button>
                     <div id="download-dropdown" class="dropdown-content">
@@ -199,7 +199,7 @@
     <!-- Sheet Music Overlay Popup Container -->
     <div id="sheet-modal">
         <div id="sheet-content">
-            <!-- New Popup Responsive Header (Consistent PC layout, customized clean tab segmented bar on Mobile) -->
+            <!-- Popup Responsive Header -->
             <div class="popup-header-container">
                 <!-- Mobile Title and Circular Close Button Bar -->
                 <div class="popup-title-bar">
@@ -239,7 +239,7 @@
                             <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0;">Traditional vertical page scroll (White paper / Thin staves)</p>
                         </div>
                         <div style="display: flex; gap: 12px; align-items: center;">
-                            <!-- Show Colors Checkbox (Unchecked by default) -->
+                            <!-- Show Colors Checkbox -->
                             <label style="display: inline-flex; align-items: center; gap: 6px; color: var(--text-color); font-size: 0.85rem; cursor: pointer; user-select: none;">
                                 <input type="checkbox" id="chk-show-colors" style="accent-color: var(--accent-color);">
                                 Show Colorful Notes
@@ -249,7 +249,7 @@
                             <button id="btn-stop-second" disabled style="background-color: #ef4444; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Stop Vert. Score</button>
                             <button id="btn-maximize-second" style="background-color: var(--accent-color); color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;">Maximize View</button>
                             
-                            <!-- Updated Download Button to Dropdown Wrapper -->
+                            <!-- Download Dropdown Wrapper -->
                             <div class="dropdown-wrapper" style="position: relative;">
                                 <button id="btn-download-second" style="background-color: #4b5563; color: white; border: 1px solid var(--panel-border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; font-weight: 600;" type="button">Download</button>
                                 <div id="download-dropdown-second" class="dropdown-content">
@@ -296,10 +296,9 @@
                 </div>
             </div>
 
-            <!-- New Studio Tab Content Layout -->
+            <!-- Studio Tab Content Layout -->
             <div id="sheet-tab-studio-content" style="display: none; flex: 1; overflow-y: auto; color: var(--text-color); font-family: monospace; font-size: 0.9rem; gap: 20px; flex-direction: column; width: 100%;">
                 
-                <!-- Row 1 Section: Edit, Filtering, Removal Details list, and Chronological Table -->
                 <div style="background: #0f0f13; padding: 20px; border-radius: 8px; border: 1px solid var(--panel-border); display: flex; flex-direction: column; gap: 15px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
                         <h3 style="color: var(--text-color); font-size: 1rem;">Row 1: Studio Event Filtering & Editing</h3>
@@ -344,7 +343,6 @@
                     </div>
                 </div>
 
-                <!-- Row 2 Section: Post-edited Music Sheet notation container with standalone audio dispatcher play/stop controls -->
                 <div style="background: #1a1a24; border: 1px solid var(--panel-border); border-radius: 8px; padding: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                         <div>
@@ -375,7 +373,7 @@
                     <button id="btn-play-max" class="btn-primary-action">Play Score</button>
                     <button id="btn-stop-max" class="btn-danger-action" disabled>Stop Score</button>
                     
-                    <!-- Updated Download SVG Button inside Maximized Modal to Dropdown Wrapper -->
+                    <!-- Download Dropdown inside Maximized Modal -->
                     <div class="dropdown-wrapper" style="position: relative;">
                         <button id="btn-download-max" class="btn-muted-action" type="button">Download</button>
                         <div id="download-dropdown-max" class="dropdown-content">
@@ -396,7 +394,7 @@
         </div>
     </div>
 
-    <!-- Added Modular Settings Overlay Panel Modal -->
+    <!-- Modular Settings Overlay Panel Modal -->
     <div id="settings-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.75); z-index: 1200; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
         <div style="background: var(--panel-color); border: 1px solid var(--panel-border); border-radius: 12px; width: 320px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); position: relative; color: var(--text-color);">
             <h3 style="margin-bottom: 20px; font-size: 1.1rem; border-bottom: 1px solid var(--panel-border); padding-bottom: 10px; display: flex; align-items: center; gap: 8px;">
@@ -407,7 +405,6 @@
                 Settings
             </h3>
             
-            <!-- Toggle settings item 1: Particles -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                 <span>Splash Particles Effect</span>
                 <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 22px;">
@@ -416,7 +413,6 @@
                 </label>
             </div>
 
-            <!-- Added Toggle settings item 2: Key Note Labels -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <span>Show Key Labels (C-D-E)</span>
                 <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 22px;">
@@ -425,7 +421,6 @@
                 </label>
             </div>
 
-            <!-- Added Toggle settings item 3: Octave Split Lines -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <span>Octave Split Lines</span>
                 <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 22px;">
@@ -438,7 +433,7 @@
         </div>
     </div>
 
-    <!-- Added Modular Generate Music/Transcribe Overlay Panel Modal -->
+    <!-- Modular Generate Music/Transcribe Overlay Panel Modal -->
     <div id="transcribe-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); z-index: 1250; align-items: center; justify-content: center; backdrop-filter: blur(8px); padding: calc(10px + env(safe-area-inset-top)) calc(15px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(15px + env(safe-area-inset-left));">
         <div class="services-hub-card" style="background: rgba(15, 15, 19, 0.95); border: 1px solid var(--panel-border); color: var(--text-color); max-width: 850px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 30px; border-radius: 20px; display: flex; flex-direction: column; gap: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); text-align: center;">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--panel-border); padding-bottom: 15px; width: 100%;">
@@ -456,7 +451,6 @@
                         <span class="step-desc">Select AI Neural Transcriber Engine</span>
                     </div>
                     <div class="model-grid">
-                        <!-- Model Card 1: Nexus-6 -->
                         <div class="model-card" data-model="T1ERA-Nexus-6">
                             <div class="model-badge nexus">Nexus-6</div>
                             <div class="model-name">TiERA Nexus-6</div>
@@ -464,7 +458,6 @@
                             <div class="model-stages">STAGES 0 - 6</div>
                         </div>
 
-                        <!-- Model Card 2: Vortex-Ultra -->
                         <div class="model-card" data-model="T1ERA-Vortex-Ultra">
                             <div class="model-badge vortex">Vortex-Ultra</div>
                             <div class="model-name">TiERA Vortex-Ultra</div>
@@ -472,7 +465,6 @@
                             <div class="model-stages">STAGES 0 - 5</div>
                         </div>
 
-                        <!-- Model Card 3: Ivory-4 -->
                         <div class="model-card" data-model="T1ERA-Ivory-4">
                             <div class="model-badge ivory">Ivory-4</div>
                             <div class="model-name">TiERA Ivory-4</div>
@@ -480,7 +472,6 @@
                             <div class="model-stages">STAGES 0 - 4</div>
                         </div>
 
-                        <!-- Model Card 4: Ivory-2 (ByteDance piano engine) -->
                         <div class="model-card" data-model="T1ERA-Ivory-2">
                             <div class="model-badge bytedance">Ivory-2</div>
                             <div class="model-name">TiERA Ivory-2</div>
@@ -490,7 +481,7 @@
                     </div>
                 </div>
 
-                <!-- STEP 2: SELECT AUDIO INPUT METHOD (Dimmed until Step 1 is completed) -->
+                <!-- STEP 2: SELECT AUDIO INPUT METHOD -->
                 <div class="input-method-section selection-locked" id="transcribe-input-methods-wrapper">
                     <div class="step-header">
                         <span class="step-num">STEP 2</span>
@@ -498,7 +489,6 @@
                     </div>
                     
                     <div class="services-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; width: 100%;">
-                        <!-- Upload Option 1: YouTube Import (Web3 Card) -->
                         <div class="service-card-expanded blue-glow">
                             <div class="card-icon-header">
                                 <svg class="yt-logo" viewBox="0 0 24 24" fill="#FF0000" style="width: 24px; height: 24px; filter: drop-shadow(0 0 5px rgba(255, 0, 0, 0.6));">
@@ -512,7 +502,6 @@
                             </div>
                         </div>
 
-                        <!-- Upload Option 2: File Explorer Audio Upload (Web3 Dropzone) -->
                         <div class="service-card-expanded emerald-glow" id="transcribe-file-dropzone-trigger" style="cursor: pointer;">
                             <div class="card-icon-header">
                                 <div class="card-subtitle" style="font-size: 0.85rem; font-weight: 500; letter-spacing: 2px; text-transform: uppercase;">Local Audio File</div>
@@ -526,7 +515,6 @@
                             </div>
                         </div>
 
-                        <!-- Upload Option 3: MIDI Player (Standard Visual Link Card) -->
                         <div class="service-card glowing-active" id="transcribe-midi-upload-card" style="cursor: pointer;">
                             <div class="card-icon" style="font-size: 2rem;">🎹</div>
                             <div class="card-name" style="font-size: 0.9rem; letter-spacing: 2px; font-weight: 500; text-transform: uppercase;">Upload MIDI file</div>
@@ -537,7 +525,7 @@
         </div>
     </div>
 
-    <!-- Separated JavaScript External Links in Exact Execution Order -->
+    <!-- JavaScript External Links -->
     <script src="assets/js/midiano-core.js"></script>
     <script src="assets/js/midiano-settings.js"></script>
     <script src="assets/js/midiano-transcribe.js"></script>
