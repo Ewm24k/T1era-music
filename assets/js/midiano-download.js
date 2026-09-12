@@ -146,7 +146,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // =========================================================================
-    // 4. CERTIFIED GRAND STAFF MusicXML ENGINE (MUSESCORE / MUSESTUDIO COMPLIANT)
+    // 4. CLEAN GRAND STAFF MusicXML (ZERO FRAGMENTED RESTS BETWEEN NOTES)
     // =========================================================================
     const handleXmlDownload = (e) => {
         e.preventDefault();
@@ -179,7 +179,6 @@ document.addEventListener("DOMContentLoaded", () => {
             ? resolvedSheetTitle
             : ((midiData && midiData.name && midiData.name !== "Untitled") ? midiData.name : "Piano Score");
         
-        // Escape special XML entities in titles
         const safeTitle = rawTitle
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
@@ -187,7 +186,7 @@ document.addEventListener("DOMContentLoaded", () => {
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&apos;");
 
-        // 1. Resolve Time Signature & BPM
+        // 1. Time Signature & BPM
         let beats = 4;
         let beatType = 4;
         if (midiData && midiData.header && midiData.header.timeSignatures && midiData.header.timeSignatures.length > 0) {
@@ -205,11 +204,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const quarterSec = 60 / bpm;
         const measureDurationSec = beats * (4 / beatType) * quarterSec;
 
-        // Divisions per quarter note (480 is standard, divisible by 2, 3, 4, 5, 6, 8, 10, 12, 16)
         const divisions = 480;
         const totalMeasureDivisions = Math.round(beats * (4 / beatType) * divisions);
 
-        // 2. Resolve Key Signature Fifths
+        // 2. Key Signature Fifths
         let fifths = 0;
         const fifthsMap = {
             "C": 0, "G": 1, "D": 2, "A": 3, "E": 4, "B": 5, "F#": 6, "C#": 7,
@@ -242,16 +240,19 @@ document.addEventListener("DOMContentLoaded", () => {
         ];
         const pitchTable = fifths < 0 ? PITCH_CLASSES_FLAT : PITCH_CLASSES_SHARP;
 
-        function getNoteType(durDiv) {
+        function getNoteTypeAndDot(durDiv) {
             const ratio = durDiv / divisions;
-            if (ratio >= 3.5) return "whole";
-            if (ratio >= 1.75) return "half";
-            if (ratio >= 0.85) return "quarter";
-            if (ratio >= 0.4) return "eighth";
-            return "16th";
+            if (ratio >= 3.5) return { type: "whole", dot: false };
+            if (ratio >= 2.5) return { type: "half", dot: true };
+            if (ratio >= 1.75) return { type: "half", dot: false };
+            if (ratio >= 1.25) return { type: "quarter", dot: true };
+            if (ratio >= 0.75) return { type: "quarter", dot: false };
+            if (ratio >= 0.6) return { type: "eighth", dot: true };
+            if (ratio >= 0.35) return { type: "eighth", dot: false };
+            return { type: "16th", dot: false };
         }
 
-        // 3. Partition and Quantize Measure Bounds
+        // 3. Partition Measure Bounds
         const lastNoteEnd = activeNotesMemory.reduce((max, n) => Math.max(max, n.time + (n.duration || 0.5)), 0);
         const totalDurationSecs = Math.max(typeof totalDuration !== "undefined" ? totalDuration : 0, lastNoteEnd);
         const totalMeasuresCount = Math.max(1, Math.ceil(totalDurationSecs / measureDurationSec));
@@ -298,50 +299,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
         xml += '  <part id="P1">\n';
 
-        // Helper to output cleanly subdivided rest notes that guarantee exact tick alignment
-        function appendRests(durationDivs, voiceNumber, staffNumber) {
-            let out = "";
-            let remaining = durationDivs;
-
-            while (remaining > 0) {
-                let restDiv = remaining;
-                if (remaining >= divisions * 4) restDiv = divisions * 4;
-                else if (remaining >= divisions * 2) restDiv = divisions * 2;
-                else if (remaining >= divisions) restDiv = divisions;
-                else if (remaining >= divisions / 2) restDiv = divisions / 2;
-                else if (remaining >= divisions / 4) restDiv = divisions / 4;
-                else restDiv = remaining;
-
-                const restType = getNoteType(restDiv);
-                out += `      <note>\n`;
-                out += `        <rest/>\n`;
-                out += `        <duration>${restDiv}</duration>\n`;
-                out += `        <voice>${voiceNumber}</voice>\n`;
-                out += `        <type>${restType}</type>\n`;
-                out += `        <staff>${staffNumber}</staff>\n`;
-                out += `      </note>\n`;
-
-                remaining -= restDiv;
-            }
-            return out;
-        }
-
-        // Rhythmic Voice Builder guaranteeing sum(divisions) === totalMeasureDivisions
+        // 5. Rhythmic Voice Builder: CONNECTS NOTES DIRECTLY WITH ZERO INTERMEDIATE RESTS
         function buildStaffVoiceXml(notes, staffNumber, voiceNumber, mStart) {
-            // If the staff has no notes in this measure, output an exact measure rest
+            // Clean whole rest if no notes played in this entire measure
             if (!notes || notes.length === 0) {
-                return appendRests(totalMeasureDivisions, voiceNumber, staffNumber);
+                return `      <note>\n        <rest/>\n        <duration>${totalMeasureDivisions}</duration>\n        <voice>${voiceNumber}</voice>\n        <type>whole</type>\n        <staff>${staffNumber}</staff>\n      </note>\n`;
             }
 
             const sorted = [...notes].sort((a, b) => a.time - b.time);
 
-            // Group notes with onsets within 40ms into simultaneous chord blocks
+            // Group simultaneous notes into chords (< 45ms onset difference)
             const clusters = [];
             let i = 0;
             while (i < sorted.length) {
                 const cluster = [sorted[i]];
                 let j = i + 1;
-                while (j < sorted.length && Math.abs(sorted[j].time - sorted[i].time) < 0.04) {
+                while (j < sorted.length && Math.abs(sorted[j].time - sorted[i].time) < 0.045) {
                     cluster.push(sorted[j]);
                     j++;
                 }
@@ -349,43 +322,56 @@ document.addEventListener("DOMContentLoaded", () => {
                 i = j;
             }
 
+            const snapGrid = divisions / 4; // 16th note grid
+            const clusterOnsets = clusters.map((cluster) => {
+                const onsetSec = Math.max(0, cluster[0].time - mStart);
+                let tick = Math.round((onsetSec / measureDurationSec) * totalMeasureDivisions);
+                tick = Math.round(tick / snapGrid) * snapGrid;
+                return Math.max(0, Math.min(totalMeasureDivisions - snapGrid, tick));
+            });
+
+            // Snap notes starting near the beginning of the measure directly to beat 1 (tick 0)
+            if (clusterOnsets.length > 0 && clusterOnsets[0] <= divisions / 2) {
+                clusterOnsets[0] = 0;
+            }
+
+            // Ensure strictly non-overlapping onsets
+            for (let k = 1; k < clusterOnsets.length; k++) {
+                if (clusterOnsets[k] < clusterOnsets[k - 1] + snapGrid) {
+                    clusterOnsets[k] = Math.min(totalMeasureDivisions - snapGrid, clusterOnsets[k - 1] + snapGrid);
+                }
+            }
+
             let staffXml = "";
             let currentTick = 0;
 
-            clusters.forEach((cluster, cIndex) => {
-                const onsetSec = Math.max(0, cluster[0].time - mStart);
-                let onsetTick = Math.round((onsetSec / measureDurationSec) * totalMeasureDivisions);
-                
-                // Snap minor rounding skews to 16th-note boundaries (divisions / 4)
-                const snapGrid = divisions / 4;
-                onsetTick = Math.round(onsetTick / snapGrid) * snapGrid;
-                onsetTick = Math.max(0, Math.min(totalMeasureDivisions - snapGrid, onsetTick));
+            // Only insert a rest if the hand enters on a later beat (e.g. beat 2 or 3)
+            if (clusterOnsets[0] > 0) {
+                const initialRestDiv = clusterOnsets[0];
+                const restTypeInfo = getNoteTypeAndDot(initialRestDiv);
+                staffXml += `      <note>\n`;
+                staffXml += `        <rest/>\n`;
+                staffXml += `        <duration>${initialRestDiv}</duration>\n`;
+                staffXml += `        <voice>${voiceNumber}</voice>\n`;
+                staffXml += `        <type>${restTypeInfo.type}</type>\n`;
+                if (restTypeInfo.dot) staffXml += `        <dot/>\n`;
+                staffXml += `        <staff>${staffNumber}</staff>\n`;
+                staffXml += `      </note>\n`;
+                currentTick = initialRestDiv;
+            }
 
-                // 1. If there is a gap between current position and note onset, insert an explicit rest
-                if (onsetTick > currentTick) {
-                    staffXml += appendRests(onsetTick - currentTick, voiceNumber, staffNumber);
-                    currentTick = onsetTick;
-                }
+            for (let k = 0; k < clusters.length; k++) {
+                const cluster = clusters[k];
+                const onset = clusterOnsets[k];
 
-                if (onsetTick < currentTick) {
-                    onsetTick = currentTick;
-                }
-
-                // 2. Determine duration of this chord/note
-                // It cannot extend beyond the start of the next chord, nor past the end of the measure
-                const nextOnset = (cIndex < clusters.length - 1)
-                    ? Math.max(currentTick + snapGrid, Math.round((Math.max(0, clusters[cIndex + 1][0].time - mStart) / measureDurationSec) * totalMeasureDivisions))
+                // Note duration sustains directly to the next note onset (NO REST IN BETWEEN)
+                const nextOnset = (k < clusters.length - 1)
+                    ? clusterOnsets[k + 1]
                     : totalMeasureDivisions;
 
-                const maxAllowedDiv = Math.max(snapGrid, nextOnset - currentTick);
-                const rawDurSec = cluster.reduce((max, n) => Math.max(max, n.duration || 0.25), 0);
-                let noteDiv = Math.round((rawDurSec / measureDurationSec) * totalMeasureDivisions);
-                noteDiv = Math.round(noteDiv / snapGrid) * snapGrid;
-                noteDiv = Math.max(snapGrid, Math.min(maxAllowedDiv, noteDiv));
+                const noteDiv = Math.max(snapGrid, nextOnset - onset);
+                const typeInfo = getNoteTypeAndDot(noteDiv);
 
-                const noteType = getNoteType(noteDiv);
-
-                // 3. Render all notes in this cluster (first note advances, following have <chord/>)
                 cluster.forEach((note, idx) => {
                     const pitchClass = ((note.midi % 12) + 12) % 12;
                     const octave = Math.floor(note.midi / 12) - 1;
@@ -404,29 +390,40 @@ document.addEventListener("DOMContentLoaded", () => {
                     staffXml += `        </pitch>\n`;
                     staffXml += `        <duration>${noteDiv}</duration>\n`;
                     staffXml += `        <voice>${voiceNumber}</voice>\n`;
-                    staffXml += `        <type>${noteType}</type>\n`;
+                    staffXml += `        <type>${typeInfo.type}</type>\n`;
+                    if (typeInfo.dot) {
+                        staffXml += `        <dot/>\n`;
+                    }
                     staffXml += `        <staff>${staffNumber}</staff>\n`;
                     staffXml += `      </note>\n`;
                 });
 
-                currentTick += noteDiv;
-            });
+                currentTick = onset + noteDiv;
+            }
 
-            // 4. Fill any remaining ticks in the measure with an explicit rest so sum === totalMeasureDivisions
+            // Fill any remaining measure fraction if piece ended early
             if (currentTick < totalMeasureDivisions) {
-                staffXml += appendRests(totalMeasureDivisions - currentTick, voiceNumber, staffNumber);
+                const gap = totalMeasureDivisions - currentTick;
+                const restTypeInfo = getNoteTypeAndDot(gap);
+                staffXml += `      <note>\n`;
+                staffXml += `        <rest/>\n`;
+                staffXml += `        <duration>${gap}</duration>\n`;
+                staffXml += `        <voice>${voiceNumber}</voice>\n`;
+                staffXml += `        <type>${restTypeInfo.type}</type>\n`;
+                if (restTypeInfo.dot) staffXml += `        <dot/>\n`;
+                staffXml += `        <staff>${staffNumber}</staff>\n`;
+                staffXml += `      </note>\n`;
             }
 
             return staffXml;
         }
 
-        // 5. Output measures
+        // 6. Assemble measures
         for (let m = 1; m <= totalMeasuresCount; m++) {
             xml += `    <measure number="${m}">\n`;
 
             const mStart = (m - 1) * measureDurationSec;
 
-            // Grand Staff Attributes & Tempo markings on Measure 1
             if (m === 1) {
                 xml += '      <attributes>\n';
                 xml += `        <divisions>${divisions}</divisions>\n`;
@@ -450,15 +447,15 @@ document.addEventListener("DOMContentLoaded", () => {
             const rhNotes = currentNotes.filter(n => n.midi >= 60);
             const lhNotes = currentNotes.filter(n => n.midi < 60);
 
-            // VOICE 1 (Staff 1 - Treble / Right Hand)
+            // VOICE 1 (Staff 1 - Treble RH)
             xml += buildStaffVoiceXml(rhNotes, 1, 1, mStart);
 
-            // Synchronize cursor back to measure start for the Left Hand
+            // Backup cursor to measure start for Left Hand
             xml += `      <backup>\n`;
             xml += `        <duration>${totalMeasureDivisions}</duration>\n`;
             xml += `      </backup>\n`;
 
-            // VOICE 2 (Staff 2 - Bass / Left Hand)
+            // VOICE 2 (Staff 2 - Bass LH)
             xml += buildStaffVoiceXml(lhNotes, 2, 2, mStart);
 
             xml += '    </measure>\n';
@@ -500,13 +497,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
 
-            // Close any open dropdown menu
             const dropdownSecond = document.getElementById("download-dropdown-second");
             if (dropdownSecond) dropdownSecond.classList.remove("show");
             const dropdownMax = document.getElementById("download-dropdown-max");
             if (dropdownMax) dropdownMax.classList.remove("show");
 
-            // Button state feedback
             const btnSecond = document.getElementById("btn-download-second");
             const btnMax = document.getElementById("btn-download-max");
             const prevTextSecond = btnSecond ? btnSecond.textContent : "";
@@ -531,7 +526,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 const sanitizedTitle = trackTitle.replace(/[\/\\:*?"<>|]/g, "_").trim() || "Score";
 
-                // Standard offscreen container (850px standard A4 proportion)
+                // Offscreen container with standard 850px A4 proportion
                 const offscreenContainer = document.createElement("div");
                 offscreenContainer.id = "offscreen-a4-pdf-container";
                 offscreenContainer.style.position = "fixed";
