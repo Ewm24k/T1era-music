@@ -140,7 +140,9 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // 4. DOWNLOAD MusicXML SHEET (Procedurally converts notes array into structured XML staves)
+    // =========================================================================
+    // 4. DOWNLOAD MusicXML SHEET (Grand Staff: Treble RH & Bass LH)
+    // =========================================================================
     const handleXmlDownload = (e) => {
         e.preventDefault();
         try {
@@ -149,7 +151,8 @@ document.addEventListener("DOMContentLoaded", () => {
             const blob = new Blob([xmlContent], { type: "application/vnd.recordare.musicxml+xml" });
             const url = URL.createObjectURL(blob);
             
-            triggerBrowserDownload(url, (midiData.name || "score") + ".musicxml");
+            const title = (midiData && midiData.name && midiData.name !== "Untitled") ? midiData.name : "score";
+            triggerBrowserDownload(url, title + ".musicxml");
         } catch (err) {
             console.error("MusicXML compilation failed:", err);
         }
@@ -158,79 +161,256 @@ document.addEventListener("DOMContentLoaded", () => {
     if (downXmlSecond) downXmlSecond.addEventListener("click", handleXmlDownload);
     if (downXmlMax) downXmlMax.addEventListener("click", handleXmlDownload);
 
-    // Procedural MusicXML Generator Engine
+    // Procedural MusicXML Generator Engine (Grand Staff for Piano)
     function generateMusicXML() {
+        const title = (typeof resolvedSheetTitle !== "undefined" && resolvedSheetTitle && resolvedSheetTitle !== "Untitled Track")
+            ? resolvedSheetTitle
+            : ((midiData && midiData.name && midiData.name !== "Untitled") ? midiData.name : "Piano Score");
+
+        // 1. Resolve Time Signature & BPM
+        let beats = 4;
+        let beatType = 4;
+        if (midiData && midiData.header && midiData.header.timeSignatures && midiData.header.timeSignatures.length > 0) {
+            const ts = midiData.header.timeSignatures[0].timeSignature;
+            if (Array.isArray(ts) && ts.length === 2) {
+                beats = ts[0];
+                beatType = ts[1];
+            }
+        }
+
+        const bpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0])
+            ? Math.round(midiData.header.tempos[0].bpm)
+            : 120;
+
+        const beatSec = (60 / bpm) * (4 / beatType);
+        const measureDurationSec = beats * beatSec;
+
+        // Divisions per quarter note (standard 480 matches PPQ and subdivides evenly)
+        const divisions = 480;
+        const totalMeasureDivisions = Math.round(beats * (4 / beatType) * divisions);
+
+        // 2. Resolve Key Signature Fifths
+        let fifths = 0;
+        const fifthsMap = {
+            "C": 0, "G": 1, "D": 2, "A": 3, "E": 4, "B": 5, "F#": 6, "C#": 7,
+            "F": -1, "Bb": -2, "Eb": -3, "Ab": -4, "Db": -5, "Gb": -6, "Cb": -7,
+            "Am": 0, "Em": 1, "Bm": 2, "F#m": 3, "C#m": 4, "G#m": 5,
+            "Dm": -1, "Gm": -2, "Cm": -3, "Fm": -4, "Bbm": -5
+        };
+        if (midiData && midiData.header && midiData.header.keySignatures && midiData.header.keySignatures.length > 0) {
+            const keyStr = midiData.header.keySignatures[0].key || "C";
+            if (typeof fifthsMap[keyStr] !== "undefined") fifths = fifthsMap[keyStr];
+        }
+
+        // Diatonic pitch lookup table
+        const PITCH_CLASSES_SHARP = [
+            { step: "C", alter: 0 }, { step: "C", alter: 1 },
+            { step: "D", alter: 0 }, { step: "D", alter: 1 },
+            { step: "E", alter: 0 },
+            { step: "F", alter: 0 }, { step: "F", alter: 1 },
+            { step: "G", alter: 0 }, { step: "G", alter: 1 },
+            { step: "A", alter: 0 }, { step: "A", alter: 1 },
+            { step: "B", alter: 0 }
+        ];
+        const PITCH_CLASSES_FLAT = [
+            { step: "C", alter: 0 }, { step: "D", alter: -1 },
+            { step: "D", alter: 0 }, { step: "E", alter: -1 },
+            { step: "E", alter: 0 },
+            { step: "F", alter: 0 }, { step: "G", alter: -1 },
+            { step: "G", alter: 0 }, { step: "A", alter: -1 },
+            { step: "A", alter: 0 }, { step: "B", alter: -1 },
+            { step: "B", alter: 0 }
+        ];
+        const pitchTable = fifths < 0 ? PITCH_CLASSES_FLAT : PITCH_CLASSES_SHARP;
+
+        function getNoteType(durDiv) {
+            const ratio = durDiv / divisions;
+            if (ratio >= 3.5) return "whole";
+            if (ratio >= 1.75) return "half";
+            if (ratio >= 0.85) return "quarter";
+            if (ratio >= 0.4) return "eighth";
+            return "16th";
+        }
+
+        // 3. Partition notes by measure
+        const pieceDuration = typeof totalDuration !== "undefined" && totalDuration > 0
+            ? totalDuration
+            : (activeNotesMemory[activeNotesMemory.length - 1].time + 1);
+        const totalMeasuresCount = Math.max(1, Math.ceil(pieceDuration / measureDurationSec));
+
+        const measuresMap = {};
+        for (let m = 1; m <= totalMeasuresCount; m++) {
+            measuresMap[m] = [];
+        }
+
+        activeNotesMemory.forEach((note) => {
+            const mIndex = Math.min(totalMeasuresCount, Math.floor(note.time / measureDurationSec) + 1);
+            if (measuresMap[mIndex]) {
+                measuresMap[mIndex].push(note);
+            }
+        });
+
+        // 4. Build MusicXML Document
         let xml = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n';
-        xml += '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n';
-        xml += '<score-partwise version="3.0">\n';
+        xml += '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n';
+        xml += '<score-partwise version="3.1">\n';
         xml += '  <work>\n';
-        xml += `    <work-title>${midiData.name || "Untitled Score"}</work-title>\n`;
+        xml += `    <work-title>${title}</work-title>\n`;
         xml += '  </work>\n';
+        xml += '  <identification>\n';
+        xml += '    <creator type="composer">T1ERA Music Ai</creator>\n';
+        xml += '    <encoding>\n';
+        xml += '      <software>Midiano Pro Music Engraver</software>\n';
+        xml += '      <encoding-date>' + new Date().toISOString().split('T')[0] + '</encoding-date>\n';
+        xml += '    </encoding>\n';
+        xml += '  </identification>\n';
+
         xml += '  <part-list>\n';
         xml += '    <score-part id="P1">\n';
         xml += '      <part-name>Piano</part-name>\n';
+        xml += '      <score-instrument id="P1-I1">\n';
+        xml += '        <instrument-name>Acoustic Grand Piano</instrument-name>\n';
+        xml += '      </score-instrument>\n';
+        xml += '      <midi-instrument id="P1-I1">\n';
+        xml += '        <midi-channel>1</midi-channel>\n';
+        xml += '        <midi-program>1</midi-program>\n';
+        xml += '      </midi-instrument>\n';
         xml += '    </score-part>\n';
         xml += '  </part-list>\n';
+
         xml += '  <part id="P1">\n';
-        
-        const measureDuration = 4.0; 
-        const measuresMap = {};
-        
-        activeNotesMemory.forEach((note) => {
-            const mIndex = Math.floor(note.time / measureDuration) + 1;
-            if (!measuresMap[mIndex]) {
-                measuresMap[mIndex] = [];
+
+        // Helper function to build Voice/Staff notes with accurate offsets & chords
+        function buildStaffVoiceXml(notes, staffNumber, voiceNumber, mStart) {
+            if (!notes || notes.length === 0) {
+                return `      <note>
+        <rest measure="yes"/>
+        <duration>${totalMeasureDivisions}</duration>
+        <voice>${voiceNumber}</voice>
+        <staff>${staffNumber}</staff>
+      </note>\n`;
             }
-            measuresMap[mIndex].push(note);
-        });
-        
-        const measureKeys = Object.keys(measuresMap).sort((a, b) => a - b);
-        const totalMeasuresCount = measureKeys.length > 0 ? Math.max(...measureKeys.map(Number)) : 1;
-        
-        for (let i = 1; i <= totalMeasuresCount; i++) {
-            xml += `    <measure number="${i}">\n`;
-            
-            if (i === 1) {
-                xml += '      <attributes>\n';
-                xml += '        <divisions>256</divisions>\n';
-                xml += '        <key>\n';
-                xml += '          <fifths>0</fifths>\n';
-                xml += '        </key>\n';
-                xml += '        <time>\n';
-                xml += '          <beats>4</beats>\n';
-                xml += '          <beat-type>4</beat-type>\n';
-                xml += '        </time>\n';
-                xml += '        <clef>\n';
-                xml += '          <sign>G</sign>\n';
-                xml += '          <line>2</line>\n';
-                xml += '        </clef>\n';
-                xml += '      </attributes>\n';
-            }
-            
-            const currentMeasureNotes = measuresMap[i] || [];
-            currentMeasureNotes.forEach((note) => {
-                const stepChar = note.name.charAt(0);
-                const isSharp = note.name.includes('#');
-                const octaveIndex = note.name.match(/\d+/)?.[0] || '4';
-                const xmlDivisionsDuration = Math.round(note.duration * 256);
-                
-                xml += '      <note>\n';
-                xml += '        <pitch>\n';
-                xml += `          <step>${stepChar}</step>\n`;
-                if (isSharp) {
-                    xml += '          <alter>1</alter>\n';
+
+            const sorted = [...notes].sort((a, b) => a.time - b.time);
+
+            // Group notes with nearly identical onsets into simultaneous chord brackets (< 35ms)
+            const clusters = [];
+            let i = 0;
+            while (i < sorted.length) {
+                const cluster = [sorted[i]];
+                let j = i + 1;
+                while (j < sorted.length && Math.abs(sorted[j].time - sorted[i].time) < 0.035) {
+                    cluster.push(sorted[j]);
+                    j++;
                 }
-                xml += `          <octave>${octaveIndex}</octave>\n`;
-                xml += '        </pitch>\n';
-                xml += `        <duration>${xmlDivisionsDuration}</duration>\n`;
-                xml += '        <voice>1</voice>\n';
-                xml += '        <type>quarter</type>\n';
-                xml += '      </note>\n';
+                clusters.push(cluster);
+                i = j;
+            }
+
+            let staffXml = "";
+            let currentDiv = 0;
+
+            clusters.forEach((cluster) => {
+                const onsetSec = Math.max(0, cluster[0].time - mStart);
+                const onsetDiv = Math.max(0, Math.min(totalMeasureDivisions - 1, Math.round((onsetSec / measureDurationSec) * totalMeasureDivisions)));
+
+                // Forward cursor if there is a gap/rest before this note
+                if (onsetDiv > currentDiv) {
+                    const gap = onsetDiv - currentDiv;
+                    staffXml += `      <forward>
+        <duration>${gap}</duration>
+      </forward>\n`;
+                    currentDiv = onsetDiv;
+                }
+
+                // Longest note duration in chord cluster
+                const maxDurSec = cluster.reduce((max, n) => Math.max(max, n.duration || 0.25), 0);
+                let durDiv = Math.max(1, Math.round((maxDurSec / measureDurationSec) * totalMeasureDivisions));
+
+                // Constrain to measure boundary
+                if (currentDiv + durDiv > totalMeasureDivisions) {
+                    durDiv = Math.max(1, totalMeasureDivisions - currentDiv);
+                }
+
+                const noteType = getNoteType(durDiv);
+
+                cluster.forEach((note, idx) => {
+                    const pitchClass = ((note.midi % 12) + 12) % 12;
+                    const octave = Math.floor(note.midi / 12) - 1;
+                    const pInfo = pitchTable[pitchClass];
+
+                    staffXml += `      <note>\n`;
+                    if (idx > 0) {
+                        staffXml += `        <chord/>\n`;
+                    }
+                    staffXml += `        <pitch>
+          <step>${pInfo.step}</step>
+          ${pInfo.alter !== 0 ? `<alter>${pInfo.alter}</alter>\n          ` : ""}<octave>${octave}</octave>
+        </pitch>
+        <duration>${durDiv}</duration>
+        <voice>${voiceNumber}</voice>
+        <type>${noteType}</type>
+        <staff>${staffNumber}</staff>
+      </note>\n`;
+                });
+
+                currentDiv += durDiv;
             });
-            
+
+            // Fill remaining measure duration if notes ended early
+            if (currentDiv < totalMeasureDivisions) {
+                const remaining = totalMeasureDivisions - currentDiv;
+                staffXml += `      <forward>
+        <duration>${remaining}</duration>
+      </forward>\n`;
+            }
+
+            return staffXml;
+        }
+
+        // 5. Generate each measure with Staff 1 (RH) and Staff 2 (LH) synchronized via <backup>
+        for (let m = 1; m <= totalMeasuresCount; m++) {
+            xml += `    <measure number="${m}">\n`;
+
+            const mStart = (m - 1) * measureDurationSec;
+
+            // Grand Staff Attributes on Measure 1
+            if (m === 1) {
+                xml += '      <attributes>\n';
+                xml += `        <divisions>${divisions}</divisions>\n`;
+                xml += `        <key>\n          <fifths>${fifths}</fifths>\n        </key>\n`;
+                xml += `        <time>\n          <beats>${beats}</beats>\n          <beat-type>${beatType}</beat-type>\n        </time>\n`;
+                xml += '        <staves>2</staves>\n';
+                xml += '        <clef number="1">\n          <sign>G</sign>\n          <line>2</line>\n        </clef>\n';
+                xml += '        <clef number="2">\n          <sign>F</sign>\n          <line>4</line>\n        </clef>\n';
+                xml += '      </attributes>\n';
+
+                xml += '      <direction placement="above">\n';
+                xml += '        <direction-type>\n';
+                xml += `          <metronome>\n            <beat-unit>quarter</beat-unit>\n            <per-minute>${bpm}</per-minute>\n          </metronome>\n`;
+                xml += '        </direction-type>\n';
+                xml += `        <sound tempo="${bpm}"/>\n`;
+                xml += '      </direction>\n';
+            }
+
+            const currentNotes = measuresMap[m] || [];
+            const rhNotes = currentNotes.filter(n => n.midi >= 60);
+            const lhNotes = currentNotes.filter(n => n.midi < 60);
+
+            // STAFF 1: Right Hand (Treble Clef, Voice 1)
+            xml += buildStaffVoiceXml(rhNotes, 1, 1, mStart);
+
+            // BACKUP CURSOR to the beginning of the measure for the Left Hand
+            xml += `      <backup>
+        <duration>${totalMeasureDivisions}</duration>
+      </backup>\n`;
+
+            // STAFF 2: Left Hand (Bass Clef, Voice 2)
+            xml += buildStaffVoiceXml(lhNotes, 2, 2, mStart);
+
             xml += '    </measure>\n';
         }
-        
+
         xml += '  </part>\n';
         xml += '</score-partwise>\n';
         return xml;
@@ -239,8 +419,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // =========================================================================
     // 5. DIRECT MULTI-PAGE A4 VECTOR PDF ENGINE (NO BROWSER PRINT DIALOG)
     // =========================================================================
-
-    // Fallback dynamic loader if jsPDF script wasn't cached in head
     async function ensureJsPdfLibrary() {
         if (window.jspdf && window.jspdf.jsPDF) {
             return window.jspdf.jsPDF;
@@ -275,7 +453,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const dropdownMax = document.getElementById("download-dropdown-max");
             if (dropdownMax) dropdownMax.classList.remove("show");
 
-            // Temporary visual indicator on buttons during generation
+            // Button state feedback
             const btnSecond = document.getElementById("btn-download-second");
             const btnMax = document.getElementById("btn-download-max");
             const prevTextSecond = btnSecond ? btnSecond.textContent : "";
@@ -286,7 +464,6 @@ document.addEventListener("DOMContentLoaded", () => {
             try {
                 const JsPdfClass = await ensureJsPdfLibrary();
 
-                // 1. Resolve Track Title
                 let trackTitle = "Sheet Music";
                 if (typeof resolvedSheetTitle !== "undefined" && resolvedSheetTitle && resolvedSheetTitle !== "Untitled Track") {
                     trackTitle = resolvedSheetTitle;
@@ -299,11 +476,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                 }
 
-                // Clean title for safe filesystem filename
                 const sanitizedTitle = trackTitle.replace(/[\/\\:*?"<>|]/g, "_").trim() || "Score";
 
-                // 2. Render to a standardized offscreen A4 container (width: 850px)
-                // This ensures maximized (1600px+) or phone screens (360px) don't distort staff proportions in the PDF.
+                // Standard offscreen container (850px standard A4 proportion)
                 const offscreenContainer = document.createElement("div");
                 offscreenContainer.id = "offscreen-a4-pdf-container";
                 offscreenContainer.style.position = "fixed";
@@ -319,7 +494,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 offscreenContainer.appendChild(offscreenTarget);
                 document.body.appendChild(offscreenContainer);
 
-                // Render into offscreen target with standard A4 desktop proportions
                 if (typeof renderVerticalSheetMusic === "function") {
                     renderVerticalSheetMusic("offscreen-a4-pdf-target");
                 } else {
@@ -331,7 +505,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     throw new Error("SVG generation failed in offscreen target.");
                 }
 
-                // Guarantee valid XML namespace for rasterization
                 if (!svgElement.getAttribute("xmlns")) {
                     svgElement.setAttribute("xmlns", "http://www.w3.org/2000/svg");
                 }
@@ -339,7 +512,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 const svgWidth = parseFloat(svgElement.getAttribute("width")) || 850;
                 const svgHeight = parseFloat(svgElement.getAttribute("height")) || 1200;
 
-                // 3. Serialize SVG into an Image Object
                 const serializer = new XMLSerializer();
                 const svgString = serializer.serializeToString(svgElement);
                 const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
@@ -352,42 +524,32 @@ document.addEventListener("DOMContentLoaded", () => {
                     img.src = svgUrl;
                 });
 
-                // 4. Calculate Slicing & Pagination Metrics
-                // Standard A4 dimensions in PDF points (72 points/inch)
                 const a4WidthPt = 595.28;
                 const a4HeightPt = 841.89;
-                const horizontalMarginPt = 36; // 0.5 in
+                const horizontalMarginPt = 36;
                 const topMarginPt = 36;
                 const bottomMarginPt = 36;
-                const printableWidthPt = a4WidthPt - (horizontalMarginPt * 2);  // 523.28 pt
-                const printableHeightPt = a4HeightPt - (topMarginPt + bottomMarginPt); // 769.89 pt
+                const printableWidthPt = a4WidthPt - (horizontalMarginPt * 2);
+                const printableHeightPt = a4HeightPt - (topMarginPt + bottomMarginPt);
 
-                // System layout metrics from midiano-sheet.js
                 const systemDuration = 10;
                 const totalDurationSecs = typeof totalDuration !== "undefined" ? totalDuration : 60;
                 const numSystems = Math.ceil(totalDurationSecs / systemDuration) || 1;
-                const systemHeight = 220; // Height of each staff system at scale 1.0
+                const systemHeight = 220;
                 const headerOffset = typeof currentHeaderOffset !== "undefined" ? currentHeaderOffset : 110;
 
-                // Scale ratio between PDF points and SVG pixels
                 const ptsPerSvgPixel = printableWidthPt / svgWidth;
                 const systemHeightPt = systemHeight * ptsPerSvgPixel;
                 const headerHeightPt = headerOffset * ptsPerSvgPixel;
 
-                // Determine systems per page without splitting any staff line
-                // Page 1 includes the title header block
                 const availHeightPage1Pt = printableHeightPt - headerHeightPt - 25;
                 const systemsOnPage1 = Math.max(1, Math.floor(availHeightPage1Pt / systemHeightPt));
-
-                // Subsequent pages have full vertical space
                 const availHeightSubsequentPt = printableHeightPt - 30;
                 const systemsPerSubsequentPage = Math.max(1, Math.floor(availHeightSubsequentPt / systemHeightPt));
 
-                // Slice systems across page boundaries
                 const pageSlices = [];
                 let currentSystem = 0;
 
-                // Page 1
                 const p1EndSystem = Math.min(numSystems, systemsOnPage1);
                 const p1SourceHeight = headerOffset + (p1EndSystem * systemHeight);
                 pageSlices.push({
@@ -397,7 +559,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
                 currentSystem = p1EndSystem;
 
-                // Subsequent pages
                 while (currentSystem < numSystems) {
                     const startSys = currentSystem;
                     const endSys = Math.min(numSystems, currentSystem + systemsPerSubsequentPage);
@@ -418,7 +579,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 const totalPages = pageSlices.length;
 
-                // 5. Initialize jsPDF Document (A4, Portrait)
                 const pdfDoc = new JsPdfClass({
                     orientation: "portrait",
                     unit: "pt",
@@ -426,7 +586,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     compress: true
                 });
 
-                // High-resolution rendering multiplier (2.0 = crisp vector-equivalent print quality)
                 const renderScale = 2.0;
 
                 for (let p = 0; p < totalPages; p++) {
@@ -436,7 +595,6 @@ document.addEventListener("DOMContentLoaded", () => {
                         pdfDoc.addPage("a4", "portrait");
                     }
 
-                    // Create offscreen slicing canvas
                     const sliceCanvas = document.createElement("canvas");
                     sliceCanvas.width = Math.round(svgWidth * renderScale);
                     sliceCanvas.height = Math.round(slice.sourceHeight * renderScale);
@@ -445,11 +603,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     ctx.fillStyle = "#ffffff";
                     ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
 
-                    // Draw only this vertical slice from the complete SVG
                     ctx.drawImage(
                         sourceImage,
-                        0, slice.sourceY, svgWidth, slice.sourceHeight,      // Source coordinates
-                        0, 0, sliceCanvas.width, sliceCanvas.height          // Destination canvas
+                        0, slice.sourceY, svgWidth, slice.sourceHeight,
+                        0, 0, sliceCanvas.width, sliceCanvas.height
                     );
 
                     const sliceDataUrl = sliceCanvas.toDataURL("image/jpeg", 0.95);
@@ -460,7 +617,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
                     pdfDoc.addImage(sliceDataUrl, "JPEG", destX, destY, printableWidthPt, destHeightPt, undefined, "FAST");
 
-                    // Running header on page 2 and later
                     if (!slice.isFirstPage) {
                         pdfDoc.setFont("helvetica", "normal");
                         pdfDoc.setFontSize(8);
@@ -468,7 +624,6 @@ document.addEventListener("DOMContentLoaded", () => {
                         pdfDoc.text(trackTitle, a4WidthPt / 2, 26, { align: "center" });
                     }
 
-                    // Footer page numbering and branding
                     pdfDoc.setFont("helvetica", "normal");
                     pdfDoc.setFontSize(8.5);
                     pdfDoc.setTextColor(130, 130, 130);
@@ -479,10 +634,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     pdfDoc.text("T1ERA Music Ai", a4WidthPt - horizontalMarginPt, a4HeightPt - 20, { align: "right" });
                 }
 
-                // 6. Save directly to PDF file (No browser print dialog)
                 pdfDoc.save(`${sanitizedTitle}_sheet_music.pdf`);
 
-                // 7. Clean up
                 URL.revokeObjectURL(svgUrl);
                 if (offscreenContainer && offscreenContainer.parentNode) {
                     offscreenContainer.parentNode.removeChild(offscreenContainer);
@@ -497,7 +650,6 @@ document.addEventListener("DOMContentLoaded", () => {
         };
     };
 
-    // Attach to both Section 2 and Maximized view PDF dropdown buttons
     if (downPdfSecond) downPdfSecond.addEventListener("click", handlePdfDownload("sheet-music-notation-vertical"));
     if (downPdfMax) downPdfMax.addEventListener("click", handlePdfDownload("sheet-music-notation-max"));
 });
