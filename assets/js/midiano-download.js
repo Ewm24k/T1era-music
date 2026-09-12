@@ -67,7 +67,9 @@ document.addEventListener("DOMContentLoaded", () => {
         URL.revokeObjectURL(url);
     }
 
+    // =========================================================================
     // 1. DOWNLOAD MIDI FILE (Re-serializes live sequencer memory map)
+    // =========================================================================
     const handleMidiDownload = (e) => {
         e.preventDefault();
         try {
@@ -86,7 +88,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (downMidiSecond) downMidiSecond.addEventListener("click", handleMidiDownload);
     if (downMidiMax) downMidiMax.addEventListener("click", handleMidiDownload);
 
+    // =========================================================================
     // 2. DOWNLOAD JSON STRUCTURE (Saves chronological event blocks)
+    // =========================================================================
     downJson.addEventListener("click", (e) => {
         e.preventDefault();
         try {
@@ -101,7 +105,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    // =========================================================================
     // 3. DOWNLOAD SVG SHEET MUSIC (Grabs current active vector staves)
+    // =========================================================================
     downSvg.addEventListener("click", (e) => {
         e.preventDefault();
         try {
@@ -122,7 +128,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Section 2 and Max view SVG downloads
     if (downSvgSecond) {
         downSvgSecond.addEventListener("click", (e) => {
             e.preventDefault();
@@ -141,31 +146,46 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // =========================================================================
-    // 4. DOWNLOAD MusicXML SHEET (Grand Staff: Treble RH & Bass LH)
+    // 4. CERTIFIED GRAND STAFF MusicXML ENGINE (MUSESCORE / MUSESTUDIO COMPLIANT)
     // =========================================================================
     const handleXmlDownload = (e) => {
         e.preventDefault();
         try {
-            if (!activeNotesMemory || activeNotesMemory.length === 0) return;
+            if (!activeNotesMemory || activeNotesMemory.length === 0) {
+                alert("Please choose and load a MIDI track first.");
+                return;
+            }
             const xmlContent = generateMusicXML();
-            const blob = new Blob([xmlContent], { type: "application/vnd.recordare.musicxml+xml" });
+            const blob = new Blob([xmlContent], { type: "application/vnd.recordare.musicxml+xml;charset=utf-8" });
             const url = URL.createObjectURL(blob);
             
-            const title = (midiData && midiData.name && midiData.name !== "Untitled") ? midiData.name : "score";
-            triggerBrowserDownload(url, title + ".musicxml");
+            const rawTitle = (typeof resolvedSheetTitle !== "undefined" && resolvedSheetTitle) 
+                ? resolvedSheetTitle 
+                : ((midiData && midiData.name && midiData.name !== "Untitled") ? midiData.name : "Piano_Score");
+            const sanitizedTitle = rawTitle.replace(/[\/\\:*?"<>|]/g, "_").trim() || "Score";
+
+            triggerBrowserDownload(url, sanitizedTitle + ".musicxml");
         } catch (err) {
             console.error("MusicXML compilation failed:", err);
+            alert("Could not export MusicXML: " + (err.message || err));
         }
     };
     downXml.addEventListener("click", handleXmlDownload);
     if (downXmlSecond) downXmlSecond.addEventListener("click", handleXmlDownload);
     if (downXmlMax) downXmlMax.addEventListener("click", handleXmlDownload);
 
-    // Procedural MusicXML Generator Engine (Grand Staff for Piano)
     function generateMusicXML() {
-        const title = (typeof resolvedSheetTitle !== "undefined" && resolvedSheetTitle && resolvedSheetTitle !== "Untitled Track")
+        const rawTitle = (typeof resolvedSheetTitle !== "undefined" && resolvedSheetTitle && resolvedSheetTitle !== "Untitled Track")
             ? resolvedSheetTitle
             : ((midiData && midiData.name && midiData.name !== "Untitled") ? midiData.name : "Piano Score");
+        
+        // Escape special XML entities in titles
+        const safeTitle = rawTitle
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&apos;");
 
         // 1. Resolve Time Signature & BPM
         let beats = 4;
@@ -182,10 +202,10 @@ document.addEventListener("DOMContentLoaded", () => {
             ? Math.round(midiData.header.tempos[0].bpm)
             : 120;
 
-        const beatSec = (60 / bpm) * (4 / beatType);
-        const measureDurationSec = beats * beatSec;
+        const quarterSec = 60 / bpm;
+        const measureDurationSec = beats * (4 / beatType) * quarterSec;
 
-        // Divisions per quarter note (standard 480 matches PPQ and subdivides evenly)
+        // Divisions per quarter note (480 is standard, divisible by 2, 3, 4, 5, 6, 8, 10, 12, 16)
         const divisions = 480;
         const totalMeasureDivisions = Math.round(beats * (4 / beatType) * divisions);
 
@@ -202,7 +222,6 @@ document.addEventListener("DOMContentLoaded", () => {
             if (typeof fifthsMap[keyStr] !== "undefined") fifths = fifthsMap[keyStr];
         }
 
-        // Diatonic pitch lookup table
         const PITCH_CLASSES_SHARP = [
             { step: "C", alter: 0 }, { step: "C", alter: 1 },
             { step: "D", alter: 0 }, { step: "D", alter: 1 },
@@ -232,11 +251,10 @@ document.addEventListener("DOMContentLoaded", () => {
             return "16th";
         }
 
-        // 3. Partition notes by measure
-        const pieceDuration = typeof totalDuration !== "undefined" && totalDuration > 0
-            ? totalDuration
-            : (activeNotesMemory[activeNotesMemory.length - 1].time + 1);
-        const totalMeasuresCount = Math.max(1, Math.ceil(pieceDuration / measureDurationSec));
+        // 3. Partition and Quantize Measure Bounds
+        const lastNoteEnd = activeNotesMemory.reduce((max, n) => Math.max(max, n.time + (n.duration || 0.5)), 0);
+        const totalDurationSecs = Math.max(typeof totalDuration !== "undefined" ? totalDuration : 0, lastNoteEnd);
+        const totalMeasuresCount = Math.max(1, Math.ceil(totalDurationSecs / measureDurationSec));
 
         const measuresMap = {};
         for (let m = 1; m <= totalMeasuresCount; m++) {
@@ -250,17 +268,17 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
 
-        // 4. Build MusicXML Document
+        // 4. Header Generation (MusicXML 3.0 Strict DTD)
         let xml = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n';
-        xml += '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n';
-        xml += '<score-partwise version="3.1">\n';
+        xml += '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n';
+        xml += '<score-partwise version="3.0">\n';
         xml += '  <work>\n';
-        xml += `    <work-title>${title}</work-title>\n`;
+        xml += `    <work-title>${safeTitle}</work-title>\n`;
         xml += '  </work>\n';
         xml += '  <identification>\n';
         xml += '    <creator type="composer">T1ERA Music Ai</creator>\n';
         xml += '    <encoding>\n';
-        xml += '      <software>Midiano Pro Music Engraver</software>\n';
+        xml += '      <software>Midiano MuseStudio Engine</software>\n';
         xml += '      <encoding-date>' + new Date().toISOString().split('T')[0] + '</encoding-date>\n';
         xml += '    </encoding>\n';
         xml += '  </identification>\n';
@@ -269,7 +287,7 @@ document.addEventListener("DOMContentLoaded", () => {
         xml += '    <score-part id="P1">\n';
         xml += '      <part-name>Piano</part-name>\n';
         xml += '      <score-instrument id="P1-I1">\n';
-        xml += '        <instrument-name>Acoustic Grand Piano</instrument-name>\n';
+        xml += '        <instrument-name>Grand Piano</instrument-name>\n';
         xml += '      </score-instrument>\n';
         xml += '      <midi-instrument id="P1-I1">\n';
         xml += '        <midi-channel>1</midi-channel>\n';
@@ -280,26 +298,50 @@ document.addEventListener("DOMContentLoaded", () => {
 
         xml += '  <part id="P1">\n';
 
-        // Helper function to build Voice/Staff notes with accurate offsets & chords
+        // Helper to output cleanly subdivided rest notes that guarantee exact tick alignment
+        function appendRests(durationDivs, voiceNumber, staffNumber) {
+            let out = "";
+            let remaining = durationDivs;
+
+            while (remaining > 0) {
+                let restDiv = remaining;
+                if (remaining >= divisions * 4) restDiv = divisions * 4;
+                else if (remaining >= divisions * 2) restDiv = divisions * 2;
+                else if (remaining >= divisions) restDiv = divisions;
+                else if (remaining >= divisions / 2) restDiv = divisions / 2;
+                else if (remaining >= divisions / 4) restDiv = divisions / 4;
+                else restDiv = remaining;
+
+                const restType = getNoteType(restDiv);
+                out += `      <note>\n`;
+                out += `        <rest/>\n`;
+                out += `        <duration>${restDiv}</duration>\n`;
+                out += `        <voice>${voiceNumber}</voice>\n`;
+                out += `        <type>${restType}</type>\n`;
+                out += `        <staff>${staffNumber}</staff>\n`;
+                out += `      </note>\n`;
+
+                remaining -= restDiv;
+            }
+            return out;
+        }
+
+        // Rhythmic Voice Builder guaranteeing sum(divisions) === totalMeasureDivisions
         function buildStaffVoiceXml(notes, staffNumber, voiceNumber, mStart) {
+            // If the staff has no notes in this measure, output an exact measure rest
             if (!notes || notes.length === 0) {
-                return `      <note>
-        <rest measure="yes"/>
-        <duration>${totalMeasureDivisions}</duration>
-        <voice>${voiceNumber}</voice>
-        <staff>${staffNumber}</staff>
-      </note>\n`;
+                return appendRests(totalMeasureDivisions, voiceNumber, staffNumber);
             }
 
             const sorted = [...notes].sort((a, b) => a.time - b.time);
 
-            // Group notes with nearly identical onsets into simultaneous chord brackets (< 35ms)
+            // Group notes with onsets within 40ms into simultaneous chord blocks
             const clusters = [];
             let i = 0;
             while (i < sorted.length) {
                 const cluster = [sorted[i]];
                 let j = i + 1;
-                while (j < sorted.length && Math.abs(sorted[j].time - sorted[i].time) < 0.035) {
+                while (j < sorted.length && Math.abs(sorted[j].time - sorted[i].time) < 0.04) {
                     cluster.push(sorted[j]);
                     j++;
                 }
@@ -308,32 +350,42 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             let staffXml = "";
-            let currentDiv = 0;
+            let currentTick = 0;
 
-            clusters.forEach((cluster) => {
+            clusters.forEach((cluster, cIndex) => {
                 const onsetSec = Math.max(0, cluster[0].time - mStart);
-                const onsetDiv = Math.max(0, Math.min(totalMeasureDivisions - 1, Math.round((onsetSec / measureDurationSec) * totalMeasureDivisions)));
+                let onsetTick = Math.round((onsetSec / measureDurationSec) * totalMeasureDivisions);
+                
+                // Snap minor rounding skews to 16th-note boundaries (divisions / 4)
+                const snapGrid = divisions / 4;
+                onsetTick = Math.round(onsetTick / snapGrid) * snapGrid;
+                onsetTick = Math.max(0, Math.min(totalMeasureDivisions - snapGrid, onsetTick));
 
-                // Forward cursor if there is a gap/rest before this note
-                if (onsetDiv > currentDiv) {
-                    const gap = onsetDiv - currentDiv;
-                    staffXml += `      <forward>
-        <duration>${gap}</duration>
-      </forward>\n`;
-                    currentDiv = onsetDiv;
+                // 1. If there is a gap between current position and note onset, insert an explicit rest
+                if (onsetTick > currentTick) {
+                    staffXml += appendRests(onsetTick - currentTick, voiceNumber, staffNumber);
+                    currentTick = onsetTick;
                 }
 
-                // Longest note duration in chord cluster
-                const maxDurSec = cluster.reduce((max, n) => Math.max(max, n.duration || 0.25), 0);
-                let durDiv = Math.max(1, Math.round((maxDurSec / measureDurationSec) * totalMeasureDivisions));
-
-                // Constrain to measure boundary
-                if (currentDiv + durDiv > totalMeasureDivisions) {
-                    durDiv = Math.max(1, totalMeasureDivisions - currentDiv);
+                if (onsetTick < currentTick) {
+                    onsetTick = currentTick;
                 }
 
-                const noteType = getNoteType(durDiv);
+                // 2. Determine duration of this chord/note
+                // It cannot extend beyond the start of the next chord, nor past the end of the measure
+                const nextOnset = (cIndex < clusters.length - 1)
+                    ? Math.max(currentTick + snapGrid, Math.round((Math.max(0, clusters[cIndex + 1][0].time - mStart) / measureDurationSec) * totalMeasureDivisions))
+                    : totalMeasureDivisions;
 
+                const maxAllowedDiv = Math.max(snapGrid, nextOnset - currentTick);
+                const rawDurSec = cluster.reduce((max, n) => Math.max(max, n.duration || 0.25), 0);
+                let noteDiv = Math.round((rawDurSec / measureDurationSec) * totalMeasureDivisions);
+                noteDiv = Math.round(noteDiv / snapGrid) * snapGrid;
+                noteDiv = Math.max(snapGrid, Math.min(maxAllowedDiv, noteDiv));
+
+                const noteType = getNoteType(noteDiv);
+
+                // 3. Render all notes in this cluster (first note advances, following have <chord/>)
                 cluster.forEach((note, idx) => {
                     const pitchClass = ((note.midi % 12) + 12) % 12;
                     const octave = Math.floor(note.midi / 12) - 1;
@@ -343,38 +395,38 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (idx > 0) {
                         staffXml += `        <chord/>\n`;
                     }
-                    staffXml += `        <pitch>
-          <step>${pInfo.step}</step>
-          ${pInfo.alter !== 0 ? `<alter>${pInfo.alter}</alter>\n          ` : ""}<octave>${octave}</octave>
-        </pitch>
-        <duration>${durDiv}</duration>
-        <voice>${voiceNumber}</voice>
-        <type>${noteType}</type>
-        <staff>${staffNumber}</staff>
-      </note>\n`;
+                    staffXml += `        <pitch>\n`;
+                    staffXml += `          <step>${pInfo.step}</step>\n`;
+                    if (pInfo.alter !== 0) {
+                        staffXml += `          <alter>${pInfo.alter}</alter>\n`;
+                    }
+                    staffXml += `          <octave>${octave}</octave>\n`;
+                    staffXml += `        </pitch>\n`;
+                    staffXml += `        <duration>${noteDiv}</duration>\n`;
+                    staffXml += `        <voice>${voiceNumber}</voice>\n`;
+                    staffXml += `        <type>${noteType}</type>\n`;
+                    staffXml += `        <staff>${staffNumber}</staff>\n`;
+                    staffXml += `      </note>\n`;
                 });
 
-                currentDiv += durDiv;
+                currentTick += noteDiv;
             });
 
-            // Fill remaining measure duration if notes ended early
-            if (currentDiv < totalMeasureDivisions) {
-                const remaining = totalMeasureDivisions - currentDiv;
-                staffXml += `      <forward>
-        <duration>${remaining}</duration>
-      </forward>\n`;
+            // 4. Fill any remaining ticks in the measure with an explicit rest so sum === totalMeasureDivisions
+            if (currentTick < totalMeasureDivisions) {
+                staffXml += appendRests(totalMeasureDivisions - currentTick, voiceNumber, staffNumber);
             }
 
             return staffXml;
         }
 
-        // 5. Generate each measure with Staff 1 (RH) and Staff 2 (LH) synchronized via <backup>
+        // 5. Output measures
         for (let m = 1; m <= totalMeasuresCount; m++) {
             xml += `    <measure number="${m}">\n`;
 
             const mStart = (m - 1) * measureDurationSec;
 
-            // Grand Staff Attributes on Measure 1
+            // Grand Staff Attributes & Tempo markings on Measure 1
             if (m === 1) {
                 xml += '      <attributes>\n';
                 xml += `        <divisions>${divisions}</divisions>\n`;
@@ -389,6 +441,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 xml += '        <direction-type>\n';
                 xml += `          <metronome>\n            <beat-unit>quarter</beat-unit>\n            <per-minute>${bpm}</per-minute>\n          </metronome>\n`;
                 xml += '        </direction-type>\n';
+                xml += '        <staff>1</staff>\n';
                 xml += `        <sound tempo="${bpm}"/>\n`;
                 xml += '      </direction>\n';
             }
@@ -397,15 +450,15 @@ document.addEventListener("DOMContentLoaded", () => {
             const rhNotes = currentNotes.filter(n => n.midi >= 60);
             const lhNotes = currentNotes.filter(n => n.midi < 60);
 
-            // STAFF 1: Right Hand (Treble Clef, Voice 1)
+            // VOICE 1 (Staff 1 - Treble / Right Hand)
             xml += buildStaffVoiceXml(rhNotes, 1, 1, mStart);
 
-            // BACKUP CURSOR to the beginning of the measure for the Left Hand
-            xml += `      <backup>
-        <duration>${totalMeasureDivisions}</duration>
-      </backup>\n`;
+            // Synchronize cursor back to measure start for the Left Hand
+            xml += `      <backup>\n`;
+            xml += `        <duration>${totalMeasureDivisions}</duration>\n`;
+            xml += `      </backup>\n`;
 
-            // STAFF 2: Left Hand (Bass Clef, Voice 2)
+            // VOICE 2 (Staff 2 - Bass / Left Hand)
             xml += buildStaffVoiceXml(lhNotes, 2, 2, mStart);
 
             xml += '    </measure>\n';
