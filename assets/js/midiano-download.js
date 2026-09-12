@@ -146,7 +146,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // =========================================================================
-    // 4. CERTIFIED GRAND STAFF MusicXML (MUSESCORE STUDIO COMPLIANT - ZERO RESTS)
+    // 4. ARCHITECTED MUSESCORE STUDIO MusicXML ENGINE (ZERO CORRUPTION / ZERO RESTS)
     // =========================================================================
     const handleXmlDownload = (e) => {
         e.preventDefault();
@@ -186,29 +186,30 @@ document.addEventListener("DOMContentLoaded", () => {
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&apos;");
 
-        // 1. Time Signature & BPM
+        // 1. Resolve Time Signature & BPM safely
         let beats = 4;
         let beatType = 4;
         if (midiData && midiData.header && midiData.header.timeSignatures && midiData.header.timeSignatures.length > 0) {
             const ts = midiData.header.timeSignatures[0].timeSignature;
             if (Array.isArray(ts) && ts.length === 2) {
-                beats = ts[0];
-                beatType = ts[1];
+                beats = Number(ts[0]) || 4;
+                beatType = Number(ts[1]) || 4;
             }
         }
 
-        const bpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0])
-            ? Math.round(midiData.header.tempos[0].bpm)
+        const rawBpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0])
+            ? midiData.header.tempos[0].bpm
             : 120;
+        const bpm = Math.max(20, Math.min(300, Math.round(rawBpm || 120)));
 
         const quarterSec = 60 / bpm;
         const measureDurationSec = beats * (4 / beatType) * quarterSec;
 
-        // 480 divisions per quarter note guarantees exact integer subdivisions
+        // Divisions per quarter note (480 is the standard MIDI PPQ, cleanly divisible by 2, 3, 4, 5, 6, 8, 10, 12, 16)
         const divisions = 480;
         const totalMeasureDivisions = Math.round(beats * (4 / beatType) * divisions);
 
-        // 2. Key Signature Fifths
+        // 2. Resolve Key Signature
         let fifths = 0;
         const fifthsMap = {
             "C": 0, "G": 1, "D": 2, "A": 3, "E": 4, "B": 5, "F#": 6, "C#": 7,
@@ -241,19 +242,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ];
         const pitchTable = fifths < 0 ? PITCH_CLASSES_FLAT : PITCH_CLASSES_SHARP;
 
-        function getNoteTypeAndDot(durDiv) {
-            const ratio = durDiv / divisions;
-            if (ratio >= 3.5) return { type: "whole", dot: false };
-            if (ratio >= 2.5) return { type: "half", dot: true };
-            if (ratio >= 1.75) return { type: "half", dot: false };
-            if (ratio >= 1.25) return { type: "quarter", dot: true };
-            if (ratio >= 0.75) return { type: "quarter", dot: false };
-            if (ratio >= 0.6) return { type: "eighth", dot: true };
-            if (ratio >= 0.35) return { type: "eighth", dot: false };
-            return { type: "16th", dot: false };
-        }
-
-        // 3. Partition Notes by Measure
+        // 3. Partition Active Notes into Measure Bins
         const lastNoteEnd = activeNotesMemory.reduce((max, n) => Math.max(max, n.time + (n.duration || 0.5)), 0);
         const totalDurationSecs = Math.max(typeof totalDuration !== "undefined" ? totalDuration : 0, lastNoteEnd);
         const totalMeasuresCount = Math.max(1, Math.ceil(totalDurationSecs / measureDurationSec));
@@ -264,7 +253,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         activeNotesMemory.forEach((note) => {
-            const mIndex = Math.min(totalMeasuresCount, Math.floor(note.time / measureDurationSec) + 1);
+            const mIndex = Math.min(totalMeasuresCount, Math.max(1, Math.floor(note.time / measureDurationSec) + 1));
             if (measuresMap[mIndex]) {
                 measuresMap[mIndex].push(note);
             }
@@ -293,16 +282,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
         xml += '  <part id="P1">\n';
 
-        // 5. Precise Rhythmic Voice Builder: CONNECTS NOTES DIRECTLY WITH ZERO INTERMEDIATE RESTS
-        function buildStaffVoiceXml(notes, staffNumber, voiceNumber, mStart) {
-            // Full measure rest if hand has no notes in this measure
+        // 5. Mathematically Exact Voice Builder: NO FRAGMENTED RESTS & EXACT MEASURE TICK TOTALS
+        function buildStaffVoiceXml(notes, staffNumber, mStart) {
+            // Both Staff 1 and Staff 2 use primary voice 1 for MuseScore compatibility
+            const voiceNumber = 1;
+
+            // If the hand is completely silent throughout this measure, output a single clean measure rest
             if (!notes || notes.length === 0) {
                 return `      <note>\n        <rest/>\n        <duration>${totalMeasureDivisions}</duration>\n        <voice>${voiceNumber}</voice>\n        <staff>${staffNumber}</staff>\n      </note>\n`;
             }
 
             const sorted = [...notes].sort((a, b) => a.time - b.time);
 
-            // Group notes with onsets within 50ms into simultaneous chord blocks
+            // Group simultaneous notes into chords (< 50ms onset tolerance)
             const clusters = [];
             let i = 0;
             while (i < sorted.length) {
@@ -316,7 +308,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 i = j;
             }
 
-            const snapGrid = divisions / 4; // 16th note grid
+            // Quantize to standard 16th note grid (120 divisions)
+            const snapGrid = divisions / 4;
             const rawOnsets = clusters.map((cluster) => {
                 const onsetSec = Math.max(0, cluster[0].time - mStart);
                 let tick = Math.round((onsetSec / measureDurationSec) * totalMeasureDivisions);
@@ -324,7 +317,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 return Math.max(0, Math.min(totalMeasureDivisions - snapGrid, tick));
             });
 
-            // Snap notes starting near beat 1 directly to tick 0
+            // Snap notes starting near the beginning of the measure directly to beat 1 (tick 0)
             if (rawOnsets.length > 0 && rawOnsets[0] <= divisions / 2) {
                 rawOnsets[0] = 0;
             }
@@ -344,21 +337,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
             let staffXml = "";
 
-            // If the hand begins later in the measure (e.g. beat 2 or 3), insert one clean starting rest
+            // If the hand enters after beat 1 (e.g. on beat 2 or 3), output one clean starting rest
             if (mergedOnsets[0] > 0) {
                 const initialRestDiv = mergedOnsets[0];
-                const restTypeInfo = getNoteTypeAndDot(initialRestDiv);
                 staffXml += `      <note>\n`;
                 staffXml += `        <rest/>\n`;
                 staffXml += `        <duration>${initialRestDiv}</duration>\n`;
                 staffXml += `        <voice>${voiceNumber}</voice>\n`;
-                staffXml += `        <type>${restTypeInfo.type}</type>\n`;
-                if (restTypeInfo.dot) staffXml += `        <dot/>\n`;
                 staffXml += `        <staff>${staffNumber}</staff>\n`;
                 staffXml += `      </note>\n`;
             }
 
-            // Tile each note directly into the next note onset (NO RESTS IN BETWEEN)
+            // Tile each note directly to the onset of the next note (ZERO RESTS IN BETWEEN)
             for (let k = 0; k < mergedClusters.length; k++) {
                 const cluster = mergedClusters[k];
                 const onset = mergedOnsets[k];
@@ -368,7 +358,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     : totalMeasureDivisions;
 
                 const noteDiv = nextOnset - onset;
-                const typeInfo = getNoteTypeAndDot(noteDiv);
 
                 cluster.forEach((note, idx) => {
                     const pitchClass = ((note.midi % 12) + 12) % 12;
@@ -388,10 +377,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     staffXml += `        </pitch>\n`;
                     staffXml += `        <duration>${noteDiv}</duration>\n`;
                     staffXml += `        <voice>${voiceNumber}</voice>\n`;
-                    staffXml += `        <type>${typeInfo.type}</type>\n`;
-                    if (typeInfo.dot) {
-                        staffXml += `        <dot/>\n`;
-                    }
                     staffXml += `        <staff>${staffNumber}</staff>\n`;
                     staffXml += `      </note>\n`;
                 });
@@ -400,7 +385,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return staffXml;
         }
 
-        // 6. Output Measures with Guaranteed 100% Exact Measure Ticks
+        // 6. Output Measures with Grand Staff and Synchronized <backup>
         for (let m = 1; m <= totalMeasuresCount; m++) {
             xml += `    <measure number="${m}">\n`;
 
@@ -429,16 +414,16 @@ document.addEventListener("DOMContentLoaded", () => {
             const rhNotes = currentNotes.filter(n => n.midi >= 60);
             const lhNotes = currentNotes.filter(n => n.midi < 60);
 
-            // VOICE 1: Staff 1 (Treble RH) - Sum of ticks strictly equals totalMeasureDivisions
-            xml += buildStaffVoiceXml(rhNotes, 1, 1, mStart);
+            // STAFF 1: Right Hand (Treble Clef, Voice 1) - Sum of durations strictly equals totalMeasureDivisions
+            xml += buildStaffVoiceXml(rhNotes, 1, mStart);
 
-            // Synchronize cursor back to measure start for the Left Hand
+            // BACKUP CURSOR: Rewinds measure position for the Left Hand
             xml += `      <backup>\n`;
             xml += `        <duration>${totalMeasureDivisions}</duration>\n`;
             xml += `      </backup>\n`;
 
-            // VOICE 2: Staff 2 (Bass LH) - Sum of ticks strictly equals totalMeasureDivisions
-            xml += buildStaffVoiceXml(lhNotes, 2, 2, mStart);
+            // STAFF 2: Left Hand (Bass Clef, Voice 1) - Sum of durations strictly equals totalMeasureDivisions
+            xml += buildStaffVoiceXml(lhNotes, 2, mStart);
 
             xml += '    </measure>\n';
         }
