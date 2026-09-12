@@ -205,9 +205,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const quarterSec = 60 / bpm;
         const measureDurationSec = beats * (4 / beatType) * quarterSec;
 
-        // Divisions per quarter note (480 is the standard MIDI PPQ, cleanly divisible by 2, 3, 4, 5, 6, 8, 10, 12, 16)
-        const divisions = 480;
-        const totalMeasureDivisions = Math.round(beats * (4 / beatType) * divisions);
+        // Divisions = 4 guarantees small, non-drifting integers (Quarter note = 4, 16th note = 1)
+        // 4/4 measure = exactly 16 divisions total
+        const divisions = 4;
+        const totalMeasureDivs = Math.round(beats * (4 / beatType) * divisions);
 
         // 2. Resolve Key Signature
         let fifths = 0;
@@ -259,7 +260,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
 
-        // 4. MusicXML 3.1 Document Header
+        // 4. MusicXML 3.1 Document Header (Strict W3C/Recordare DTD)
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
         xml += '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n';
         xml += '<score-partwise version="3.1">\n';
@@ -282,82 +283,50 @@ document.addEventListener("DOMContentLoaded", () => {
 
         xml += '  <part id="P1">\n';
 
-        // 5. Mathematically Exact Voice Builder: NO FRAGMENTED RESTS & EXACT MEASURE TICK TOTALS
-        function buildStaffVoiceXml(notes, staffNumber, mStart) {
-            // Both Staff 1 and Staff 2 use primary voice 1 for MuseScore compatibility
-            const voiceNumber = 1;
-
-            // If the hand is completely silent throughout this measure, output a single clean measure rest
+        // 5. Discrete Grid Voice Builder: Staff 1 (Voice 1) and Staff 2 (Voice 2)
+        function buildMeasureVoice(notes, staffNum, voiceNum, mStartSec) {
+            // Full measure rest if hand has no notes in this measure
             if (!notes || notes.length === 0) {
-                return `      <note>\n        <rest/>\n        <duration>${totalMeasureDivisions}</duration>\n        <voice>${voiceNumber}</voice>\n        <staff>${staffNumber}</staff>\n      </note>\n`;
+                return `      <note>\n        <rest/>\n        <duration>${totalMeasureDivs}</duration>\n        <voice>${voiceNum}</voice>\n        <staff>${staffNum}</staff>\n      </note>\n`;
             }
 
-            const sorted = [...notes].sort((a, b) => a.time - b.time);
+            // Quantize notes onto an eighth-note grid (grid size = 2 ticks)
+            const slotMap = {};
+            notes.forEach((note) => {
+                const relSec = Math.max(0, note.time - mStartSec);
+                let slot = Math.round((relSec / measureDurationSec) * (totalMeasureDivs / 2)) * 2;
+                slot = Math.max(0, Math.min(totalMeasureDivs - 2, slot));
 
-            // Group simultaneous notes into chords (< 50ms onset tolerance)
-            const clusters = [];
-            let i = 0;
-            while (i < sorted.length) {
-                const cluster = [sorted[i]];
-                let j = i + 1;
-                while (j < sorted.length && Math.abs(sorted[j].time - sorted[i].time) < 0.05) {
-                    cluster.push(sorted[j]);
-                    j++;
+                // Snap notes near beat 1 directly to tick 0
+                if (slot <= 2) slot = 0;
+
+                if (!slotMap[slot]) {
+                    slotMap[slot] = [];
                 }
-                clusters.push(cluster);
-                i = j;
-            }
-
-            // Quantize to standard 16th note grid (120 divisions)
-            const snapGrid = divisions / 4;
-            const rawOnsets = clusters.map((cluster) => {
-                const onsetSec = Math.max(0, cluster[0].time - mStart);
-                let tick = Math.round((onsetSec / measureDurationSec) * totalMeasureDivisions);
-                tick = Math.round(tick / snapGrid) * snapGrid;
-                return Math.max(0, Math.min(totalMeasureDivisions - snapGrid, tick));
+                // Avoid redundant pitches at the same slot
+                if (!slotMap[slot].some(n => n.midi === note.midi)) {
+                    slotMap[slot].push(note);
+                }
             });
 
-            // Snap notes starting near the beginning of the measure directly to beat 1 (tick 0)
-            if (rawOnsets.length > 0 && rawOnsets[0] <= divisions / 2) {
-                rawOnsets[0] = 0;
-            }
-
-            // Merge any clusters that share the exact same quantized onset into a single unified chord
-            const mergedClusters = [];
-            const mergedOnsets = [];
-
-            for (let k = 0; k < clusters.length; k++) {
-                if (mergedOnsets.length > 0 && rawOnsets[k] === mergedOnsets[mergedOnsets.length - 1]) {
-                    mergedClusters[mergedClusters.length - 1].push(...clusters[k]);
-                } else {
-                    mergedClusters.push([...clusters[k]]);
-                    mergedOnsets.push(rawOnsets[k]);
-                }
+            const slots = Object.keys(slotMap).map(Number).sort((a, b) => a - b);
+            if (slots.length === 0) {
+                return `      <note>\n        <rest/>\n        <duration>${totalMeasureDivs}</duration>\n        <voice>${voiceNum}</voice>\n        <staff>${staffNum}</staff>\n      </note>\n`;
             }
 
             let staffXml = "";
 
-            // If the hand enters after beat 1 (e.g. on beat 2 or 3), output one clean starting rest
-            if (mergedOnsets[0] > 0) {
-                const initialRestDiv = mergedOnsets[0];
-                staffXml += `      <note>\n`;
-                staffXml += `        <rest/>\n`;
-                staffXml += `        <duration>${initialRestDiv}</duration>\n`;
-                staffXml += `        <voice>${voiceNumber}</voice>\n`;
-                staffXml += `        <staff>${staffNumber}</staff>\n`;
-                staffXml += `      </note>\n`;
+            // Insert a single clean rest only if the hand enters on a later beat
+            if (slots[0] > 0) {
+                staffXml += `      <note>\n        <rest/>\n        <duration>${slots[0]}</duration>\n        <voice>${voiceNum}</voice>\n        <staff>${staffNum}</staff>\n      </note>\n`;
             }
 
             // Tile each note directly to the onset of the next note (ZERO RESTS IN BETWEEN)
-            for (let k = 0; k < mergedClusters.length; k++) {
-                const cluster = mergedClusters[k];
-                const onset = mergedOnsets[k];
-
-                const nextOnset = (k < mergedClusters.length - 1)
-                    ? mergedOnsets[k + 1]
-                    : totalMeasureDivisions;
-
-                const noteDiv = nextOnset - onset;
+            for (let i = 0; i < slots.length; i++) {
+                const slot = slots[i];
+                const nextSlot = (i < slots.length - 1) ? slots[i + 1] : totalMeasureDivs;
+                const dur = nextSlot - slot;
+                const cluster = slotMap[slot];
 
                 cluster.forEach((note, idx) => {
                     const pitchClass = ((note.midi % 12) + 12) % 12;
@@ -375,9 +344,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                     staffXml += `          <octave>${octave}</octave>\n`;
                     staffXml += `        </pitch>\n`;
-                    staffXml += `        <duration>${noteDiv}</duration>\n`;
-                    staffXml += `        <voice>${voiceNumber}</voice>\n`;
-                    staffXml += `        <staff>${staffNumber}</staff>\n`;
+                    staffXml += `        <duration>${dur}</duration>\n`;
+                    staffXml += `        <voice>${voiceNum}</voice>\n`;
+                    staffXml += `        <staff>${staffNum}</staff>\n`;
                     staffXml += `      </note>\n`;
                 });
             }
@@ -389,9 +358,9 @@ document.addEventListener("DOMContentLoaded", () => {
         for (let m = 1; m <= totalMeasuresCount; m++) {
             xml += `    <measure number="${m}">\n`;
 
-            const mStart = (m - 1) * measureDurationSec;
+            const mStartSec = (m - 1) * measureDurationSec;
 
-            // Grand Staff Attributes on Measure 1
+            // Grand Staff Attributes on Measure 1 only
             if (m === 1) {
                 xml += '      <attributes>\n';
                 xml += `        <divisions>${divisions}</divisions>\n`;
@@ -414,16 +383,16 @@ document.addEventListener("DOMContentLoaded", () => {
             const rhNotes = currentNotes.filter(n => n.midi >= 60);
             const lhNotes = currentNotes.filter(n => n.midi < 60);
 
-            // STAFF 1: Right Hand (Treble Clef, Voice 1) - Sum of durations strictly equals totalMeasureDivisions
-            xml += buildStaffVoiceXml(rhNotes, 1, mStart);
+            // STAFF 1: Right Hand (Treble Clef, Voice 1) - Duration = exactly totalMeasureDivs
+            xml += buildMeasureVoice(rhNotes, 1, 1, mStartSec);
 
-            // BACKUP CURSOR: Rewinds measure position for the Left Hand
+            // BACKUP CURSOR: Rewinds measure position for Left Hand by exact measure duration
             xml += `      <backup>\n`;
-            xml += `        <duration>${totalMeasureDivisions}</duration>\n`;
+            xml += `        <duration>${totalMeasureDivs}</duration>\n`;
             xml += `      </backup>\n`;
 
-            // STAFF 2: Left Hand (Bass Clef, Voice 1) - Sum of durations strictly equals totalMeasureDivisions
-            xml += buildStaffVoiceXml(lhNotes, 2, mStart);
+            // STAFF 2: Left Hand (Bass Clef, Voice 2) - Duration = exactly totalMeasureDivs
+            xml += buildMeasureVoice(lhNotes, 2, 2, mStartSec);
 
             xml += '    </measure>\n';
         }
