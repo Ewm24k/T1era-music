@@ -22,10 +22,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const checkLoadInterval = setInterval(() => {
         const hasData = typeof midiData !== 'undefined' && midiData !== null;
         if (btnDownloadMenu) btnDownloadMenu.disabled = !hasData;
-        
+
         const btnDownloadSecond = document.getElementById("btn-download-second");
         if (btnDownloadSecond) btnDownloadSecond.disabled = !hasData;
-        
+
         const btnDownloadMax = document.getElementById("btn-download-max");
         if (btnDownloadMax) btnDownloadMax.disabled = !hasData;
     }, 1000);
@@ -48,10 +48,10 @@ document.addEventListener("DOMContentLoaded", () => {
     // Close Dropdown Menus when clicking anywhere else on page
     document.addEventListener("click", () => {
         if (downloadDropdown) downloadDropdown.classList.remove("show");
-        
+
         const dropdownSecond = document.getElementById("download-dropdown-second");
         if (dropdownSecond) dropdownSecond.classList.remove("show");
-        
+
         const dropdownMax = document.getElementById("download-dropdown-max");
         if (dropdownMax) dropdownMax.classList.remove("show");
     });
@@ -77,7 +77,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const midiArray = midiData.toArray();
             const blob = new Blob([midiArray], { type: "audio/midi" });
             const url = URL.createObjectURL(blob);
-            
+
             triggerBrowserDownload(url, (midiData.name || "score") + ".mid");
         } catch (err) {
             console.error("MIDI Re-serialization buffer download failed:", err);
@@ -98,7 +98,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const jsonStr = JSON.stringify(midiData, null, 2);
             const blob = new Blob([jsonStr], { type: "application/json" });
             const url = URL.createObjectURL(blob);
-            
+
             triggerBrowserDownload(url, (midiData.name || "score") + "_structure.json");
         } catch (err) {
             console.error("JSON download failed:", err);
@@ -111,9 +111,9 @@ document.addEventListener("DOMContentLoaded", () => {
     downSvg.addEventListener("click", (e) => {
         e.preventDefault();
         try {
-            const svgElement = document.querySelector("#sheet-music-notation-vertical svg") || 
+            const svgElement = document.querySelector("#sheet-music-notation-vertical svg") ||
                                document.querySelector("#sheet-music-notation svg");
-                               
+
             if (!svgElement) {
                 alert("Please click the 'Sheet Music' button once to pre-render the vector sheets before exporting.");
                 return;
@@ -121,7 +121,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const svgString = new XMLSerializer().serializeToString(svgElement);
             const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
             const url = URL.createObjectURL(blob);
-            
+
             triggerBrowserDownload(url, (midiData.name || "score") + "_notation.svg");
         } catch (err) {
             console.error("SVG Extraction failed:", err);
@@ -147,6 +147,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // =========================================================================
     // 4. ARCHITECTED MUSESCORE STUDIO MusicXML ENGINE (ZERO CORRUPTION / ZERO RESTS)
+    //    Every note/rest below always carries a valid <type> (and <dot>/<tie> where
+    //    needed). Omitting <type> is what was triggering the "corrupted file"
+    //    prompt in MuseScore Studio - it's required for the importer to accept
+    //    the file, even though the raw DTD lists it as optional.
     // =========================================================================
     const handleXmlDownload = (e) => {
         e.preventDefault();
@@ -158,9 +162,9 @@ document.addEventListener("DOMContentLoaded", () => {
             const xmlContent = generateMusicXML();
             const blob = new Blob([xmlContent], { type: "application/vnd.recordare.musicxml+xml;charset=utf-8" });
             const url = URL.createObjectURL(blob);
-            
-            const rawTitle = (typeof resolvedSheetTitle !== "undefined" && resolvedSheetTitle) 
-                ? resolvedSheetTitle 
+
+            const rawTitle = (typeof resolvedSheetTitle !== "undefined" && resolvedSheetTitle)
+                ? resolvedSheetTitle
                 : ((midiData && midiData.name && midiData.name !== "Untitled") ? midiData.name : "Piano_Score");
             const sanitizedTitle = rawTitle.replace(/[\/\\:*?"<>|]/g, "_").trim() || "Score";
 
@@ -174,11 +178,99 @@ document.addEventListener("DOMContentLoaded", () => {
     if (downXmlSecond) downXmlSecond.addEventListener("click", handleXmlDownload);
     if (downXmlMax) downXmlMax.addEventListener("click", handleXmlDownload);
 
+    // --- Duration -> notated symbol decomposition -----------------------------
+    // These tables assume <divisions>4</divisions> (quarter note = 4 divisions).
+    // Every note/rest length that comes out of the quantizer is a multiple of 2
+    // (an eighth note or longer), but decomposeDuration() works for ANY positive
+    // integer division count, splitting it into tied notes if it doesn't map to
+    // a single legal symbol. This guarantees every <note> always gets a valid
+    // <type> (and <dot>/<tie> when needed), which is what MuseScore Studio's
+    // importer requires to accept the file.
+    const BASIC_NOTE_VALUES = [
+        { div: 16, type: "whole" },
+        { div: 8, type: "half" },
+        { div: 4, type: "quarter" },
+        { div: 2, type: "eighth" },
+        { div: 1, type: "16th" }
+    ];
+
+    function decomposeDuration(totalDiv) {
+        const chunks = [];
+        let rem = totalDiv;
+        let guard = 0;
+        while (rem > 0 && guard < 20) {
+            guard++;
+            let base = BASIC_NOTE_VALUES.find(b => b.div <= rem);
+            if (!base) base = BASIC_NOTE_VALUES[BASIC_NOTE_VALUES.length - 1];
+            if (base.div * 1.5 <= rem) {
+                chunks.push({ div: base.div * 1.5, type: base.type, dots: 1 });
+                rem -= base.div * 1.5;
+            } else {
+                chunks.push({ div: base.div, type: base.type, dots: 0 });
+                rem -= base.div;
+            }
+        }
+        return chunks;
+    }
+
+    function buildRestXml(totalDiv, voiceNum, staffNum) {
+        if (totalDiv <= 0) return "";
+        let xml = "";
+        decomposeDuration(totalDiv).forEach((chunk) => {
+            xml += `      <note>\n`;
+            xml += `        <rest/>\n`;
+            xml += `        <duration>${chunk.div}</duration>\n`;
+            xml += `        <voice>${voiceNum}</voice>\n`;
+            xml += `        <type>${chunk.type}</type>\n`;
+            for (let d = 0; d < chunk.dots; d++) xml += `        <dot/>\n`;
+            xml += `        <staff>${staffNum}</staff>\n`;
+            xml += `      </note>\n`;
+        });
+        return xml;
+    }
+
+    function buildPitchGroupXml(cluster, totalDiv, voiceNum, staffNum, pitchTable) {
+        const chunks = decomposeDuration(totalDiv);
+        let xml = "";
+        chunks.forEach((chunk, chunkIdx) => {
+            const isFirstChunk = chunkIdx === 0;
+            const isLastChunk = chunkIdx === chunks.length - 1;
+            cluster.forEach((note, noteIdx) => {
+                const pitchClass = ((note.midi % 12) + 12) % 12;
+                const octave = Math.floor(note.midi / 12) - 1;
+                const pInfo = pitchTable[pitchClass];
+
+                xml += `      <note>\n`;
+                if (noteIdx > 0) xml += `        <chord/>\n`;
+                xml += `        <pitch>\n`;
+                xml += `          <step>${pInfo.step}</step>\n`;
+                if (pInfo.alter !== 0) xml += `          <alter>${pInfo.alter}</alter>\n`;
+                xml += `          <octave>${octave}</octave>\n`;
+                xml += `        </pitch>\n`;
+                xml += `        <duration>${chunk.div}</duration>\n`;
+                if (!isFirstChunk) xml += `        <tie type="stop"/>\n`;
+                if (!isLastChunk) xml += `        <tie type="start"/>\n`;
+                xml += `        <voice>${voiceNum}</voice>\n`;
+                xml += `        <type>${chunk.type}</type>\n`;
+                for (let d = 0; d < chunk.dots; d++) xml += `        <dot/>\n`;
+                xml += `        <staff>${staffNum}</staff>\n`;
+                if (!isFirstChunk || !isLastChunk) {
+                    xml += `        <notations>\n`;
+                    if (!isFirstChunk) xml += `          <tied type="stop"/>\n`;
+                    if (!isLastChunk) xml += `          <tied type="start"/>\n`;
+                    xml += `        </notations>\n`;
+                }
+                xml += `      </note>\n`;
+            });
+        });
+        return xml;
+    }
+
     function generateMusicXML() {
         const rawTitle = (typeof resolvedSheetTitle !== "undefined" && resolvedSheetTitle && resolvedSheetTitle !== "Untitled Track")
             ? resolvedSheetTitle
             : ((midiData && midiData.name && midiData.name !== "Untitled") ? midiData.name : "Piano Score");
-        
+
         const safeTitle = rawTitle
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
@@ -192,8 +284,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (midiData && midiData.header && midiData.header.timeSignatures && midiData.header.timeSignatures.length > 0) {
             const ts = midiData.header.timeSignatures[0].timeSignature;
             if (Array.isArray(ts) && ts.length === 2) {
-                beats = Number(ts[0]) || 4;
-                beatType = Number(ts[1]) || 4;
+                const b0 = Number(ts[0]);
+                const b1 = Number(ts[1]);
+                beats = (Number.isFinite(b0) && b0 > 0) ? b0 : 4;
+                beatType = (Number.isFinite(b1) && b1 > 0) ? b1 : 4;
             }
         }
 
@@ -284,10 +378,13 @@ document.addEventListener("DOMContentLoaded", () => {
         xml += '  <part id="P1">\n';
 
         // 5. Discrete Grid Voice Builder: Staff 1 (Voice 1) and Staff 2 (Voice 2)
+        //    Every note/rest length is run through decomposeDuration() via
+        //    buildRestXml()/buildPitchGroupXml() so a valid <type> is always
+        //    present - this is what fixes the "corrupted file" import error.
         function buildMeasureVoice(notes, staffNum, voiceNum, mStartSec) {
             // Full measure rest if hand has no notes in this measure
             if (!notes || notes.length === 0) {
-                return `      <note>\n        <rest/>\n        <duration>${totalMeasureDivs}</duration>\n        <voice>${voiceNum}</voice>\n        <staff>${staffNum}</staff>\n      </note>\n`;
+                return buildRestXml(totalMeasureDivs, voiceNum, staffNum);
             }
 
             // Quantize notes onto an eighth-note grid (grid size = 2 ticks)
@@ -311,14 +408,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const slots = Object.keys(slotMap).map(Number).sort((a, b) => a - b);
             if (slots.length === 0) {
-                return `      <note>\n        <rest/>\n        <duration>${totalMeasureDivs}</duration>\n        <voice>${voiceNum}</voice>\n        <staff>${staffNum}</staff>\n      </note>\n`;
+                return buildRestXml(totalMeasureDivs, voiceNum, staffNum);
             }
 
             let staffXml = "";
 
             // Insert a single clean rest only if the hand enters on a later beat
             if (slots[0] > 0) {
-                staffXml += `      <note>\n        <rest/>\n        <duration>${slots[0]}</duration>\n        <voice>${voiceNum}</voice>\n        <staff>${staffNum}</staff>\n      </note>\n`;
+                staffXml += buildRestXml(slots[0], voiceNum, staffNum);
             }
 
             // Tile each note directly to the onset of the next note (ZERO RESTS IN BETWEEN)
@@ -328,27 +425,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 const dur = nextSlot - slot;
                 const cluster = slotMap[slot];
 
-                cluster.forEach((note, idx) => {
-                    const pitchClass = ((note.midi % 12) + 12) % 12;
-                    const octave = Math.floor(note.midi / 12) - 1;
-                    const pInfo = pitchTable[pitchClass];
-
-                    staffXml += `      <note>\n`;
-                    if (idx > 0) {
-                        staffXml += `        <chord/>\n`;
-                    }
-                    staffXml += `        <pitch>\n`;
-                    staffXml += `          <step>${pInfo.step}</step>\n`;
-                    if (pInfo.alter !== 0) {
-                        staffXml += `          <alter>${pInfo.alter}</alter>\n`;
-                    }
-                    staffXml += `          <octave>${octave}</octave>\n`;
-                    staffXml += `        </pitch>\n`;
-                    staffXml += `        <duration>${dur}</duration>\n`;
-                    staffXml += `        <voice>${voiceNum}</voice>\n`;
-                    staffXml += `        <staff>${staffNum}</staff>\n`;
-                    staffXml += `      </note>\n`;
-                });
+                staffXml += buildPitchGroupXml(cluster, dur, voiceNum, staffNum, pitchTable);
             }
 
             return staffXml;
