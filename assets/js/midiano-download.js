@@ -405,8 +405,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (!slotMap[slot]) {
                     slotMap[slot] = [];
                 }
-                // Avoid redundant pitches at the same slot
-                if (!slotMap[slot].some(n => n.midi === note.midi)) {
+                // Only drop a note if it's a true duplicate entry (same pitch
+                // AND same onset time). A repeated key press - same pitch,
+                // different time, that happens to round into this same slot -
+                // is a real, distinct note and must be kept, not merged away.
+                const isTrueDuplicate = slotMap[slot].some(
+                    n => n.midi === note.midi && n.time === note.time
+                );
+                if (!isTrueDuplicate) {
                     slotMap[slot].push(note);
                 }
             });
