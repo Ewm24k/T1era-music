@@ -314,32 +314,34 @@ function renderMeasureBarLines(numSystems, systemDuration, systemHeight, rhStaff
         const systemTimeOffset = measureTime - systemIdx * systemDuration;
         const rawBarX = systemTimeOffset * localPixelsPerSecond + marginLeftValue + startPadding * scale;
 
-        // Intelligent bar line placement to avoid touching noteheads, accidentals, or ledger lines
+        // Intelligent bar line placement to guarantee zero collision with key notes
         let barX = rawBarX;
         if (notes && notes.length > 0) {
             const systemStartTime = systemIdx * systemDuration;
             const systemEndTime = (systemIdx + 1) * systemDuration;
 
-            const upcomingNotes = notes.filter(n => n.time >= measureTime - 0.04 && n.time < measureTime + 0.35 && n.time < systemEndTime);
-            const precedingNotes = notes.filter(n => n.time < measureTime - 0.02 && (n.time + n.duration) >= measureTime - 0.30 && n.time >= systemStartTime);
+            const notesOnSystem = notes.filter(n => n.time >= systemStartTime && n.time < systemEndTime);
+            const upcomingNotes = notesOnSystem.filter(n => n.time >= measureTime - 0.04 && n.time < measureTime + 0.35);
+            const precedingNotes = notesOnSystem.filter(n => n.time < measureTime - 0.02 && (n.time + n.duration) >= measureTime - 0.30);
 
             if (upcomingNotes.length > 0) {
                 const minStartTime = Math.min(...upcomingNotes.map(n => n.time));
                 const nextNoteX = (minStartTime - systemStartTime) * localPixelsPerSecond + marginLeftValue + startPadding * scale;
                 const hasAccidental = upcomingNotes.some(n => sharpKey(n.midi));
                 
-                const neededClearance = (hasAccidental ? 18.5 : 11.5) * scale;
+                // Generous clearance before the upcoming notehead/sharp so they never touch
+                const neededClearance = (hasAccidental ? 22 : 14) * scale;
                 const targetBarX = nextNoteX - neededClearance;
 
                 if (precedingNotes.length > 0) {
                     const maxPrevTime = Math.max(...precedingNotes.map(n => n.time));
                     const prevNoteX = (maxPrevTime - systemStartTime) * localPixelsPerSecond + marginLeftValue + startPadding * scale;
-                    const prevRightEdge = prevNoteX + (8.5 * scale);
+                    const prevRightEdge = prevNoteX + (9.5 * scale);
 
-                    if (targetBarX > prevRightEdge + 4 * scale) {
+                    if (targetBarX > prevRightEdge + 5 * scale) {
                         barX = targetBarX;
-                    } else if (nextNoteX > prevRightEdge + 12 * scale) {
-                        barX = (prevRightEdge + (nextNoteX - (hasAccidental ? 15 : 8) * scale)) / 2;
+                    } else if (nextNoteX > prevRightEdge + 14 * scale) {
+                        barX = (prevRightEdge + (nextNoteX - (hasAccidental ? 18 : 10) * scale)) / 2;
                     } else {
                         barX = targetBarX;
                     }
@@ -349,8 +351,22 @@ function renderMeasureBarLines(numSystems, systemDuration, systemHeight, rhStaff
             } else if (precedingNotes.length > 0) {
                 const maxPrevTime = Math.max(...precedingNotes.map(n => n.time));
                 const prevNoteX = (maxPrevTime - systemStartTime) * localPixelsPerSecond + marginLeftValue + startPadding * scale;
-                if (barX <= prevNoteX + 9 * scale) {
-                    barX = prevNoteX + 11 * scale;
+                if (barX <= prevNoteX + 10 * scale) {
+                    barX = prevNoteX + 12 * scale;
+                }
+            }
+
+            // Global fail-safe: Ensure barX never falls inside any note's collision zone on this system
+            for (let i = 0; i < notesOnSystem.length; i++) {
+                const n = notesOnSystem[i];
+                const nX = (n.time - systemStartTime) * localPixelsPerSecond + marginLeftValue + startPadding * scale;
+                const hasSharp = sharpKey(n.midi);
+                const leftBound = nX - (hasSharp ? 18 : 9) * scale;
+                const rightBound = nX + 8 * scale;
+
+                if (barX >= leftBound && barX <= rightBound) {
+                    // Collision detected! Shift bar line safely to the left of the note's boundary
+                    barX = leftBound - 3 * scale;
                 }
             }
         }
@@ -714,8 +730,11 @@ function renderSheetMusic() {
         }
 
         if (sharpKey(pitch)) {
-            svgContent += `<text x="${x - 13}" y="${y + 6}" font-size="20" font-family="Georgia, serif" font-weight="bold" fill="${color}" stroke="#0b0b0f" stroke-width="2.5" paint-order="stroke fill" stroke-linejoin="round" text-anchor="middle">♯</text>`;
+            svgContent += `<text x="${x - 13}" y="${y + 6}" font-size="20" font-family="Georgia, serif" font-weight="bold" fill="${color}" stroke="#0b0b0f" stroke-width="3" paint-order="stroke fill" stroke-linejoin="round" text-anchor="middle">♯</text>`;
         }
+
+        // Protective knockout shield behind continuous notehead
+        svgContent += `<ellipse cx="${x}" cy="${y}" rx="9" ry="6.5" fill="#0b0b0f" stroke="none" transform="rotate(-15, ${x}, ${y})" />`;
 
         svgContent += `<ellipse cx="${x}" cy="${y}" rx="7" ry="5" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="sheet-notehead-${index}" transform="rotate(-15, ${x}, ${y})" />`;
 
@@ -1012,8 +1031,11 @@ function renderVerticalSheetMusic(targetContainerId) {
         }
 
         if (sharpKey(pitch)) {
-            svgContent += `<text x="${noteX - 11 * scale}" y="${y + 5.5 * scale}" font-size="${18 * scale}" font-family="Georgia, serif" font-weight="bold" fill="${color}" stroke="#ffffff" stroke-width="${2.5 * scale}" paint-order="stroke fill" stroke-linejoin="round" text-anchor="middle">♯</text>`;
+            svgContent += `<text x="${noteX - 11 * scale}" y="${y + 5.5 * scale}" font-size="${18 * scale}" font-family="Georgia, serif" font-weight="bold" fill="${color}" stroke="#ffffff" stroke-width="${3.5 * scale}" paint-order="stroke fill" stroke-linejoin="round" text-anchor="middle">♯</text>`;
         }
+
+        // Protective white knockout shield behind notehead to guarantee zero touch with measure split lines
+        svgContent += `<ellipse cx="${noteX}" cy="${y}" rx="${7.2 * scale}" ry="${5.0 * scale}" fill="#ffffff" stroke="none" transform="rotate(-15, ${noteX}, ${y})" />`;
 
         svgContent += `<ellipse cx="${noteX}" cy="${y}" rx="${5.5 * scale}" ry="${3.8 * scale}" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="${targetContainerId}-notehead-${index}" transform="rotate(-15, ${noteX}, ${y})" />`;
 
@@ -1895,8 +1917,11 @@ function renderStudioSheetMusic(targetContainerId) {
         }
 
         if (sharpKey(pitch)) {
-            svgContent += `<text x="${noteX - 13}" y="${y + 6}" font-size="20" font-family="Georgia, serif" font-weight="bold" fill="${color}" stroke="#ffffff" stroke-width="3" paint-order="stroke fill" stroke-linejoin="round" text-anchor="middle">♯</text>`;
+            svgContent += `<text x="${noteX - 13}" y="${y + 6}" font-size="20" font-family="Georgia, serif" font-weight="bold" fill="${color}" stroke="#ffffff" stroke-width="4" paint-order="stroke fill" stroke-linejoin="round" text-anchor="middle">♯</text>`;
         }
+
+        // Protective white knockout shield behind studio notehead
+        svgContent += `<ellipse cx="${noteX}" cy="${y}" rx="9" ry="6.5" fill="#ffffff" stroke="none" transform="rotate(-15, ${noteX}, ${y})" />`;
 
         svgContent += `<ellipse cx="${noteX}" cy="${y}" rx="${7}" ry="${5}" fill="${noteheadFill}" stroke="${noteheadStroke}" ${strokeWidthAttr} id="${targetContainerId}-notehead-${index}" transform="rotate(-15, ${noteX}, ${y})" />`;
 
