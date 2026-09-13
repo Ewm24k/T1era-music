@@ -146,8 +146,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // =========================================================================
-    // 4. MUSICXML ENGINE: 100% IDENTICAL TO SHEET MUSIC DISPLAY
-    //    Guarantees exact clef distribution, pitch placing, and key consistency.
+    // 4. MUSICXML ENGINE: 100% IDENTICAL TO MIDIANO-SHEET.JS
+    //    Identical staves (RH >= 60, LH < 60), diatonic key placing, 40ms chords.
     // =========================================================================
     const handleXmlDownload = (e) => {
         e.preventDefault();
@@ -231,25 +231,25 @@ document.addEventListener("DOMContentLoaded", () => {
         return xml;
     }
 
-    // Exact pitch placement strictly identical to the sheet music staff lines and sharp usage
+    // Matches midiPitchToProAbc and sharpKey(pitch) in midiano-sheet.js identically
     function getPitchInfo(midiNumber) {
         const midi = Number(midiNumber);
         const pitchClass = ((midi % 12) + 12) % 12;
         const octave = Math.floor(midi / 12) - 1;
 
-        // Matches the visual sheet music: chromatic keys are spelled with sharps on their base line
+        // Base note names matching ["C", "^C", "D", "^D", "E", "F", "^F", "G", "^G", "A", "^A", "B"]
         const PITCH_MAP = [
             { step: "C", alter: 0 },
-            { step: "C", alter: 1 }, // C#
+            { step: "C", alter: 1 }, // ^C (C#)
             { step: "D", alter: 0 },
-            { step: "D", alter: 1 }, // D#
+            { step: "D", alter: 1 }, // ^D (D#)
             { step: "E", alter: 0 },
             { step: "F", alter: 0 },
-            { step: "F", alter: 1 }, // F#
+            { step: "F", alter: 1 }, // ^F (F#)
             { step: "G", alter: 0 },
-            { step: "G", alter: 1 }, // G#
+            { step: "G", alter: 1 }, // ^G (G#)
             { step: "A", alter: 0 },
-            { step: "A", alter: 1 }, // A#
+            { step: "A", alter: 1 }, // ^A (A#)
             { step: "B", alter: 0 }
         ];
 
@@ -257,15 +257,18 @@ document.addEventListener("DOMContentLoaded", () => {
         return { step: p.step, alter: p.alter, octave };
     }
 
-    function buildPitchGroupXml(cluster, totalDiv, voiceNum, staffNum) {
+    function buildPitchGroupXml(cluster, totalDiv, voiceNum, staffNum, isTiedFromPrev, isTiedToNext) {
         if (!cluster || cluster.length === 0 || totalDiv <= 0) return "";
         const chunks = decomposeDuration(totalDiv);
         if (chunks.length === 0) return "";
 
         let xml = "";
         chunks.forEach((chunk, chunkIdx) => {
-            const isFirstChunk = chunkIdx === 0;
-            const isLastChunk = chunkIdx === chunks.length - 1;
+            const isFirstChunk = (chunkIdx === 0);
+            const isLastChunk = (chunkIdx === chunks.length - 1);
+
+            const needTieStop = (!isFirstChunk) || isTiedFromPrev;
+            const needTieStart = (!isLastChunk) || isTiedToNext;
 
             cluster.forEach((note, noteIdx) => {
                 const pInfo = getPitchInfo(note.midi);
@@ -282,36 +285,44 @@ document.addEventListener("DOMContentLoaded", () => {
                 xml += `          <octave>${pInfo.octave}</octave>\n`;
                 xml += `        </pitch>\n`;
                 xml += `        <duration>${chunk.div}</duration>\n`;
-                if (!isFirstChunk) {
+
+                if (needTieStop) {
                     xml += `        <tie type="stop"/>\n`;
                 }
-                if (!isLastChunk) {
+                if (needTieStart) {
                     xml += `        <tie type="start"/>\n`;
                 }
+
                 xml += `        <voice>${voiceNum}</voice>\n`;
                 xml += `        <type>${chunk.type}</type>\n`;
                 for (let d = 0; d < chunk.dots; d++) {
                     xml += `        <dot/>\n`;
                 }
                 xml += `        <staff>${staffNum}</staff>\n`;
-                if (!isFirstChunk || !isLastChunk) {
+
+                if (needTieStop || needTieStart) {
                     xml += `        <notations>\n`;
-                    if (!isFirstChunk) {
+                    if (needTieStop) {
                         xml += `          <tied type="stop"/>\n`;
                     }
-                    if (!isLastChunk) {
+                    if (needTieStart) {
                         xml += `          <tied type="start"/>\n`;
                     }
                     xml += `        </notations>\n`;
                 }
+
                 xml += `      </note>\n`;
             });
         });
         return xml;
     }
 
-    function buildMeasureVoice(notes, staffNum, voiceNum, mStartSec, mDurSec, totalDivs, quarterSec) {
-        if (!notes || notes.length === 0) {
+    // Build measure voice that handles 40ms chords, seamless ties, and true rests
+    function buildStaffMeasure(clusters, staffNum, voiceNum, mStartSec, mEndSec, mDurSec, totalDivs) {
+        // Find all clusters that overlap with this measure [mStartSec, mEndSec]
+        const activeClusters = clusters.filter(c => c.time < mEndSec - 0.01 && (c.time + c.duration) > mStartSec + 0.01);
+
+        if (activeClusters.length === 0) {
             let xml = `      <note>\n`;
             xml += `        <rest measure="yes"/>\n`;
             xml += `        <duration>${totalDivs}</duration>\n`;
@@ -321,70 +332,70 @@ document.addEventListener("DOMContentLoaded", () => {
             return xml;
         }
 
-        const slotMap = {};
-        notes.forEach((note) => {
-            const relSec = Math.max(0, note.time - mStartSec);
-            let slot = Math.round((relSec / mDurSec) * totalDivs);
-            slot = Math.max(0, Math.min(totalDivs - 1, slot));
+        const events = [];
+        activeClusters.forEach(c => {
+            const segStartSec = Math.max(mStartSec, c.time);
+            const segEndSec = Math.min(mEndSec, c.time + c.duration);
 
-            if (!slotMap[slot]) slotMap[slot] = [];
-            if (!slotMap[slot].some(n => n.midi === note.midi && Math.abs(n.time - note.time) < 0.001)) {
-                slotMap[slot].push(note);
-            }
+            let startDiv = Math.round(((segStartSec - mStartSec) / mDurSec) * totalDivs);
+            startDiv = Math.max(0, Math.min(totalDivs, startDiv));
+
+            let endDiv = Math.round(((segEndSec - mStartSec) / mDurSec) * totalDivs);
+            endDiv = Math.max(startDiv + 30, Math.min(totalDivs, endDiv));
+
+            const isTiedFromPrev = c.time < mStartSec - 0.01;
+            const isTiedToNext = (c.time + c.duration) > mEndSec + 0.01;
+
+            events.push({
+                cluster: c.notes,
+                startDiv,
+                endDiv,
+                isTiedFromPrev,
+                isTiedToNext
+            });
         });
 
-        const slots = Object.keys(slotMap).map(Number).sort((a, b) => a - b);
-        if (slots.length === 0) {
-            let xml = `      <note>\n`;
-            xml += `        <rest measure="yes"/>\n`;
-            xml += `        <duration>${totalDivs}</duration>\n`;
-            xml += `        <voice>${voiceNum}</voice>\n`;
-            xml += `        <staff>${staffNum}</staff>\n`;
-            xml += `      </note>\n`;
-            return xml;
-        }
+        events.sort((a, b) => a.startDiv - b.startDiv);
 
         let staffXml = "";
         let cursor = 0;
 
-        for (let i = 0; i < slots.length; i++) {
-            const slot = slots[i];
+        for (let k = 0; k < events.length; k++) {
+            const ev = events[k];
+            let startDiv = ev.startDiv;
+            let endDiv = ev.endDiv;
 
-            // 1. Pre-note silence -> Real Rest
-            if (slot > cursor) {
-                staffXml += buildRestXml(slot - cursor, voiceNum, staffNum);
-                cursor = slot;
+            // Fill pre-chord silence with real rest
+            if (startDiv > cursor) {
+                staffXml += buildRestXml(startDiv - cursor, voiceNum, staffNum);
+                cursor = startDiv;
+            } else if (startDiv < cursor) {
+                startDiv = cursor;
+                if (endDiv <= startDiv) {
+                    endDiv = Math.min(totalDivs, startDiv + 60);
+                }
             }
 
-            // 2. Note / Chord Duration
-            const cluster = slotMap[slot];
-            const nextSlot = (i < slots.length - 1) ? slots[i + 1] : totalDivs;
-            const availableDiv = nextSlot - slot;
+            const nextStart = (k < events.length - 1) ? Math.max(startDiv, events[k + 1].startDiv) : totalDivs;
+            const maxAvail = nextStart - startDiv;
+            if (maxAvail <= 0) continue;
 
-            let longestNoteSec = 0;
-            cluster.forEach((n) => {
-                const d = (n.duration && n.duration > 0) ? n.duration : (quarterSec * 0.5);
-                if (d > longestNoteSec) longestNoteSec = d;
-            });
-
-            let targetDurDiv = Math.round((longestNoteSec / mDurSec) * totalDivs);
-            targetDurDiv = Math.max(30, Math.min(availableDiv, targetDurDiv));
-
-            if (availableDiv - targetDurDiv < 15) {
-                targetDurDiv = availableDiv;
+            let durDiv = Math.max(30, Math.min(maxAvail, endDiv - startDiv));
+            if (maxAvail - durDiv < 30) {
+                durDiv = maxAvail;
             }
 
-            staffXml += buildPitchGroupXml(cluster, targetDurDiv, voiceNum, staffNum);
-            cursor = slot + targetDurDiv;
+            staffXml += buildPitchGroupXml(ev.cluster, durDiv, voiceNum, staffNum, ev.isTiedFromPrev, ev.isTiedToNext);
+            cursor = startDiv + durDiv;
 
-            // 3. Post-note silence -> Real Rest
-            if (cursor < nextSlot) {
-                staffXml += buildRestXml(nextSlot - cursor, voiceNum, staffNum);
-                cursor = nextSlot;
+            // Fill post-chord silence before next chord
+            if (cursor < nextStart) {
+                staffXml += buildRestXml(nextStart - cursor, voiceNum, staffNum);
+                cursor = nextStart;
             }
         }
 
-        // 4. Measure Trailing silence -> Real Rest
+        // Fill trailing measure silence
         if (cursor < totalDivs) {
             staffXml += buildRestXml(totalDivs - cursor, voiceNum, staffNum);
             cursor = totalDivs;
@@ -394,57 +405,83 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function generateMusicXML() {
+        if (typeof activeNotesMemory === "undefined" || !activeNotesMemory || activeNotesMemory.length === 0) {
+            return "";
+        }
+
         const rawTitle = (typeof resolvedSheetTitle !== "undefined" && resolvedSheetTitle && resolvedSheetTitle !== "Untitled Track")
             ? resolvedSheetTitle
             : ((midiData && midiData.name && midiData.name !== "Untitled") ? midiData.name : "Piano Score");
 
-        const safeTitle = rawTitle
+        const safeTitle = String(rawTitle)
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&apos;");
 
-        // 1. Resolve Time Signature matching the visual score
+        // 1. Time Signature matching midiano-sheet.js
         let beats = 4;
         let beatType = 4;
         if (midiData && midiData.header && midiData.header.timeSignatures && midiData.header.timeSignatures.length > 0) {
             const ts = midiData.header.timeSignatures[0].timeSignature;
             if (Array.isArray(ts) && ts.length === 2) {
-                const b0 = Number(ts[0]);
-                const b1 = Number(ts[1]);
-                beats = (Number.isFinite(b0) && b0 > 0) ? b0 : 4;
-                beatType = (Number.isFinite(b1) && b1 > 0) ? b1 : 4;
+                beats = Number(ts[0]) || 4;
+                beatType = Number(ts[1]) || 4;
             }
         }
 
-        // 2. Resolve Tempo (BPM)
-        const rawBpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0])
-            ? midiData.header.tempos[0].bpm
+        // 2. Tempo (BPM) matching midiano-sheet.js
+        const bpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0] && midiData.header.tempos[0].bpm)
+            ? Math.round(midiData.header.tempos[0].bpm)
             : 120;
-        const bpm = Math.max(20, Math.min(300, Math.round(rawBpm || 120)));
 
-        const quarterSec = (60 / bpm) * (4 / beatType);
-        const measureDurationSec = beats * quarterSec;
+        const beatDuration = (60 / bpm) * (4 / beatType);
+        const measureDurationSec = beats * beatDuration;
 
         const divisions = NOTE_DIVISIONS;
         const totalMeasureDivs = Math.round(beats * (4 / beatType) * divisions);
 
-        // 3. Staves arrangement: Strictly identical to renderVerticalSheetMusic
-        //    RH (Staff 1 / Treble Clef) = MIDI >= 60
-        //    LH (Staff 2 / Bass Clef)   = MIDI < 60
-        const notesSource = (typeof activeNotesMemory !== "undefined" && activeNotesMemory) ? activeNotesMemory : [];
-        const rhNotes = notesSource.filter(n => n.midi >= 60).sort((a, b) => a.time - b.time);
-        const lhNotes = notesSource.filter(n => n.midi < 60).sort((a, b) => a.time - b.time);
+        // 3. Staves arrangement strictly matching midiano-sheet.js:
+        //    RH (Staff 1 / Treble Clef) = note.midi >= 60
+        //    LH (Staff 2 / Bass Clef)   = note.midi < 60
+        const sortedNotes = [...activeNotesMemory].sort((a, b) => a.time - b.time);
+        const rhNotes = sortedNotes.filter(n => n.midi >= 60);
+        const lhNotes = sortedNotes.filter(n => n.midi < 60);
 
-        // Calculate total measures matching sheet music measure lines
-        const lastNoteEnd = notesSource.reduce((max, n) => Math.max(max, n.time + (n.duration || 0.5)), 0);
+        // Calculate total measures matching midiano-sheet.js measure lines
+        const lastNoteEnd = sortedNotes.reduce((max, n) => Math.max(max, n.time + (n.duration || 0.5)), 0);
         const totalDurationSecs = Math.max(
             typeof totalDuration !== "undefined" ? totalDuration : 0,
             (midiData && midiData.duration) ? midiData.duration : 0,
             lastNoteEnd
         );
         const totalMeasuresCount = Math.max(1, Math.ceil(totalDurationSecs / measureDurationSec));
+
+        // Group notes into 40ms chord clusters exactly like midiano-sheet.js
+        function clusterNotes(notes) {
+            const clusters = [];
+            let i = 0;
+            while (i < notes.length) {
+                const cluster = [notes[i]];
+                let j = i + 1;
+                while (j < notes.length && Math.abs(notes[j].time - notes[i].time) < 0.04) {
+                    cluster.push(notes[j]);
+                    j++;
+                }
+                const clusterDur = cluster.reduce((max, n) => Math.max(max, (n.duration && n.duration > 0) ? n.duration : 0.5), 0);
+                clusters.push({
+                    notes: cluster,
+                    time: cluster[0].time,
+                    duration: clusterDur
+                });
+                i = j;
+            }
+            return clusters;
+        }
+
+        const rhClusters = clusterNotes(rhNotes);
+        const lhClusters = clusterNotes(lhNotes);
 
         // 4. MusicXML 3.1 Document Header
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
@@ -469,14 +506,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
         xml += '  <part id="P1">\n';
 
-        // 5. Output Measures with Synchronized Grand Staff
+        // 5. Output Measures with Grand Staff and Synchronized <backup>
         for (let m = 1; m <= totalMeasuresCount; m++) {
             xml += `    <measure number="${m}">\n`;
 
             const mStartSec = (m - 1) * measureDurationSec;
             const mEndSec = m * measureDurationSec;
 
-            // Grand Staff Attributes on Measure 1 (open key fifths=0 matches visual score exactly)
+            // Grand Staff Attributes on Measure 1 (K:C open key fifths=0 matches midiano-sheet.js)
             if (m === 1) {
                 xml += '      <attributes>\n';
                 xml += `        <divisions>${divisions}</divisions>\n`;
@@ -500,19 +537,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 xml += '      </direction>\n';
             }
 
-            const currentRh = rhNotes.filter(n => n.time >= mStartSec - 0.001 && n.time < mEndSec - 0.001);
-            const currentLh = lhNotes.filter(n => n.time >= mStartSec - 0.001 && n.time < mEndSec - 0.001);
+            // STAFF 1: Right Hand (Treble Clef, Voice 1) - matches RH on screen
+            xml += buildStaffMeasure(rhClusters, 1, 1, mStartSec, mEndSec, measureDurationSec, totalMeasureDivs);
 
-            // STAFF 1: Right Hand (Treble Clef, Voice 1) - matches RH staves on screen
-            xml += buildMeasureVoice(currentRh, 1, 1, mStartSec, measureDurationSec, totalMeasureDivs, quarterSec);
-
-            // BACKUP CURSOR: Rewinds measure position for Left Hand by exact measure duration
+            // BACKUP CURSOR: Rewinds measure position for Left Hand
             xml += `      <backup>\n`;
             xml += `        <duration>${totalMeasureDivs}</duration>\n`;
             xml += `      </backup>\n`;
 
-            // STAFF 2: Left Hand (Bass Clef, Voice 2) - matches LH staves on screen
-            xml += buildMeasureVoice(currentLh, 2, 2, mStartSec, measureDurationSec, totalMeasureDivs, quarterSec);
+            // STAFF 2: Left Hand (Bass Clef, Voice 2) - matches LH on screen
+            xml += buildStaffMeasure(lhClusters, 2, 2, mStartSec, mEndSec, measureDurationSec, totalMeasureDivs);
 
             xml += '    </measure>\n';
         }
@@ -619,7 +653,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 const serializer = new XMLSerializer();
                 const svgString = serializer.serializeToString(svgElement);
                 const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
-                const svgUrl = URL.createObjectURL(svgBlob);
+                const svgUrl = URL.createObjectURL(blob);
 
                 const sourceImage = await new Promise((resolve, reject) => {
                     const img = new Image();
