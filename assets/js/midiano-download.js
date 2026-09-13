@@ -64,21 +64,23 @@ document.addEventListener("DOMContentLoaded", () => {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        if (url.startsWith("blob:")) {
+            window.URL.revokeObjectURL(url);
+        }
     }
 
     // =========================================================================
-    // 1. DOWNLOAD MIDI FILE (Re-serializes live sequencer memory map)
+    // 1. DOWNLOAD MIDI FILE
     // =========================================================================
     const handleMidiDownload = (e) => {
         e.preventDefault();
         try {
             if (!midiData) return;
             const midiArray = midiData.toArray();
-            const blob = new Blob([midiArray], { type: "audio/midi" });
-            const url = URL.createObjectURL(blob);
+            const midiBlob = new window.Blob([midiArray], { type: "audio/midi" });
+            const midiUrl = window.URL.createObjectURL(midiBlob);
 
-            triggerBrowserDownload(url, (midiData.name || "score") + ".mid");
+            triggerBrowserDownload(midiUrl, (midiData.name || "score") + ".mid");
         } catch (err) {
             console.error("MIDI Re-serialization buffer download failed:", err);
             alert("Could not serialize track. Ensure a valid file has been imported.");
@@ -89,29 +91,30 @@ document.addEventListener("DOMContentLoaded", () => {
     if (downMidiMax) downMidiMax.addEventListener("click", handleMidiDownload);
 
     // =========================================================================
-    // 2. DOWNLOAD JSON STRUCTURE (Saves chronological event blocks)
+    // 2. DOWNLOAD JSON STRUCTURE
     // =========================================================================
     downJson.addEventListener("click", (e) => {
         e.preventDefault();
         try {
             if (!midiData) return;
             const jsonStr = JSON.stringify(midiData, null, 2);
-            const blob = new Blob([jsonStr], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
+            const jsonBlob = new window.Blob([jsonStr], { type: "application/json" });
+            const jsonUrl = window.URL.createObjectURL(jsonBlob);
 
-            triggerBrowserDownload(url, (midiData.name || "score") + "_structure.json");
+            triggerBrowserDownload(jsonUrl, (midiData.name || "score") + "_structure.json");
         } catch (err) {
             console.error("JSON download failed:", err);
         }
     });
 
     // =========================================================================
-    // 3. DOWNLOAD SVG SHEET MUSIC (Grabs current active vector staves)
+    // 3. DOWNLOAD SVG SHEET MUSIC
     // =========================================================================
     downSvg.addEventListener("click", (e) => {
         e.preventDefault();
         try {
             const svgElement = document.querySelector("#sheet-music-notation-vertical svg") ||
+                               document.querySelector("#sheet-music-notation-max svg") ||
                                document.querySelector("#sheet-music-notation svg");
 
             if (!svgElement) {
@@ -119,10 +122,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
             const svgString = new XMLSerializer().serializeToString(svgElement);
-            const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
-            const url = URL.createObjectURL(blob);
+            const svgDownloadBlob = new window.Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+            const svgDownloadUrl = window.URL.createObjectURL(svgDownloadBlob);
 
-            triggerBrowserDownload(url, (midiData.name || "score") + "_notation.svg");
+            triggerBrowserDownload(svgDownloadUrl, (midiData.name || "score") + "_notation.svg");
         } catch (err) {
             console.error("SVG Extraction failed:", err);
         }
@@ -147,7 +150,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // =========================================================================
     // 4. MUSICXML ENGINE: 100% IDENTICAL TO MIDIANO-SHEET.JS
-    //    Identical staves (RH >= 60, LH < 60), diatonic key placing, 40ms chords.
     // =========================================================================
     const handleXmlDownload = (e) => {
         e.preventDefault();
@@ -157,15 +159,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
             const xmlContent = generateMusicXML();
-            const blob = new Blob([xmlContent], { type: "application/vnd.recordare.musicxml+xml;charset=utf-8" });
-            const url = URL.createObjectURL(blob);
+            const xmlBlob = new window.Blob([xmlContent], { type: "application/vnd.recordare.musicxml+xml;charset=utf-8" });
+            const xmlUrl = window.URL.createObjectURL(xmlBlob);
 
             const rawTitle = (typeof resolvedSheetTitle !== "undefined" && resolvedSheetTitle && resolvedSheetTitle !== "Untitled Track")
                 ? resolvedSheetTitle
                 : ((midiData && midiData.name && midiData.name !== "Untitled") ? midiData.name : "Piano_Score");
             const sanitizedTitle = rawTitle.replace(/[\/\\:*?"<>|]/g, "_").trim() || "Score";
 
-            triggerBrowserDownload(url, sanitizedTitle + ".musicxml");
+            triggerBrowserDownload(xmlUrl, sanitizedTitle + ".musicxml");
         } catch (err) {
             console.error("MusicXML compilation failed:", err);
             alert("Could not export MusicXML: " + (err.message || err));
@@ -175,7 +177,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (downXmlSecond) downXmlSecond.addEventListener("click", handleXmlDownload);
     if (downXmlMax) downXmlMax.addEventListener("click", handleXmlDownload);
 
-    // Standard high-resolution MusicXML division (480 divisions per quarter note)
     const NOTE_DIVISIONS = 480;
 
     const BASIC_NOTE_VALUES = [
@@ -231,25 +232,23 @@ document.addEventListener("DOMContentLoaded", () => {
         return xml;
     }
 
-    // Matches midiPitchToProAbc and sharpKey(pitch) in midiano-sheet.js identically
     function getPitchInfo(midiNumber) {
         const midi = Number(midiNumber);
         const pitchClass = ((midi % 12) + 12) % 12;
         const octave = Math.floor(midi / 12) - 1;
 
-        // Base note names matching ["C", "^C", "D", "^D", "E", "F", "^F", "G", "^G", "A", "^A", "B"]
         const PITCH_MAP = [
             { step: "C", alter: 0 },
-            { step: "C", alter: 1 }, // ^C (C#)
+            { step: "C", alter: 1 },
             { step: "D", alter: 0 },
-            { step: "D", alter: 1 }, // ^D (D#)
+            { step: "D", alter: 1 },
             { step: "E", alter: 0 },
             { step: "F", alter: 0 },
-            { step: "F", alter: 1 }, // ^F (F#)
+            { step: "F", alter: 1 },
             { step: "G", alter: 0 },
-            { step: "G", alter: 1 }, // ^G (G#)
+            { step: "G", alter: 1 },
             { step: "A", alter: 0 },
-            { step: "A", alter: 1 }, // ^A (A#)
+            { step: "A", alter: 1 },
             { step: "B", alter: 0 }
         ];
 
@@ -317,9 +316,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return xml;
     }
 
-    // Build measure voice that handles 40ms chords, seamless ties, and true rests
     function buildStaffMeasure(clusters, staffNum, voiceNum, mStartSec, mEndSec, mDurSec, totalDivs) {
-        // Find all clusters that overlap with this measure [mStartSec, mEndSec]
         const activeClusters = clusters.filter(c => c.time < mEndSec - 0.01 && (c.time + c.duration) > mStartSec + 0.01);
 
         if (activeClusters.length === 0) {
@@ -365,7 +362,6 @@ document.addEventListener("DOMContentLoaded", () => {
             let startDiv = ev.startDiv;
             let endDiv = ev.endDiv;
 
-            // Fill pre-chord silence with real rest
             if (startDiv > cursor) {
                 staffXml += buildRestXml(startDiv - cursor, voiceNum, staffNum);
                 cursor = startDiv;
@@ -388,14 +384,12 @@ document.addEventListener("DOMContentLoaded", () => {
             staffXml += buildPitchGroupXml(ev.cluster, durDiv, voiceNum, staffNum, ev.isTiedFromPrev, ev.isTiedToNext);
             cursor = startDiv + durDiv;
 
-            // Fill post-chord silence before next chord
             if (cursor < nextStart) {
                 staffXml += buildRestXml(nextStart - cursor, voiceNum, staffNum);
                 cursor = nextStart;
             }
         }
 
-        // Fill trailing measure silence
         if (cursor < totalDivs) {
             staffXml += buildRestXml(totalDivs - cursor, voiceNum, staffNum);
             cursor = totalDivs;
@@ -420,7 +414,6 @@ document.addEventListener("DOMContentLoaded", () => {
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&apos;");
 
-        // 1. Time Signature matching midiano-sheet.js
         let beats = 4;
         let beatType = 4;
         if (midiData && midiData.header && midiData.header.timeSignatures && midiData.header.timeSignatures.length > 0) {
@@ -431,7 +424,6 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
 
-        // 2. Tempo (BPM) matching midiano-sheet.js
         const bpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0] && midiData.header.tempos[0].bpm)
             ? Math.round(midiData.header.tempos[0].bpm)
             : 120;
@@ -442,14 +434,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const divisions = NOTE_DIVISIONS;
         const totalMeasureDivs = Math.round(beats * (4 / beatType) * divisions);
 
-        // 3. Staves arrangement strictly matching midiano-sheet.js:
-        //    RH (Staff 1 / Treble Clef) = note.midi >= 60
-        //    LH (Staff 2 / Bass Clef)   = note.midi < 60
         const sortedNotes = [...activeNotesMemory].sort((a, b) => a.time - b.time);
         const rhNotes = sortedNotes.filter(n => n.midi >= 60);
         const lhNotes = sortedNotes.filter(n => n.midi < 60);
 
-        // Calculate total measures matching midiano-sheet.js measure lines
         const lastNoteEnd = sortedNotes.reduce((max, n) => Math.max(max, n.time + (n.duration || 0.5)), 0);
         const totalDurationSecs = Math.max(
             typeof totalDuration !== "undefined" ? totalDuration : 0,
@@ -458,7 +446,6 @@ document.addEventListener("DOMContentLoaded", () => {
         );
         const totalMeasuresCount = Math.max(1, Math.ceil(totalDurationSecs / measureDurationSec));
 
-        // Group notes into 40ms chord clusters exactly like midiano-sheet.js
         function clusterNotes(notes) {
             const clusters = [];
             let i = 0;
@@ -483,7 +470,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const rhClusters = clusterNotes(rhNotes);
         const lhClusters = clusterNotes(lhNotes);
 
-        // 4. MusicXML 3.1 Document Header
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
         xml += '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n';
         xml += '<score-partwise version="3.1">\n';
@@ -506,14 +492,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
         xml += '  <part id="P1">\n';
 
-        // 5. Output Measures with Grand Staff and Synchronized <backup>
         for (let m = 1; m <= totalMeasuresCount; m++) {
             xml += `    <measure number="${m}">\n`;
 
             const mStartSec = (m - 1) * measureDurationSec;
             const mEndSec = m * measureDurationSec;
 
-            // Grand Staff Attributes on Measure 1 (K:C open key fifths=0 matches midiano-sheet.js)
             if (m === 1) {
                 xml += '      <attributes>\n';
                 xml += `        <divisions>${divisions}</divisions>\n`;
@@ -537,15 +521,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 xml += '      </direction>\n';
             }
 
-            // STAFF 1: Right Hand (Treble Clef, Voice 1) - matches RH on screen
             xml += buildStaffMeasure(rhClusters, 1, 1, mStartSec, mEndSec, measureDurationSec, totalMeasureDivs);
 
-            // BACKUP CURSOR: Rewinds measure position for Left Hand
             xml += `      <backup>\n`;
             xml += `        <duration>${totalMeasureDivs}</duration>\n`;
             xml += `      </backup>\n`;
 
-            // STAFF 2: Left Hand (Bass Clef, Voice 2) - matches LH on screen
             xml += buildStaffMeasure(lhClusters, 2, 2, mStartSec, mEndSec, measureDurationSec, totalMeasureDivs);
 
             xml += '    </measure>\n';
@@ -557,7 +538,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // =========================================================================
-    // 5. DIRECT MULTI-PAGE A4 VECTOR PDF ENGINE (NO BROWSER PRINT DIALOG)
+    // 5. BULLETPROOF MULTI-PAGE A4 PDF ENGINE
     // =========================================================================
     async function ensureJsPdfLibrary() {
         if (window.jspdf && window.jspdf.jsPDF) {
@@ -599,6 +580,9 @@ document.addEventListener("DOMContentLoaded", () => {
             if (btnSecond) btnSecond.textContent = "Saving PDF...";
             if (btnMax) btnMax.textContent = "Saving PDF...";
 
+            let offscreenContainer = null;
+            let objectUrlToRevoke = null;
+
             try {
                 const JsPdfClass = await ensureJsPdfLibrary();
 
@@ -616,14 +600,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 const sanitizedTitle = trackTitle.replace(/[\/\\:*?"<>|]/g, "_").trim() || "Score";
 
-                // Standard offscreen container (850px standard A4 proportion)
-                const offscreenContainer = document.createElement("div");
+                // 1. Clean up any previous stale offscreen container
+                const staleEl = document.getElementById("offscreen-a4-pdf-container");
+                if (staleEl) staleEl.remove();
+
+                // 2. Create isolated offscreen container (850px standard A4 proportion)
+                offscreenContainer = document.createElement("div");
                 offscreenContainer.id = "offscreen-a4-pdf-container";
-                offscreenContainer.style.position = "fixed";
+                offscreenContainer.style.position = "absolute";
                 offscreenContainer.style.left = "-9999px";
                 offscreenContainer.style.top = "0";
                 offscreenContainer.style.width = "850px";
-                offscreenContainer.style.visibility = "hidden";
+                offscreenContainer.style.opacity = "0";
+                offscreenContainer.style.pointerEvents = "none";
                 offscreenContainer.style.background = "#ffffff";
 
                 const offscreenTarget = document.createElement("div");
@@ -632,34 +621,75 @@ document.addEventListener("DOMContentLoaded", () => {
                 offscreenContainer.appendChild(offscreenTarget);
                 document.body.appendChild(offscreenContainer);
 
-                if (typeof renderVerticalSheetMusic === "function") {
-                    renderVerticalSheetMusic("offscreen-a4-pdf-target");
-                } else {
-                    throw new Error("renderVerticalSheetMusic engine function is missing.");
+                try {
+                    if (typeof renderVerticalSheetMusic === "function") {
+                        renderVerticalSheetMusic("offscreen-a4-pdf-target");
+                    }
+                } catch (renderErr) {
+                    console.warn("[PDF ENGINE] Offscreen render warning:", renderErr);
                 }
 
-                const svgElement = offscreenTarget.querySelector("svg");
+                // 3. Fail-Safe SVG Extraction: Offscreen target first, then active container fallback
+                let svgElement = offscreenTarget.querySelector("svg");
+
                 if (!svgElement) {
-                    throw new Error("SVG generation failed in offscreen target.");
+                    const activeSource = (sourceContainerId && document.getElementById(sourceContainerId)) ||
+                                         document.getElementById("sheet-music-notation-vertical") ||
+                                         document.getElementById("sheet-music-notation-max") ||
+                                         document.getElementById("sheet-music-notation");
+
+                    if (activeSource) {
+                        svgElement = activeSource.querySelector("svg");
+                    }
                 }
 
-                if (!svgElement.getAttribute("xmlns")) {
-                    svgElement.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+                if (!svgElement && typeof renderVerticalSheetMusic === "function") {
+                    const activeId = sourceContainerId || "sheet-music-notation-vertical";
+                    renderVerticalSheetMusic(activeId);
+                    const activeEl = document.getElementById(activeId);
+                    if (activeEl) {
+                        svgElement = activeEl.querySelector("svg");
+                    }
                 }
 
-                const svgWidth = parseFloat(svgElement.getAttribute("width")) || 850;
-                const svgHeight = parseFloat(svgElement.getAttribute("height")) || 1200;
+                if (!svgElement) {
+                    throw new Error("Sheet music vector SVG is not available. Please open the Sheet Music view once before exporting.");
+                }
+
+                // Clone SVG node to prevent mutating live view
+                const svgClone = svgElement.cloneNode(true);
+                if (!svgClone.getAttribute("xmlns")) {
+                    svgClone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+                }
+                if (!svgClone.getAttribute("xmlns:xlink")) {
+                    svgClone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+                }
+
+                const svgWidth = parseFloat(svgClone.getAttribute("width")) || 850;
+                const svgHeight = parseFloat(svgClone.getAttribute("height")) || 1200;
 
                 const serializer = new XMLSerializer();
-                const svgString = serializer.serializeToString(svgElement);
-                const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
-                const svgUrl = URL.createObjectURL(blob);
+                const svgString = serializer.serializeToString(svgClone);
+
+                // Dual-mode image source generation (Object URL with safe fallback to Data URI)
+                let imageSrc = "";
+                try {
+                    if (typeof window.Blob !== "undefined" && typeof window.URL !== "undefined" && typeof window.URL.createObjectURL === "function") {
+                        const safePdfBlob = new window.Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+                        imageSrc = window.URL.createObjectURL(safePdfBlob);
+                        objectUrlToRevoke = imageSrc;
+                    } else {
+                        imageSrc = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgString);
+                    }
+                } catch (bErr) {
+                    imageSrc = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgString);
+                }
 
                 const sourceImage = await new Promise((resolve, reject) => {
                     const img = new Image();
                     img.onload = () => resolve(img);
-                    img.onerror = (err) => reject(err);
-                    img.src = svgUrl;
+                    img.onerror = () => reject(new Error("Failed loading rendered SVG image buffer for PDF slicing."));
+                    img.src = imageSrc;
                 });
 
                 const a4WidthPt = 595.28;
@@ -774,14 +804,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 pdfDoc.save(`${sanitizedTitle}_sheet_music.pdf`);
 
-                URL.revokeObjectURL(svgUrl);
-                if (offscreenContainer && offscreenContainer.parentNode) {
-                    offscreenContainer.parentNode.removeChild(offscreenContainer);
-                }
             } catch (err) {
                 console.error("[MIDIANO PDF ENGINE ERROR]:", err);
                 alert("Could not generate PDF: " + (err.message || err));
             } finally {
+                if (objectUrlToRevoke && typeof window.URL !== "undefined" && typeof window.URL.revokeObjectURL === "function") {
+                    window.URL.revokeObjectURL(objectUrlToRevoke);
+                }
+                if (offscreenContainer && offscreenContainer.parentNode) {
+                    offscreenContainer.parentNode.removeChild(offscreenContainer);
+                }
                 if (btnSecond) btnSecond.textContent = prevTextSecond || "Download";
                 if (btnMax) btnMax.textContent = prevTextMax || "Download";
             }
