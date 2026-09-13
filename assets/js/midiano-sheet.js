@@ -296,10 +296,11 @@ function renderMeasureBarLines(numSystems, systemDuration, systemHeight, rhStaff
         const measureTime = m * measureDuration;
         if (measureTime >= totalDurationSecs - 0.05) break;
 
+        // Skip measure bar lines if a silence gap / double bar line is already present nearby (0.35s tolerance)
         let overlapsGap = false;
         if (gaps && gaps.length > 0) {
             for (let g = 0; g < gaps.length; g++) {
-                if (Math.abs(measureTime - gaps[g].end) < 0.18 || Math.abs(measureTime - gaps[g].start) < 0.18) {
+                if (Math.abs(measureTime - gaps[g].end) < 0.35 || Math.abs(measureTime - gaps[g].start) < 0.35) {
                     overlapsGap = true;
                     break;
                 }
@@ -630,19 +631,23 @@ function renderSheetMusic() {
 
     const gaps = findSilenceGaps(activeNotesMemory);
     gaps.forEach(gap => {
-        const restsEndSecs = Math.max(0, gap.end - 0.1);
+        const restsEndSecs = Math.max(0, gap.end - 0.2);
         if (restsEndSecs > gap.start + 0.05) {
             svgContent = renderRestsForGap(svgContent, gap.start * pixelsPerSecond + 100, restsEndSecs * pixelsPerSecond + 100, rhStaffCenterY, true);
             svgContent = renderRestsForGap(svgContent, gap.start * pixelsPerSecond + 100, restsEndSecs * pixelsPerSecond + 100, lhStaffCenterY, false);
         }
 
-        const doubleBarX = gap.end * pixelsPerSecond + 100 - 10;
+        const upcomingNotesAtGap = activeNotesMemory.filter(n => Math.abs(n.time - gap.end) < 0.15);
+        const hasAccidental = upcomingNotesAtGap.some(n => sharpKey(n.midi));
+        const leftClearance = hasAccidental ? 26 : 20;
+        const doubleBarX = gap.end * pixelsPerSecond + 100 - leftClearance;
+
         svgContent += `<!-- Double Bar Lines strictly fitting inside the 5 lines of each staff -->`;
         
-        svgContent += `<line x1="${doubleBarX - 3}" y1="${rhStaffCenterY - 6 * dy}" x2="${doubleBarX - 3}" y2="${rhStaffCenterY + 7 * dy}" stroke="#818cf8" stroke-width="1.2" opacity="0.8" />`;
+        svgContent += `<line x1="${doubleBarX - 3.5}" y1="${rhStaffCenterY - 6 * dy}" x2="${doubleBarX - 3.5}" y2="${rhStaffCenterY + 7 * dy}" stroke="#818cf8" stroke-width="1.2" opacity="0.8" />`;
         svgContent += `<line x1="${doubleBarX}" y1="${rhStaffCenterY - 6 * dy}" x2="${doubleBarX}" y2="${rhStaffCenterY + 7 * dy}" stroke="#818cf8" stroke-width="2.8" opacity="0.8" />`;
         
-        svgContent += `<line x1="${doubleBarX - 3}" y1="${lhStaffCenterY - 7 * dy}" x2="${doubleBarX - 3}" y2="${lhStaffCenterY + 7 * dy}" stroke="#fbbf24" stroke-width="1.2" opacity="0.8" />`;
+        svgContent += `<line x1="${doubleBarX - 3.5}" y1="${lhStaffCenterY - 7 * dy}" x2="${doubleBarX - 3.5}" y2="${lhStaffCenterY + 7 * dy}" stroke="#fbbf24" stroke-width="1.2" opacity="0.8" />`;
         svgContent += `<line x1="${doubleBarX}" y1="${lhStaffCenterY - 7 * dy}" x2="${doubleBarX}" y2="${lhStaffCenterY + 7 * dy}" stroke="#fbbf24" stroke-width="2.8" opacity="0.8" />`;
     });
 
@@ -887,7 +892,7 @@ function renderVerticalSheetMusic(targetContainerId) {
 
     const gaps = findSilenceGaps(activeNotesMemory);
     gaps.forEach(gap => {
-        const restsEndSecs = Math.max(0, gap.end - 0.1);
+        const restsEndSecs = Math.max(0, gap.end - 0.2);
         if (restsEndSecs > gap.start + 0.05) {
             svgContent = renderRestsForGapVertical(
                 svgContent, gap.start, restsEndSecs, 
@@ -901,12 +906,21 @@ function renderVerticalSheetMusic(targetContainerId) {
         const systemTimeOffset = gap.end - firstNoteSystemIdx * systemDuration;
         
         const noteX = systemTimeOffset * localPixelsPerSecond + marginLeftValue + startPadding * scale;
-        const doubleBarX = noteX - 10 * scale;
+
+        // Check if upcoming key note has an accidental (sharp)
+        const upcomingNotesAtGap = activeNotesMemory.filter(n => Math.abs(n.time - gap.end) < 0.15);
+        const hasAccidental = upcomingNotesAtGap.some(n => sharpKey(n.midi));
+
+        // Adjust double bar line more to the left after the rest symbol instead of wide to the right
+        const leftClearance = (hasAccidental ? 24 : 18) * scale;
+        const doubleBarX = noteX - leftClearance;
 
         svgContent += `<!-- Double Bar Lines strictly fitting inside the 5 lines of each staff (Vertical) -->`;
-        svgContent += `<line x1="${doubleBarX - 3 * scale}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX - 3 * scale}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="${1.0 * scale}" />`;
+        
+        svgContent += `<line x1="${doubleBarX - 3.5 * scale}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX - 3.5 * scale}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="${1.0 * scale}" />`;
         svgContent += `<line x1="${doubleBarX}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="${2.4 * scale}" />`;
-        svgContent += `<line x1="${doubleBarX - 3 * scale}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX - 3 * scale}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="${1.0 * scale}" />`;
+        
+        svgContent += `<line x1="${doubleBarX - 3.5 * scale}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX - 3.5 * scale}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="${1.0 * scale}" />`;
         svgContent += `<line x1="${doubleBarX}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="${2.4 * scale}" />`;
     });
 
@@ -1764,7 +1778,7 @@ function renderStudioSheetMusic(targetContainerId) {
 
     const gaps = findSilenceGaps(studioNotesMemory);
     gaps.forEach(gap => {
-        const restsEndSecs = Math.max(0, gap.end - 0.1);
+        const restsEndSecs = Math.max(0, gap.end - 0.2);
         if (restsEndSecs > gap.start + 0.05) {
             svgContent = renderRestsForGapVertical(
                 svgContent, gap.start, restsEndSecs, 
@@ -1778,12 +1792,18 @@ function renderStudioSheetMusic(targetContainerId) {
         const systemTimeOffset = gap.end - firstNoteSystemIdx * systemDuration;
         
         const noteX = systemTimeOffset * localPixelsPerSecond + marginLeft + startPadding;
-        const doubleBarX = noteX - 10;
+
+        const upcomingNotesAtGap = studioNotesMemory.filter(n => Math.abs(n.time - gap.end) < 0.15);
+        const hasAccidental = upcomingNotesAtGap.some(n => sharpKey(n.midi));
+        const leftClearance = hasAccidental ? 26 : 20;
+        const doubleBarX = noteX - leftClearance;
 
         svgContent += `<!-- Double Bar Lines strictly fitting inside the 5 lines of each staff (Studio) -->`;
-        svgContent += `<line x1="${doubleBarX - 3}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX - 3}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="1.0" opacity="0.85" />`;
+        
+        svgContent += `<line x1="${doubleBarX - 3.5}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX - 3.5}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="1.0" opacity="0.85" />`;
         svgContent += `<line x1="${doubleBarX}" y1="${yOffset + rhStaffCenterY - 6 * dy}" x2="${doubleBarX}" y2="${yOffset + rhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="2.4" opacity="0.85" />`;
-        svgContent += `<line x1="${doubleBarX - 3}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX - 3}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="1.0" opacity="0.85" />`;
+        
+        svgContent += `<line x1="${doubleBarX - 3.5}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX - 3.5}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="1.0" opacity="0.85" />`;
         svgContent += `<line x1="${doubleBarX}" y1="${yOffset + lhStaffCenterY - 7 * dy}" x2="${doubleBarX}" y2="${yOffset + lhStaffCenterY + 7 * dy}" stroke="#111115" stroke-width="2.4" opacity="0.85" />`;
     });
 
