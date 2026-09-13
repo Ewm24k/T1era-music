@@ -146,16 +146,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // =========================================================================
-    // 4. HIGH-FIDELITY MUSESCORE STUDIO MusicXML ENGINE (100% MIDI FIDELITY)
-    //    Preserves original notes, durations, rests, accidentals, and track separation.
+    // 4. MUSICXML ENGINE: 100% IDENTICAL TO SHEET MUSIC DISPLAY
+    //    Guarantees exact clef distribution, pitch placing, and key consistency.
     // =========================================================================
     const handleXmlDownload = (e) => {
         e.preventDefault();
         try {
-            const hasNotes = (typeof activeNotesMemory !== "undefined" && activeNotesMemory && activeNotesMemory.length > 0) ||
-                            (midiData && midiData.tracks && midiData.tracks.some(t => t.notes && t.notes.length > 0));
-
-            if (!hasNotes) {
+            if (typeof activeNotesMemory === "undefined" || !activeNotesMemory || activeNotesMemory.length === 0) {
                 alert("Please choose and load a MIDI track first.");
                 return;
             }
@@ -163,7 +160,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const blob = new Blob([xmlContent], { type: "application/vnd.recordare.musicxml+xml;charset=utf-8" });
             const url = URL.createObjectURL(blob);
 
-            const rawTitle = (typeof resolvedSheetTitle !== "undefined" && resolvedSheetTitle)
+            const rawTitle = (typeof resolvedSheetTitle !== "undefined" && resolvedSheetTitle && resolvedSheetTitle !== "Untitled Track")
                 ? resolvedSheetTitle
                 : ((midiData && midiData.name && midiData.name !== "Untitled") ? midiData.name : "Piano_Score");
             const sanitizedTitle = rawTitle.replace(/[\/\\:*?"<>|]/g, "_").trim() || "Score";
@@ -234,55 +231,33 @@ document.addEventListener("DOMContentLoaded", () => {
         return xml;
     }
 
-    // Accurate pitch derivation directly matching original MIDI note and key signature
-    function parseMidiPitch(note, fifths) {
-        const midi = Number(note.midi);
-        if (!Number.isFinite(midi) || midi < 0 || midi > 127) {
-            return { step: "C", alter: 0, octave: 4 };
-        }
-
-        // 1. If original note name is present, parse directly for maximum fidelity
-        if (typeof note.name === "string" && note.name.length >= 2) {
-            const match = note.name.match(/^([A-Ga-g])([#b]?)(-?\d+)$/);
-            if (match) {
-                const step = match[1].toUpperCase();
-                const acc = match[2];
-                const octave = parseInt(match[3], 10);
-                const alter = (acc === "#") ? 1 : ((acc === "b") ? -1 : 0);
-                return { step, alter, octave };
-            }
-        }
-
-        // 2. Mathematical fallback using MIDI pitch number and key fifths
-        const octave = Math.floor(midi / 12) - 1;
+    // Exact pitch placement strictly identical to the sheet music staff lines and sharp usage
+    function getPitchInfo(midiNumber) {
+        const midi = Number(midiNumber);
         const pitchClass = ((midi % 12) + 12) % 12;
+        const octave = Math.floor(midi / 12) - 1;
 
-        const SHARPS_TABLE = [
-            { step: "C", alter: 0 }, { step: "C", alter: 1 },
-            { step: "D", alter: 0 }, { step: "D", alter: 1 },
+        // Matches the visual sheet music: chromatic keys are spelled with sharps on their base line
+        const PITCH_MAP = [
+            { step: "C", alter: 0 },
+            { step: "C", alter: 1 }, // C#
+            { step: "D", alter: 0 },
+            { step: "D", alter: 1 }, // D#
             { step: "E", alter: 0 },
-            { step: "F", alter: 0 }, { step: "F", alter: 1 },
-            { step: "G", alter: 0 }, { step: "G", alter: 1 },
-            { step: "A", alter: 0 }, { step: "A", alter: 1 },
+            { step: "F", alter: 0 },
+            { step: "F", alter: 1 }, // F#
+            { step: "G", alter: 0 },
+            { step: "G", alter: 1 }, // G#
+            { step: "A", alter: 0 },
+            { step: "A", alter: 1 }, // A#
             { step: "B", alter: 0 }
         ];
 
-        const FLATS_TABLE = [
-            { step: "C", alter: 0 }, { step: "D", alter: -1 },
-            { step: "D", alter: 0 }, { step: "E", alter: -1 },
-            { step: "E", alter: 0 },
-            { step: "F", alter: 0 }, { step: "G", alter: -1 },
-            { step: "G", alter: 0 }, { step: "A", alter: -1 },
-            { step: "A", alter: 0 }, { step: "B", alter: -1 },
-            { step: "B", alter: 0 }
-        ];
-
-        const table = (fifths < 0) ? FLATS_TABLE : SHARPS_TABLE;
-        const pInfo = table[pitchClass];
-        return { step: pInfo.step, alter: pInfo.alter, octave };
+        const p = PITCH_MAP[pitchClass];
+        return { step: p.step, alter: p.alter, octave };
     }
 
-    function buildPitchGroupXml(cluster, totalDiv, voiceNum, staffNum, fifths) {
+    function buildPitchGroupXml(cluster, totalDiv, voiceNum, staffNum) {
         if (!cluster || cluster.length === 0 || totalDiv <= 0) return "";
         const chunks = decomposeDuration(totalDiv);
         if (chunks.length === 0) return "";
@@ -293,7 +268,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const isLastChunk = chunkIdx === chunks.length - 1;
 
             cluster.forEach((note, noteIdx) => {
-                const pInfo = parseMidiPitch(note, fifths);
+                const pInfo = getPitchInfo(note.midi);
 
                 xml += `      <note>\n`;
                 if (noteIdx > 0) {
@@ -335,8 +310,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return xml;
     }
 
-    // Measure voice builder that respects exact note durations and preserves natural rests
-    function buildMeasureVoice(notes, staffNum, voiceNum, mStartSec, mDurSec, totalDivs, fifths, quarterSec) {
+    function buildMeasureVoice(notes, staffNum, voiceNum, mStartSec, mDurSec, totalDivs, quarterSec) {
         if (!notes || notes.length === 0) {
             let xml = `      <note>\n`;
             xml += `        <rest measure="yes"/>\n`;
@@ -376,13 +350,13 @@ document.addEventListener("DOMContentLoaded", () => {
         for (let i = 0; i < slots.length; i++) {
             const slot = slots[i];
 
-            // 1. Fill silence gap before note with real rest
+            // 1. Pre-note silence -> Real Rest
             if (slot > cursor) {
                 staffXml += buildRestXml(slot - cursor, voiceNum, staffNum);
                 cursor = slot;
             }
 
-            // 2. Determine actual duration of note/chord from raw MIDI
+            // 2. Note / Chord Duration
             const cluster = slotMap[slot];
             const nextSlot = (i < slots.length - 1) ? slots[i + 1] : totalDivs;
             const availableDiv = nextSlot - slot;
@@ -396,22 +370,21 @@ document.addEventListener("DOMContentLoaded", () => {
             let targetDurDiv = Math.round((longestNoteSec / mDurSec) * totalDivs);
             targetDurDiv = Math.max(30, Math.min(availableDiv, targetDurDiv));
 
-            // Prevent sub-64th microscopic rest artifacts
             if (availableDiv - targetDurDiv < 15) {
                 targetDurDiv = availableDiv;
             }
 
-            staffXml += buildPitchGroupXml(cluster, targetDurDiv, voiceNum, staffNum, fifths);
+            staffXml += buildPitchGroupXml(cluster, targetDurDiv, voiceNum, staffNum);
             cursor = slot + targetDurDiv;
 
-            // 3. Preserve natural silence after note finishes before next note arrives
+            // 3. Post-note silence -> Real Rest
             if (cursor < nextSlot) {
                 staffXml += buildRestXml(nextSlot - cursor, voiceNum, staffNum);
                 cursor = nextSlot;
             }
         }
 
-        // 4. Fill trailing measure silence with rest
+        // 4. Measure Trailing silence -> Real Rest
         if (cursor < totalDivs) {
             staffXml += buildRestXml(totalDivs - cursor, voiceNum, staffNum);
             cursor = totalDivs;
@@ -432,7 +405,7 @@ document.addEventListener("DOMContentLoaded", () => {
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&apos;");
 
-        // 1. Resolve Time Signature & Tempo accurately
+        // 1. Resolve Time Signature matching the visual score
         let beats = 4;
         let beatType = 4;
         if (midiData && midiData.header && midiData.header.timeSignatures && midiData.header.timeSignatures.length > 0) {
@@ -445,119 +418,27 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
 
+        // 2. Resolve Tempo (BPM)
         const rawBpm = (midiData && midiData.header && midiData.header.tempos && midiData.header.tempos[0])
             ? midiData.header.tempos[0].bpm
             : 120;
         const bpm = Math.max(20, Math.min(300, Math.round(rawBpm || 120)));
 
-        const quarterSec = 60 / bpm;
-        const measureDurationSec = beats * (4 / beatType) * quarterSec;
+        const quarterSec = (60 / bpm) * (4 / beatType);
+        const measureDurationSec = beats * quarterSec;
 
         const divisions = NOTE_DIVISIONS;
         const totalMeasureDivs = Math.round(beats * (4 / beatType) * divisions);
 
-        // 2. Resolve Key Signature (Fifths and Mode)
-        let fifths = 0;
-        let mode = "major";
-        const fifthsMap = {
-            "C": 0, "Am": 0, "A minor": 0, "C major": 0,
-            "G": 1, "Em": 1, "E minor": 1, "G major": 1,
-            "D": 2, "Bm": 2, "B minor": 2, "D major": 2,
-            "A": 3, "F#m": 3, "F# minor": 3, "A major": 3,
-            "E": 4, "C#m": 4, "C# minor": 4, "E major": 4,
-            "B": 5, "G#m": 5, "G# minor": 5, "B major": 5,
-            "F#": 6, "D#m": 6, "D# minor": 6, "F# major": 6,
-            "C#": 7, "A#m": 7, "A# minor": 7, "C# major": 7,
-            "F": -1, "Dm": -1, "D minor": -1, "F major": -1,
-            "Bb": -2, "Gm": -2, "G minor": -2, "Bb major": -2,
-            "Eb": -3, "Cm": -3, "C minor": -3, "Eb major": -3,
-            "Ab": -4, "Fm": -4, "F minor": -4, "Ab major": -4,
-            "Db": -5, "Bbm": -5, "Bb minor": -5, "Db major": -5,
-            "Gb": -6, "Ebm": -6, "Eb minor": -6, "Gb major": -6,
-            "Cb": -7, "Abm": -7, "Ab minor": -7, "Cb major": -7
-        };
+        // 3. Staves arrangement: Strictly identical to renderVerticalSheetMusic
+        //    RH (Staff 1 / Treble Clef) = MIDI >= 60
+        //    LH (Staff 2 / Bass Clef)   = MIDI < 60
+        const notesSource = (typeof activeNotesMemory !== "undefined" && activeNotesMemory) ? activeNotesMemory : [];
+        const rhNotes = notesSource.filter(n => n.midi >= 60).sort((a, b) => a.time - b.time);
+        const lhNotes = notesSource.filter(n => n.midi < 60).sort((a, b) => a.time - b.time);
 
-        if (midiData && midiData.header && midiData.header.keySignatures && midiData.header.keySignatures.length > 0) {
-            const keyObj = midiData.header.keySignatures[0];
-            const keyStr = (keyObj.key || "C").trim();
-            const capKey = keyStr.charAt(0).toUpperCase() + keyStr.slice(1);
-            if (typeof fifthsMap[keyStr] !== "undefined") {
-                fifths = fifthsMap[keyStr];
-            } else if (typeof fifthsMap[capKey] !== "undefined") {
-                fifths = fifthsMap[capKey];
-            }
-            if (keyObj.scale) {
-                mode = String(keyObj.scale).toLowerCase();
-            } else if (keyStr.toLowerCase().includes("m") && !keyStr.toLowerCase().includes("major")) {
-                mode = "minor";
-            }
-        }
-
-        // 3. Separate notes into Staff 1 (Treble) and Staff 2 (Bass) honoring raw MIDI tracks
-        let rhNotes = [];
-        let lhNotes = [];
-
-        const noteTracks = (midiData && midiData.tracks)
-            ? midiData.tracks.filter(t => t.notes && t.notes.length > 0)
-            : [];
-
-        if (noteTracks.length >= 2) {
-            const avg0 = noteTracks[0].notes.reduce((s, n) => s + n.midi, 0) / noteTracks[0].notes.length;
-            const avg1 = noteTracks[1].notes.reduce((s, n) => s + n.midi, 0) / noteTracks[1].notes.length;
-
-            let trebleTrack, bassTrack;
-            if (avg0 >= avg1) {
-                trebleTrack = noteTracks[0];
-                bassTrack = noteTracks[1];
-            } else {
-                trebleTrack = noteTracks[1];
-                bassTrack = noteTracks[0];
-            }
-
-            rhNotes = [...trebleTrack.notes];
-            lhNotes = [...bassTrack.notes];
-
-            for (let i = 2; i < noteTracks.length; i++) {
-                const trk = noteTracks[i];
-                const avg = trk.notes.reduce((s, n) => s + n.midi, 0) / trk.notes.length;
-                if (avg >= 60) {
-                    rhNotes.push(...trk.notes);
-                } else {
-                    lhNotes.push(...trk.notes);
-                }
-            }
-        } else {
-            const sourceNotes = (noteTracks.length === 1)
-                ? noteTracks[0].notes
-                : (typeof activeNotesMemory !== "undefined" && activeNotesMemory ? activeNotesMemory : []);
-
-            const channels = new Set(sourceNotes.map(n => n.channel).filter(c => typeof c !== "undefined"));
-            if (channels.size >= 2) {
-                const chArr = Array.from(channels);
-                const ch0 = sourceNotes.filter(n => n.channel === chArr[0]);
-                const ch1 = sourceNotes.filter(n => n.channel === chArr[1]);
-                const avg0 = ch0.reduce((s, n) => s + n.midi, 0) / (ch0.length || 1);
-                const avg1 = ch1.reduce((s, n) => s + n.midi, 0) / (ch1.length || 1);
-
-                if (avg0 >= avg1) {
-                    rhNotes = ch0;
-                    lhNotes = ch1;
-                } else {
-                    rhNotes = ch1;
-                    lhNotes = ch0;
-                }
-            } else {
-                rhNotes = sourceNotes.filter(n => n.midi >= 60);
-                lhNotes = sourceNotes.filter(n => n.midi < 60);
-            }
-        }
-
-        rhNotes.sort((a, b) => a.time - b.time);
-        lhNotes.sort((a, b) => a.time - b.time);
-
-        // Calculate total measures based on the latest note ending
-        const allNotes = [...rhNotes, ...lhNotes];
-        const lastNoteEnd = allNotes.reduce((max, n) => Math.max(max, n.time + (n.duration || 0.5)), 0);
+        // Calculate total measures matching sheet music measure lines
+        const lastNoteEnd = notesSource.reduce((max, n) => Math.max(max, n.time + (n.duration || 0.5)), 0);
         const totalDurationSecs = Math.max(
             typeof totalDuration !== "undefined" ? totalDuration : 0,
             (midiData && midiData.duration) ? midiData.duration : 0,
@@ -565,7 +446,7 @@ document.addEventListener("DOMContentLoaded", () => {
         );
         const totalMeasuresCount = Math.max(1, Math.ceil(totalDurationSecs / measureDurationSec));
 
-        // 4. MusicXML 3.1 Document Header (W3C/Recordare DTD compliant)
+        // 4. MusicXML 3.1 Document Header
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
         xml += '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n';
         xml += '<score-partwise version="3.1">\n';
@@ -588,20 +469,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
         xml += '  <part id="P1">\n';
 
-        // 5. Output Measures with Grand Staff and Synchronized <backup>
+        // 5. Output Measures with Synchronized Grand Staff
         for (let m = 1; m <= totalMeasuresCount; m++) {
             xml += `    <measure number="${m}">\n`;
 
             const mStartSec = (m - 1) * measureDurationSec;
             const mEndSec = m * measureDurationSec;
 
-            // Grand Staff Attributes on Measure 1
+            // Grand Staff Attributes on Measure 1 (open key fifths=0 matches visual score exactly)
             if (m === 1) {
                 xml += '      <attributes>\n';
                 xml += `        <divisions>${divisions}</divisions>\n`;
                 xml += `        <key>\n`;
-                xml += `          <fifths>${fifths}</fifths>\n`;
-                xml += `          <mode>${mode}</mode>\n`;
+                xml += `          <fifths>0</fifths>\n`;
                 xml += `        </key>\n`;
                 xml += `        <time>\n`;
                 xml += `          <beats>${beats}</beats>\n`;
@@ -623,16 +503,16 @@ document.addEventListener("DOMContentLoaded", () => {
             const currentRh = rhNotes.filter(n => n.time >= mStartSec - 0.001 && n.time < mEndSec - 0.001);
             const currentLh = lhNotes.filter(n => n.time >= mStartSec - 0.001 && n.time < mEndSec - 0.001);
 
-            // STAFF 1: Right Hand (Treble Clef, Voice 1)
-            xml += buildMeasureVoice(currentRh, 1, 1, mStartSec, measureDurationSec, totalMeasureDivs, fifths, quarterSec);
+            // STAFF 1: Right Hand (Treble Clef, Voice 1) - matches RH staves on screen
+            xml += buildMeasureVoice(currentRh, 1, 1, mStartSec, measureDurationSec, totalMeasureDivs, quarterSec);
 
             // BACKUP CURSOR: Rewinds measure position for Left Hand by exact measure duration
             xml += `      <backup>\n`;
             xml += `        <duration>${totalMeasureDivs}</duration>\n`;
             xml += `      </backup>\n`;
 
-            // STAFF 2: Left Hand (Bass Clef, Voice 2)
-            xml += buildMeasureVoice(currentLh, 2, 2, mStartSec, measureDurationSec, totalMeasureDivs, fifths, quarterSec);
+            // STAFF 2: Left Hand (Bass Clef, Voice 2) - matches LH staves on screen
+            xml += buildMeasureVoice(currentLh, 2, 2, mStartSec, measureDurationSec, totalMeasureDivs, quarterSec);
 
             xml += '    </measure>\n';
         }
